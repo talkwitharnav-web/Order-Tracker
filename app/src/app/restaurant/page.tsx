@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent, FC, useCallback } from "react";
 import Link from "next/link";
 import {
+  Home,
   Clock,
   Flame,
   CheckCircle,
@@ -98,9 +99,15 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("Kitchen name cannot be empty.");
+      setIsLoading(false);
+      return;
+    }
     try {
-      await api.login(name, password);
-      onLoginSuccess(name);
+      await api.login(trimmedName, password);
+      onLoginSuccess(trimmedName);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "An unknown error occurred",
@@ -129,7 +136,7 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({
                 id="kitchenName"
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value.replace(/\s{2,}/g, " "))}
                 placeholder="e.g., 'The Golden Spoon'"
                 className="w-full p-4 text-lg bg-slate-900 text-white border border-slate-700 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
                 required
@@ -146,7 +153,7 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value.replace(/\s/g, ""))}
                 placeholder="••••••••"
                 className="w-full p-4 text-lg bg-slate-900 text-white border border-slate-700 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
                 required
@@ -184,31 +191,41 @@ const Sidebar: FC<{
   restaurantName: string;
 }> = ({ activeTab, setActiveTab, onLogout, restaurantName }) => {
   const navItems: Tab[] = ["Home", "Received", "Making", "Finished"];
+  const navIcons: Record<Tab, React.ComponentType<{ className?: string }>> = {
+    Home: Home,
+    Received: Clock,
+    Making: Flame,
+    Finished: CheckCircle,
+  };
 
   return (
     <div className="w-64 bg-slate-900 text-slate-200 flex flex-col p-4 border-r border-slate-800">
-      <div className="mb-10">
+      <div className="mb-10 px-2">
         <h2 className="text-2xl font-bold text-white">{restaurantName}</h2>
         <span className="text-sm text-amber-500">Kitchen Dashboard</span>
       </div>
-      <nav className="flex-grow">
-        {navItems.map((name) => (
-          <button
-            key={name}
-            onClick={() => setActiveTab(name)}
-            className={`w-full px-4 py-3 my-1 rounded-lg text-lg font-bold uppercase tracking-wider transition-colors ${
-              activeTab === name
-                ? "bg-amber-600 text-white shadow-lg"
-                : "hover:bg-slate-800 hover:text-white"
-            }`}
-          >
-            <span>{name}</span>
-          </button>
-        ))}
+      <nav className="flex-grow space-y-2">
+        {navItems.map((name) => {
+          const Icon = navIcons[name];
+          return (
+            <button
+              key={name}
+              onClick={() => setActiveTab(name)}
+              className={`w-full flex items-center px-4 py-3 rounded-lg text-base font-semibold transition-colors duration-200 ${
+                activeTab === name
+                  ? "bg-amber-600 text-white shadow-lg"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <Icon className="w-5 h-5 mr-3" />
+              <span className="flex-1 text-left">{name}</span>
+            </button>
+          );
+        })}
       </nav>
       <button
         onClick={onLogout}
-        className="w-full text-left px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-red-500 rounded-lg transition-colors"
+        className="w-full text-left px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-red-500 rounded-lg transition-colors mt-4"
       >
         Logout
       </button>
@@ -288,6 +305,11 @@ const HomeTab: FC<{
     }
   };
 
+  const formatOrderNumber = (value: string) => {
+    const cleaned = value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+    setOrderNumber(cleaned);
+  };
+
   return (
     <div className="space-y-8">
       <div className="bg-slate-800 border border-slate-700 p-8 rounded-2xl">
@@ -304,7 +326,7 @@ const HomeTab: FC<{
               id="orderNumber"
               type="text"
               value={orderNumber}
-              onChange={(e) => setOrderNumber(e.target.value)}
+              onChange={(e) => formatOrderNumber(e.target.value)}
               placeholder="e.g., 'ORD-54321'"
               className="w-full p-3 bg-slate-900 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
             />
@@ -386,38 +408,45 @@ const Dashboard: FC<{ restaurantName: string; onLogout: () => void }> = ({
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchOrders = useCallback(
-    async (isInitial = false) => {
+  useEffect(() => {
+    const fetchAndSetOrders = async (isInitial = false) => {
+      const name = localStorage.getItem("restaurantName");
+      if (!name) {
+        console.error("Restaurant name not found in localStorage during poll");
+        if (isInitial) setIsLoading(false);
+        return;
+      }
+
       if (isInitial) setIsLoading(true);
       try {
-        const fetchedOrders = await api.getOrders(restaurantName);
+        const fetchedOrders = await api.getOrders(name);
         setOrders(fetchedOrders);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
       } finally {
         if (isInitial) setIsLoading(false);
       }
-    },
-    [restaurantName],
-  );
+    };
 
-  useEffect(() => {
-    fetchOrders(true);
-    const interval = setInterval(() => fetchOrders(), 5000); // Poll every 5 seconds
+    fetchAndSetOrders(true);
+    const interval = setInterval(fetchAndSetOrders, 5000);
     return () => clearInterval(interval);
-  }, [fetchOrders]);
+  }, []);
 
   const handleUpdateStatus = async (id: number, status: OrderStatus) => {
     try {
-      // Optimistic update
       setOrders((prevOrders) =>
         prevOrders.map((o) => (o.id === id ? { ...o, status } : o)),
       );
       await api.updateOrderStatus(id, status);
     } catch (error) {
       console.error("Failed to update status", error);
-      // Revert on failure
-      fetchOrders();
+      // Revert on failure by re-fetching all orders
+      const name = localStorage.getItem("restaurantName");
+      if (name) {
+        const fetchedOrders = await api.getOrders(name);
+        setOrders(fetchedOrders);
+      }
     }
   };
 

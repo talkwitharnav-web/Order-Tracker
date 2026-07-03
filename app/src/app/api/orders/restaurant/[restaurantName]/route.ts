@@ -6,7 +6,7 @@ export async function GET(
   request: Request,
   { params }: { params: { restaurantName: string } },
 ) {
-  const restaurantName = params.restaurantName;
+  const { restaurantName } = await params;
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
@@ -37,6 +37,9 @@ export async function GET(
     query += ` ORDER BY id DESC`;
 
     const orders = await db.all(query, ...queryParams);
+
+    console.log("Requested restaurant name:", restaurantName);
+    console.log("Returned rows:", orders);
 
     logger.info(
       `GET /api/orders/restaurant/${restaurantName} - found ${orders.length} orders`,

@@ -6,7 +6,7 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const id = params.id;
+  const { id } = params;
   logger.info(`PUT /api/orders/${id} - request received`);
 
   try {
@@ -47,7 +47,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const id = params.id;
+  const { id } = await params;
   logger.info(`DELETE /api/orders/${id} - request received`);
 
   try {

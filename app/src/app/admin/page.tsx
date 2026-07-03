@@ -3,10 +3,7 @@
 import { useState, useEffect, FC } from "react";
 import Link from "next/link";
 
-interface DbData {
-  restaurants: any[];
-  orders: any[];
-}
+// --- Components ---
 
 const DataTable: FC<{ title: string; data: any[] }> = ({ title, data }) => (
   <div className="mb-8">
@@ -48,8 +45,8 @@ const DataTable: FC<{ title: string; data: any[] }> = ({ title, data }) => (
   </div>
 );
 
-export default function DbViewPage() {
-  const [data, setData] = useState<DbData | null>(null);
+const AdminDashboard: FC = () => {
+  const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPurging, setIsPurging] = useState(false);
@@ -96,7 +93,7 @@ export default function DbViewPage() {
   return (
     <div className="min-h-screen bg-slate-950 font-sans text-white p-8">
       <header className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold">Database Viewer</h1>
+        <h1 className="text-4xl font-bold">Admin Dashboard</h1>
         <div className="flex items-center gap-4">
           <Link
             href="/"
@@ -133,4 +130,93 @@ export default function DbViewPage() {
       </main>
     </div>
   );
+};
+
+
+const AdminLoginPage: FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username === "darkglory" && password === "Re$t@ur@nt@dm!n") {
+      sessionStorage.setItem("isAdminAuthenticated", "true");
+      onLoginSuccess();
+    } else {
+      setError("Invalid username or password.");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <form
+          onSubmit={handleLogin}
+          className="bg-slate-900 shadow-2xl shadow-amber-900/10 rounded-xl p-8 border border-slate-700"
+        >
+          <h1 className="text-3xl font-bold text-center text-amber-500 mb-6">
+            Admin Access
+          </h1>
+          {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+          <div className="mb-4">
+            <label
+              htmlFor="username"
+              className="block text-slate-400 text-sm font-bold mb-2"
+            >
+              Username
+            </label>
+            <input
+              type="text"
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+              required
+            />
+          </div>
+          <div className="mb-6">
+            <label
+              htmlFor="password"
+              className="block text-slate-400 text-sm font-bold mb-2"
+            >
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-colors"
+          >
+            Sign In
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
+export default function AdminPage() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const isAdmin = sessionStorage.getItem("isAdminAuthenticated") === "true";
+    if (isAdmin) {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  if (!isAuthenticated) {
+    return <AdminLoginPage onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
+
+  return <AdminDashboard />;
 }

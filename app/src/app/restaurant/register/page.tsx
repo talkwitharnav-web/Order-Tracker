@@ -15,12 +15,18 @@ export default function RegisterPage() {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("Kitchen name cannot be empty.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch("/api/restaurants/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, password }),
+        body: JSON.stringify({ name: trimmedName, password }),
       });
 
       const data = await response.json();
@@ -29,7 +35,8 @@ export default function RegisterPage() {
         throw new Error(data.error || "Registration failed");
       }
 
-      // On success, redirect to the login page (restaurant dashboard)
+      // On success, save to localStorage and redirect to the dashboard
+      localStorage.setItem("restaurantName", trimmedName);
       router.push("/restaurant");
     } catch (err) {
       setError(
@@ -59,7 +66,7 @@ export default function RegisterPage() {
                 id="kitchenName"
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value.replace(/\s{2,}/g, " "))}
                 placeholder="e.g., 'The Midnight Table'"
                 className="w-full p-4 text-lg bg-slate-900 text-white border border-slate-700 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
                 required
@@ -76,7 +83,7 @@ export default function RegisterPage() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value.replace(/\s/g, ""))}
                 placeholder="••••••••"
                 className="w-full p-4 text-lg bg-slate-900 text-white border border-slate-700 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
                 required
