@@ -2,6 +2,12 @@
 
 import { useState, useEffect, FormEvent, FC, useCallback } from "react";
 import Link from "next/link";
+import {
+  Clock,
+  Flame,
+  CheckCircle,
+  Trash2 as TrashIcon,
+} from "lucide-react";
 
 // --- TYPES ---
 type OrderStatus = "Received" | "Making" | "Finished";
@@ -13,24 +19,21 @@ type Order = {
 type Tab = "Home" | "Received" | "Making" | "Finished";
 
 // --- ICONS ---
-const TrashIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="3 6 5 6 21 6" />
-    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    <line x1="10" y1="11" x2="10" y2="17" />
-    <line x1="14" y1="11" x2="14" y2="17" />
-  </svg>
-);
+const StatusIcon: FC<{ status: OrderStatus }> = ({ status }) => {
+  const iconProps = {
+    className: "w-5 h-5 mr-2 inline-block",
+  };
+  switch (status) {
+    case "Received":
+      return <Clock {...iconProps} />;
+    case "Making":
+      return <Flame {...iconProps} />;
+    case "Finished":
+      return <CheckCircle {...iconProps} />;
+    default:
+      return null;
+  }
+};
 
 // --- API HELPERS ---
 const api = {
@@ -46,11 +49,8 @@ const api = {
     }
     return response.json();
   },
-  async getOrders(restName: string, status?: OrderStatus) {
-    let url = `/api/orders/restaurant/${restName}`;
-    if (status) {
-      url += `?status=${status}`;
-    }
+  async getOrders(restName: string) {
+    const url = `/api/orders/restaurant/${restName}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to fetch orders");
     return response.json();
@@ -230,7 +230,9 @@ const OrderCard: FC<{
   return (
     <div className="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 flex flex-col">
       <div className="flex justify-between items-start mb-4">
-        <p className="font-bold text-2xl text-white">#{order.order_number}</p>
+        <p className="font-bold text-2xl text-white flex items-center">
+          <StatusIcon status={order.status} /> #{order.order_number}
+        </p>
         <span
           className={`px-3 py-1 text-sm font-semibold rounded-full ${statusClasses[order.status]}`}
         >
@@ -329,7 +331,7 @@ const HomeTab: FC<{
             >
               <div>
                 <span className="font-bold text-xl text-white">
-                  #{order.order_number}
+                  <StatusIcon status={order.status} /> #{order.order_number}
                 </span>
                 <span
                   className={`ml-4 px-2 py-0.5 text-xs font-semibold rounded-full ${order.status === "Received" ? "bg-slate-200 text-slate-800" : order.status === "Making" ? "bg-amber-200 text-amber-800" : "bg-emerald-200 text-emerald-800"}`}
@@ -388,16 +390,7 @@ const Dashboard: FC<{ restaurantName: string; onLogout: () => void }> = ({
     async (isInitial = false) => {
       if (isInitial) setIsLoading(true);
       try {
-        const statusMap: Record<Tab, OrderStatus | undefined> = {
-          Home: undefined,
-          Received: "Received",
-          Making: "Making",
-          Finished: "Finished",
-        };
-        const fetchedOrders = await api.getOrders(
-          restaurantName,
-          statusMap[activeTab],
-        );
+        const fetchedOrders = await api.getOrders(restaurantName);
         setOrders(fetchedOrders);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
@@ -405,27 +398,26 @@ const Dashboard: FC<{ restaurantName: string; onLogout: () => void }> = ({
         if (isInitial) setIsLoading(false);
       }
     },
-    [activeTab, restaurantName],
+    [restaurantName],
   );
 
   useEffect(() => {
     fetchOrders(true);
-    const interval = setInterval(fetchOrders, 5000); // Poll every 5 seconds
+    const interval = setInterval(() => fetchOrders(), 5000); // Poll every 5 seconds
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
   const handleUpdateStatus = async (id: number, status: OrderStatus) => {
     try {
+      // Optimistic update
+      setOrders((prevOrders) =>
+        prevOrders.map((o) => (o.id === id ? { ...o, status } : o)),
+      );
       await api.updateOrderStatus(id, status);
-      setOrders((prevOrders) => {
-        // If on a specific status tab, remove it from the list. Otherwise, update it.
-        if (activeTab !== "Home" && activeTab !== status) {
-          return prevOrders.filter((o) => o.id !== id);
-        }
-        return prevOrders.map((o) => (o.id === id ? { ...o, status } : o));
-      });
     } catch (error) {
       console.error("Failed to update status", error);
+      // Revert on failure
+      fetchOrders();
     }
   };
 
@@ -433,10 +425,12 @@ const Dashboard: FC<{ restaurantName: string; onLogout: () => void }> = ({
     // Use window.confirm for simplicity, but a custom modal would be better UX
     if (window.confirm("Are you sure you want to delete this order?")) {
       try {
-        await api.deleteOrder(id);
         setOrders((prevOrders) => prevOrders.filter((o) => o.id !== id));
+        await api.deleteOrder(id);
       } catch (error) {
         console.error("Failed to delete order", error);
+        // Revert on failure
+        fetchOrders();
       }
     }
   };
