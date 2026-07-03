@@ -1,195 +1,528 @@
-'use client';
+"use client";
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, FC, useCallback } from "react";
+import Link from "next/link";
 
+// --- TYPES ---
+type OrderStatus = "Received" | "Making" | "Finished";
 type Order = {
   id: number;
-  restaurant_name: string;
   order_number: string;
-  status: 'Received' | 'Preparing' | 'Complete';
+  status: OrderStatus;
 };
+type Tab = "Home" | "Received" | "Making" | "Finished";
 
-const statusColors = {
-  Received: 'bg-slate-50 text-slate-800 border border-slate-200',
-  Preparing: 'bg-amber-50 text-amber-800 border border-amber-200',
-  Complete: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
-};
+// --- ICONS ---
+const TrashIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <line x1="10" y1="11" x2="10" y2="17" />
+    <line x1="14" y1="11" x2="14" y2="17" />
+  </svg>
+);
 
-export default function RestaurantPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [restaurantName, setRestaurantName] = useState('');
-  const [orderNumber, setOrderNumber] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [formError, setFormError] = useState('');
-
-  const fetchOrders = async () => {
-    if (!restaurantName.trim()) return;
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/orders/restaurant/${restaurantName}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch orders');
-      }
+// --- API HELPERS ---
+const api = {
+  async login(name: string, pass: string) {
+    const response = await fetch("/api/restaurants/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, password: pass }),
+    });
+    if (!response.ok) {
       const data = await response.json();
-      setOrders(data);
+      throw new Error(data.error || "Login failed");
+    }
+    return response.json();
+  },
+  async getOrders(restName: string, status?: OrderStatus) {
+    let url = `/api/orders/restaurant/${restName}`;
+    if (status) {
+      url += `?status=${status}`;
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to fetch orders");
+    return response.json();
+  },
+  async createOrder(restName: string, orderNum: string): Promise<Order> {
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        restaurant_name: restName,
+        order_number: orderNum,
+      }),
+    });
+    if (!response.ok) throw new Error("Failed to create order");
+    return response.json();
+  },
+  async updateOrderStatus(id: number, status: OrderStatus) {
+    const response = await fetch(`/api/orders/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) throw new Error("Failed to update status");
+    return response.json();
+  },
+  async deleteOrder(id: number) {
+    const response = await fetch(`/api/orders/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to delete order");
+    return response.json();
+  },
+};
+
+// --- LOGIN COMPONENT ---
+const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({
+  onLoginSuccess,
+}) => {
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    try {
+      await api.login(name, password);
+      onLoginSuccess(name);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCreateOrder = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!orderNumber.trim()) {
-      setFormError('Order number cannot be blank.');
-      return;
-    }
-    setFormError(''); // Clear error on successful submission
-    try {
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurant_name: restaurantName, order_number: orderNumber }),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to create order');
-      }
-      setOrderNumber('');
-      fetchOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-    }
-  };
-
-  const handleUpdateStatus = async (id: number, status: Order['status']) => {
-    try {
-      const response = await fetch(`/api/orders/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to update status');
-      }
-      fetchOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-    }
-  };
-
-  useEffect(() => {
-    if (restaurantName.trim()) {
-      const timer = setTimeout(() => {
-        fetchOrders();
-      }, 500); // Debounce fetching
-      return () => clearTimeout(timer);
-    } else {
-      setOrders([]);
-    }
-  }, [restaurantName]);
-  
-  // Polling for real-time updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if(restaurantName.trim()) fetchOrders();
-    }, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
-  }, [restaurantName]);
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      <main className="container mx-auto p-4 md:p-8">
-        <h1 className="text-4xl font-bold text-slate-800 mb-8">Kitchen Dashboard</h1>
-
-        <div className="mb-12">
-            <label htmlFor="restaurantName" className="block text-lg font-medium text-slate-700 mb-2">
-                Restaurant Name
-            </label>
-            <input
-            id="restaurantName"
-            type="text"
-            value={restaurantName}
-            onChange={(e) => setRestaurantName(e.target.value)}
-            placeholder="e.g., 'The Golden Spoon'"
-            className="w-full max-w-md p-4 text-lg border-slate-200 rounded-xl shadow-sm focus:ring-amber-500 focus:border-amber-500"
-            />
-        </div>
-
-        {restaurantName.trim() && (
-            <>
-        <div className="bg-white p-10 rounded-xl shadow-lg mb-12">
-          <h2 className="text-2xl font-semibold text-slate-800 mb-6">Create New Order</h2>
-          <form onSubmit={handleCreateOrder} className="flex flex-col md:flex-row items-start md:items-end gap-4">
-            <div className="w-full">
-              <label htmlFor="orderNumber" className="block text-lg font-medium text-slate-700 mb-2">
-                Order Number
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center font-sans text-white">
+      <main className="w-full max-w-md mx-auto p-8">
+        <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-10 rounded-2xl shadow-2xl">
+          <h1 className="text-4xl font-bold text-white mb-8 text-center">
+            Kitchen Login
+          </h1>
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label
+                htmlFor="kitchenName"
+                className="block text-lg font-medium text-slate-300 mb-2"
+              >
+                Kitchen Name
               </label>
               <input
-                id="orderNumber"
+                id="kitchenName"
                 type="text"
-                value={orderNumber}
-                onChange={(e) => setOrderNumber(e.target.value)}
-                placeholder="e.g., 'ORD-12345'"
-                className={`w-full p-4 text-lg border rounded-xl shadow-sm focus:ring-amber-500 focus:border-amber-500 ${formError ? 'border-red-500' : 'border-slate-200'}`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., 'The Golden Spoon'"
+                className="w-full p-4 text-lg bg-slate-900 text-white border border-slate-700 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
+                required
               />
-              {formError && <p className="text-red-600 text-sm mt-2">{formError}</p>}
+            </div>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-lg font-medium text-slate-300 mb-2"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full p-4 text-lg bg-slate-900 text-white border border-slate-700 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
+                required
+              />
             </div>
             <button
               type="submit"
-              disabled={!orderNumber.trim()}
-              className="w-full md:w-auto px-8 py-4 text-lg font-semibold text-white bg-amber-600 rounded-xl shadow-lg hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all duration-200 transform hover:scale-[1.02] disabled:bg-slate-400 disabled:cursor-not-allowed disabled:scale-100"
+              disabled={isLoading}
+              className="w-full px-8 py-4 text-lg font-semibold text-white bg-amber-600 rounded-xl shadow-lg hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 disabled:bg-slate-700 transition-all duration-200"
             >
-              Add Order
+              {isLoading ? "Signing in..." : "Sign In"}
             </button>
           </form>
-        </div>
-
-        <div className="bg-white p-10 rounded-xl shadow-lg leading-relaxed">
-          <h2 className="text-2xl font-semibold text-slate-800 mb-6">Active Orders</h2>
-          {isLoading && <p>Loading orders...</p>}
-          {error && <p className="text-red-500">{error}</p>}
-          <div className="space-y-6">
-            {orders.length > 0 ? (
-              orders.map((order) => (
-                <div key={order.id} className="p-6 border border-slate-100 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div>
-                    <p className="font-bold text-xl text-slate-800">#{order.order_number}</p>
-                    <span
-                      className={`px-3 py-1 mt-2 inline-block text-sm font-semibold rounded-full ${
-                        statusColors[order.status]
-                      }`}
-                    >
-                      {order.status}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    {(['Received', 'Preparing', 'Complete'] as const).map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => handleUpdateStatus(order.id, status)}
-                        disabled={order.status === status}
-                        className={`px-4 py-2 text-sm font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 transform hover:scale-[1.02] ${
-                          order.status === status
-                            ? 'text-white bg-slate-400 cursor-not-allowed'
-                            : 'text-slate-700 bg-slate-100 hover:bg-slate-200 focus:ring-slate-300'
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-slate-500">No active orders for this restaurant.</p>
-            )}
+          {error && <p className="mt-4 text-center text-red-400">{error}</p>}
+          <div className="mt-8 text-center">
+            <Link
+              href="/restaurant/register"
+              className="text-slate-400 hover:text-amber-500 transition-colors"
+            >
+              Need a kitchen account? Register
+            </Link>
           </div>
         </div>
-        </>
-        )}
       </main>
     </div>
+  );
+};
+
+// --- DASHBOARD COMPONENTS ---
+
+const Sidebar: FC<{
+  activeTab: Tab;
+  setActiveTab: (tab: Tab) => void;
+  onLogout: () => void;
+  restaurantName: string;
+}> = ({ activeTab, setActiveTab, onLogout, restaurantName }) => {
+  const navItems: Tab[] = ["Home", "Received", "Making", "Finished"];
+
+  return (
+    <div className="w-64 bg-slate-900 text-slate-200 flex flex-col p-4 border-r border-slate-800">
+      <div className="mb-10">
+        <h2 className="text-2xl font-bold text-white">{restaurantName}</h2>
+        <span className="text-sm text-amber-500">Kitchen Dashboard</span>
+      </div>
+      <nav className="flex-grow">
+        {navItems.map((name) => (
+          <button
+            key={name}
+            onClick={() => setActiveTab(name)}
+            className={`w-full px-4 py-3 my-1 rounded-lg text-lg font-bold uppercase tracking-wider transition-colors ${
+              activeTab === name
+                ? "bg-amber-600 text-white shadow-lg"
+                : "hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <span>{name}</span>
+          </button>
+        ))}
+      </nav>
+      <button
+        onClick={onLogout}
+        className="w-full text-left px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-red-500 rounded-lg transition-colors"
+      >
+        Logout
+      </button>
+    </div>
+  );
+};
+
+const OrderCard: FC<{
+  order: Order;
+  onUpdateStatus: (id: number, status: OrderStatus) => void;
+  onDelete: (id: number) => void;
+}> = ({ order, onUpdateStatus, onDelete }) => {
+  const statusClasses: Record<OrderStatus, string> = {
+    Received: "bg-slate-200 text-slate-800",
+    Making: "bg-amber-200 text-amber-800",
+    Finished: "bg-emerald-200 text-emerald-800",
+  };
+
+  return (
+    <div className="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 flex flex-col">
+      <div className="flex justify-between items-start mb-4">
+        <p className="font-bold text-2xl text-white">#{order.order_number}</p>
+        <span
+          className={`px-3 py-1 text-sm font-semibold rounded-full ${statusClasses[order.status]}`}
+        >
+          {order.status}
+        </span>
+      </div>
+      <div className="flex-grow" />
+      <div className="flex flex-col gap-2 mt-4">
+        {order.status === "Received" && (
+          <button
+            onClick={() => onUpdateStatus(order.id, "Making")}
+            className="w-full py-2 text-sm font-medium rounded-lg shadow-sm bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-amber-500 transition-all"
+          >
+            Mark Making
+          </button>
+        )}
+        {order.status === "Making" && (
+          <button
+            onClick={() => onUpdateStatus(order.id, "Finished")}
+            className="w-full py-2 text-sm font-medium rounded-lg shadow-sm bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-amber-500 transition-all"
+          >
+            Mark Finished
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(order.id)}
+          className="w-full py-2 text-sm font-medium rounded-lg shadow-sm bg-red-900/50 text-red-300 hover:bg-red-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-red-500 transition-all"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const HomeTab: FC<{
+  orders: Order[];
+  restaurantName: string;
+  onAddOrder: (order: Order) => void;
+  onDeleteOrder: (id: number) => void;
+}> = ({ orders, restaurantName, onAddOrder, onDeleteOrder }) => {
+  const [orderNumber, setOrderNumber] = useState("");
+
+  const handleCreateOrder = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!orderNumber.trim()) return;
+    try {
+      const newOrder = await api.createOrder(restaurantName, orderNumber);
+      onAddOrder(newOrder);
+      setOrderNumber("");
+    } catch (error) {
+      console.error("Failed to create order", error);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="bg-slate-800 border border-slate-700 p-8 rounded-2xl">
+        <h3 className="text-2xl font-bold text-white mb-4">Add New Order</h3>
+        <form onSubmit={handleCreateOrder} className="flex items-end gap-4">
+          <div className="flex-grow">
+            <label
+              htmlFor="orderNumber"
+              className="block text-sm font-medium text-slate-400 mb-1"
+            >
+              Order Number
+            </label>
+            <input
+              id="orderNumber"
+              type="text"
+              value={orderNumber}
+              onChange={(e) => setOrderNumber(e.target.value)}
+              placeholder="e.g., 'ORD-54321'"
+              className="w-full p-3 bg-slate-900 text-white border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!orderNumber.trim()}
+            className="px-6 py-3 font-semibold text-white bg-amber-600 rounded-lg shadow-md hover:bg-amber-700 disabled:bg-slate-700 disabled:cursor-not-allowed"
+          >
+            Add Order
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-slate-800 border border-slate-700 p-8 rounded-2xl">
+        <h3 className="text-2xl font-bold text-white mb-4">
+          All Active Orders
+        </h3>
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <div
+              key={order.id}
+              className="bg-slate-900 p-4 rounded-lg flex justify-between items-center"
+            >
+              <div>
+                <span className="font-bold text-xl text-white">
+                  #{order.order_number}
+                </span>
+                <span
+                  className={`ml-4 px-2 py-0.5 text-xs font-semibold rounded-full ${order.status === "Received" ? "bg-slate-200 text-slate-800" : order.status === "Making" ? "bg-amber-200 text-amber-800" : "bg-emerald-200 text-emerald-800"}`}
+                >
+                  {order.status}
+                </span>
+              </div>
+              <button
+                onClick={() => onDeleteOrder(order.id)}
+                className="text-slate-500 hover:text-red-500 p-2 rounded-full transition-colors"
+              >
+                <TrashIcon />
+              </button>
+            </div>
+          ))}
+          {orders.length === 0 && (
+            <p className="text-slate-400">No active orders.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const OrderGrid: FC<{
+  orders: Order[];
+  onUpdateStatus: (id: number, status: OrderStatus) => void;
+  onDelete: (id: number) => void;
+}> = ({ orders, onUpdateStatus, onDelete }) => {
+  if (orders.length === 0) {
+    return <p className="text-slate-400">No orders in this category.</p>;
+  }
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {orders.map((order) => (
+        <OrderCard
+          key={order.id}
+          order={order}
+          onUpdateStatus={onUpdateStatus}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+};
+
+const Dashboard: FC<{ restaurantName: string; onLogout: () => void }> = ({
+  restaurantName,
+  onLogout,
+}) => {
+  const [activeTab, setActiveTab] = useState<Tab>("Home");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchOrders = useCallback(
+    async (isInitial = false) => {
+      if (isInitial) setIsLoading(true);
+      try {
+        const statusMap: Record<Tab, OrderStatus | undefined> = {
+          Home: undefined,
+          Received: "Received",
+          Making: "Making",
+          Finished: "Finished",
+        };
+        const fetchedOrders = await api.getOrders(
+          restaurantName,
+          statusMap[activeTab],
+        );
+        setOrders(fetchedOrders);
+      } catch (error) {
+        console.error("Failed to fetch orders:", error);
+      } finally {
+        if (isInitial) setIsLoading(false);
+      }
+    },
+    [activeTab, restaurantName],
+  );
+
+  useEffect(() => {
+    fetchOrders(true);
+    const interval = setInterval(fetchOrders, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
+  }, [fetchOrders]);
+
+  const handleUpdateStatus = async (id: number, status: OrderStatus) => {
+    try {
+      await api.updateOrderStatus(id, status);
+      setOrders((prevOrders) => {
+        // If on a specific status tab, remove it from the list. Otherwise, update it.
+        if (activeTab !== "Home" && activeTab !== status) {
+          return prevOrders.filter((o) => o.id !== id);
+        }
+        return prevOrders.map((o) => (o.id === id ? { ...o, status } : o));
+      });
+    } catch (error) {
+      console.error("Failed to update status", error);
+    }
+  };
+
+  const handleDeleteOrder = async (id: number) => {
+    // Use window.confirm for simplicity, but a custom modal would be better UX
+    if (window.confirm("Are you sure you want to delete this order?")) {
+      try {
+        await api.deleteOrder(id);
+        setOrders((prevOrders) => prevOrders.filter((o) => o.id !== id));
+      } catch (error) {
+        console.error("Failed to delete order", error);
+      }
+    }
+  };
+
+  const handleAddOrder = (newOrder: Order) => {
+    setOrders((prevOrders) => [newOrder, ...prevOrders]);
+  };
+
+  const renderContent = () => {
+    if (isLoading) return <p className="text-slate-400">Loading orders...</p>;
+
+    const displayedOrders =
+      activeTab === "Home"
+        ? orders
+        : orders.filter((o) => o.status === activeTab);
+
+    switch (activeTab) {
+      case "Home":
+        return (
+          <HomeTab
+            orders={displayedOrders}
+            restaurantName={restaurantName}
+            onAddOrder={handleAddOrder}
+            onDeleteOrder={handleDeleteOrder}
+          />
+        );
+      case "Received":
+      case "Making":
+      case "Finished":
+        return (
+          <OrderGrid
+            orders={displayedOrders}
+            onUpdateStatus={handleUpdateStatus}
+            onDelete={handleDeleteOrder}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex font-sans text-white">
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onLogout={onLogout}
+        restaurantName={restaurantName}
+      />
+      <main className="flex-grow p-8 overflow-auto">
+        <h1 className="text-4xl font-bold text-white mb-8">{activeTab}</h1>
+        {renderContent()}
+      </main>
+    </div>
+  );
+};
+
+// --- MAIN PAGE COMPONENT ---
+export default function RestaurantPage() {
+  const [loggedInRestaurant, setLoggedInRestaurant] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    // Check for saved session on initial load
+    const savedRestaurant = localStorage.getItem("restaurantName");
+    if (savedRestaurant) {
+      setLoggedInRestaurant(savedRestaurant);
+    }
+  }, []);
+
+  const handleLoginSuccess = (name: string) => {
+    localStorage.setItem("restaurantName", name);
+    setLoggedInRestaurant(name);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("restaurantName");
+    setLoggedInRestaurant(null);
+  };
+
+  if (!loggedInRestaurant) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  return (
+    <Dashboard restaurantName={loggedInRestaurant} onLogout={handleLogout} />
   );
 }
