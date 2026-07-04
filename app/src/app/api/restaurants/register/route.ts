@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import bcrypt from "bcrypt";
 
@@ -18,14 +18,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const db = await getDb();
-
     // Check if restaurant already exists
-    const existingRestaurant = await db.get(
-      "SELECT * FROM restaurants WHERE name = ?",
-      name,
+    const existing = await query(
+      "SELECT * FROM restaurants WHERE name = $1",
+      [name],
     );
-    if (existingRestaurant) {
+    if (existing.rows[0]) {
       return NextResponse.json(
         { error: "Restaurant with this name already exists" },
         { status: 409 },
@@ -34,11 +32,10 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-    const stmt = await db.prepare(
-      "INSERT INTO restaurants (name, password, raw_password) VALUES (?, ?, ?)",
+    await query(
+      "INSERT INTO restaurants (name, password, raw_password) VALUES ($1, $2, $3)",
+      [name, hashedPassword, password],
     );
-    await stmt.run(name, hashedPassword, password);
-    await stmt.finalize();
 
     logger.info(
       `POST /api/restaurants/register - restaurant "${name}" created successfully`,

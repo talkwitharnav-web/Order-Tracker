@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { query } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 export async function GET(req: Request) {
@@ -16,11 +16,11 @@ export async function GET(req: Request) {
       );
     }
 
-    const db = await getDb();
-    const order = await db.get(
-      "SELECT * FROM orders WHERE restaurant_name = ? AND order_number = ?",
+    const result = await query(
+      "SELECT * FROM orders WHERE restaurant_name = $1 AND order_number = $2",
       [restaurantName, orderNumber],
     );
+    const order = result.rows[0];
 
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });

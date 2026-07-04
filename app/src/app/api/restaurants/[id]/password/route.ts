@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import bcrypt from "bcrypt";
 
@@ -19,16 +19,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
-    const db = await getDb();
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
-    const stmt = await db.prepare(
-      "UPDATE restaurants SET password = ?, raw_password = ? WHERE id = ?",
+    const result = await query(
+      "UPDATE restaurants SET password = $1, raw_password = $2 WHERE id = $3",
+      [hashedPassword, newPassword, id],
     );
-    const result = await stmt.run(hashedPassword, newPassword, id);
-    await stmt.finalize();
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
         return NextResponse.json(
             { error: "Restaurant not found" },
             { status: 404 },

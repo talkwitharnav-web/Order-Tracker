@@ -161,14 +161,50 @@ export default function CustomerPage() {
     setIsLoading(false);
   };
 
+  // Real-time updates via WebSocket, replacing the previous 5s poll.
+  // The broadcast payload's status vocabulary doesn't always match this
+  // page's OrderStatus enum (see SYSTEM_MEMORY.md status-vocab quirk), so on
+  // any relevant event we just refetch via the existing REST lookup rather
+  // than trust the raw broadcast status string.
   useEffect(() => {
     if (!order || order.status === "Finished") return;
 
-    const interval = setInterval(() => {
-      fetchOrderStatus(order.restaurant_name, order.order_number);
-    }, 5000); // Poll every 5 seconds
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closedByEffect = false;
 
-    return () => clearInterval(interval);
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (
+            (data.type === "order_updated" || data.type === "order_deleted") &&
+            order
+          ) {
+            fetchOrderStatus(order.restaurant_name, order.order_number);
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      socket.onclose = () => {
+        if (!closedByEffect) {
+          reconnectTimer = setTimeout(connect, 2000);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      closedByEffect = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
+    };
   }, [order]);
 
   const formatInput = (value: string) => {

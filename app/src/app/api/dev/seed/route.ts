@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import bcrypt from "bcrypt";
 
@@ -9,13 +9,12 @@ export async function POST() {
   logger.info("POST /api/dev/seed - request received");
   try {
     await initDb();
-    const db = await getDb();
 
     logger.info("POST /api/dev/seed - clearing tables...");
-    await db.exec("DELETE FROM orders");
-    await db.exec("DELETE FROM restaurants");
-    await db.exec("DELETE FROM sqlite_sequence WHERE name='orders'");
-    await db.exec("DELETE FROM sqlite_sequence WHERE name='restaurants'");
+    await query("DELETE FROM orders");
+    await query("DELETE FROM restaurants");
+    await query("ALTER SEQUENCE orders_id_seq RESTART WITH 1");
+    await query("ALTER SEQUENCE restaurants_id_seq RESTART WITH 1");
     logger.info("POST /api/dev/seed - tables cleared");
 
     logger.info("POST /api/dev/seed - seeding database...");
@@ -24,11 +23,9 @@ export async function POST() {
     const restaurantName = "The Golden Spoon";
     const password = "password123";
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    await db.run(
-      "INSERT INTO restaurants (name, password, raw_password) VALUES (?, ?, ?)",
-      restaurantName,
-      hashedPassword,
-      password,
+    await query(
+      "INSERT INTO restaurants (name, password, raw_password) VALUES ($1, $2, $3)",
+      [restaurantName, hashedPassword, password],
     );
     logger.info(`POST /api/dev/seed - created restaurant: ${restaurantName}`);
 
@@ -41,14 +38,12 @@ export async function POST() {
       { num: "105", status: "Complete" },
     ];
 
-    const stmt = await db.prepare(
-      "INSERT INTO orders (order_number, restaurant_name, status) VALUES (?, ?, ?)",
-    );
-
     for (const order of orders) {
-      await stmt.run(`ORD-${order.num}`, restaurantName, order.status);
+      await query(
+        "INSERT INTO orders (order_number, restaurant_name, status) VALUES ($1, $2, $3)",
+        [`ORD-${order.num}`, restaurantName, order.status],
+      );
     }
-    await stmt.finalize();
     logger.info(`POST /api/dev/seed - created ${orders.length} sample orders`);
 
     logger.info("POST /api/dev/seed - database seeded successfully");

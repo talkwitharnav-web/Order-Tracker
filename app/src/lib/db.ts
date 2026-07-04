@@ -1,61 +1,44 @@
-import sqlite3 from "sqlite3";
-import { open, Database } from "sqlite";
+import { Pool, QueryResultRow } from "pg";
 
-let db: Database | null = null;
+let pool: Pool | null = null;
 
-export async function getDb() {
-  if (!db) {
-    db = await open({
-      filename: "./orders.db",
-      driver: sqlite3.Database,
+export function getPool() {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
     });
   }
-  return db;
+  return pool;
+}
+
+export async function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[],
+) {
+  return getPool().query<T>(text, params);
 }
 
 export async function initDb() {
-  const db = await getDb();
-  await db.exec(`
+  const db = getPool();
+  await db.query(`
     CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       order_number TEXT NOT NULL,
       restaurant_name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'Received',
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await db.exec(`
+  await db.query(`
     CREATE TABLE IF NOT EXISTS restaurants (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
-      password TEXT NOT NULL
+      password TEXT NOT NULL,
+      raw_password TEXT
     );
   `);
-
-  // Add raw_password column if it doesn't exist, for backwards compatibility
-  try {
-    await db.exec('ALTER TABLE restaurants ADD COLUMN raw_password TEXT');
-  } catch (e) {
-    if (e instanceof Error && e.message.includes('duplicate column name')) {
-      // Column already exists, which is fine.
-    } else {
-      throw e;
-    }
-  }
-
-  await db.exec(`
+  await db.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_updated_at ON orders (updated_at);
   `);
-
-  // A migration to add 'created_at' to orders if it doesn't exist.
-  try {
-    await db.exec('ALTER TABLE orders ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
-  } catch (e) {
-     if (e instanceof Error && e.message.includes('duplicate column name')) {
-      // Column already exists, which is fine.
-    } else {
-      throw e;
-    }
-  }
 }

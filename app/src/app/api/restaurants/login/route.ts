@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { query } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import bcrypt from "bcrypt";
 
@@ -15,11 +15,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const db = await getDb();
-    const restaurant = await db.get(
-      "SELECT * FROM restaurants WHERE name = ?",
-      name,
+    const result = await query(
+      "SELECT * FROM restaurants WHERE name = $1",
+      [name],
     );
+    const restaurant = result.rows[0];
 
     console.log("Database lookup result for restaurant:", restaurant);
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 export async function GET(request: Request, { params }: { params: Promise<{ restaurantName: string }> }) {
@@ -13,27 +13,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
 
   try {
     await initDb();
-    const db = await getDb();
 
     logger.info(
       `GET /api/orders/restaurant/${restaurantName} - fetching orders`,
     );
 
-    let query = `SELECT * FROM orders WHERE restaurant_name = ?`;
+    let sql = `SELECT * FROM orders WHERE restaurant_name = $1`;
     const queryParams: any[] = [restaurantName];
 
     if (status && ["Received", "Making", "Finished"].includes(status)) {
-      query += ` AND status = ?`;
+      sql += ` AND status = $2`;
       queryParams.push(status);
     } else {
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      query += ` AND (status != 'Finished' OR (status = 'Finished' AND updated_at > ?))`;
+      sql += ` AND (status != 'Finished' OR (status = 'Finished' AND updated_at > $2))`;
       queryParams.push(fiveMinutesAgo);
     }
 
-    query += ` ORDER BY id DESC`;
+    sql += ` ORDER BY id DESC`;
 
-    const orders = await db.all(query, ...queryParams);
+    const result = await query(sql, queryParams);
+    const orders = result.rows;
 
     console.log("Requested restaurant name:", restaurantName);
     console.log("Returned rows:", orders);

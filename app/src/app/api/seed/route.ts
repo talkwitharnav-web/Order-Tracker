@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 export async function GET() {
   logger.info("GET /api/seed - request received");
   try {
     await initDb();
-    const db = await getDb();
 
     logger.info("GET /api/seed - clearing orders table");
-    await db.exec("DELETE FROM orders");
-    // Reset the auto-increment counter
-    await db.exec("DELETE FROM sqlite_sequence WHERE name='orders'");
+    await query("DELETE FROM orders");
+    await query("ALTER SEQUENCE orders_id_seq RESTART WITH 1");
 
     logger.info("GET /api/seed - seeding database with sample orders");
     const orders = [
@@ -32,15 +30,12 @@ export async function GET() {
       },
     ];
 
-    const stmt = await db.prepare(
-      "INSERT INTO orders (order_number, restaurant_name, status) VALUES (?, ?, ?)",
-    );
-
     for (const order of orders) {
-      await stmt.run(order.order_number, order.restaurant_name, order.status);
+      await query(
+        "INSERT INTO orders (order_number, restaurant_name, status) VALUES ($1, $2, $3)",
+        [order.order_number, order.restaurant_name, order.status],
+      );
     }
-
-    await stmt.finalize();
 
     logger.info("GET /api/seed - database seeded successfully");
     return NextResponse.json({ message: "Database seeded successfully" });

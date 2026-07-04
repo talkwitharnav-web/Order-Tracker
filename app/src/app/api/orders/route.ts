@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { broadcast } from "@/lib/ws-hub";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
   try {
     await initDb();
-    const db = await getDb();
     const { restaurant_name, order_number } = await request.json();
 
     if (!restaurant_name || !order_number) {
@@ -20,21 +20,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await db.run(
-      "INSERT INTO orders (restaurant_name, order_number) VALUES (?, ?)",
-      restaurant_name,
-      order_number,
+    const result = await query(
+      "INSERT INTO orders (restaurant_name, order_number) VALUES ($1, $2) RETURNING id",
+      [restaurant_name, order_number],
     );
 
+    const id = result.rows[0].id;
+
     logger.info("POST /api/orders - order created successfully", {
-      orderId: result.lastID,
+      orderId: id,
     });
-    return NextResponse.json({
-      id: result.lastID,
+
+    const order = {
+      id,
       restaurant_name,
       order_number,
       status: "Received",
-    });
+    };
+
+    broadcast({ type: "order_updated", payload: order });
+
+    return NextResponse.json(order);
   } catch (err) {
     logger.error("POST /api/orders - error processing request", err);
     return NextResponse.json(
@@ -48,7 +54,6 @@ export async function GET(request: Request) {
   logger.info("GET /api/orders - request received");
   try {
     await initDb();
-    const db = await getDb();
     const { searchParams } = new URL(request.url);
     const restaurant_name = searchParams.get("restaurant_name");
     const order_number = searchParams.get("order_number");
@@ -69,11 +74,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const order = await db.get(
-      "SELECT * FROM orders WHERE restaurant_name = ? AND order_number = ?",
-      restaurant_name,
-      order_number,
+    const result = await query(
+      "SELECT * FROM orders WHERE restaurant_name = $1 AND order_number = $2",
+      [restaurant_name, order_number],
     );
+    const order = result.rows[0];
 
     if (!order) {
       logger.warn("GET /api/orders - order not found", {

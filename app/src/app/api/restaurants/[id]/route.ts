@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDb, initDb } from "@/lib/db";
+import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 export async function DELETE(
@@ -9,12 +9,15 @@ export async function DELETE(
   const { id } = await params;
   logger.info(`DELETE /api/restaurants/${id} - request received`);
 
-  try {
-    await initDb();
-    const db = await getDb();
+  await initDb();
+  const client = await getPool().connect();
 
-    // First, get the restaurant's name
-    const restaurant = await db.get("SELECT name FROM restaurants WHERE id = ?", id);
+  try {
+    const restaurantResult = await client.query(
+      "SELECT name FROM restaurants WHERE id = $1",
+      [id],
+    );
+    const restaurant = restaurantResult.rows[0];
 
     if (!restaurant) {
       logger.warn(`DELETE /api/restaurants/${id} - restaurant not found`);
@@ -26,22 +29,17 @@ export async function DELETE(
 
     const restaurantName = restaurant.name;
 
-    // Begin transaction
-    await db.exec("BEGIN TRANSACTION");
+    await client.query("BEGIN");
 
-    // Delete associated orders
     logger.info(`DELETE /api/restaurants/${id} - deleting orders for restaurant: ${restaurantName}`);
-    await db.run("DELETE FROM orders WHERE restaurant_name = ?", restaurantName);
+    await client.query("DELETE FROM orders WHERE restaurant_name = $1", [restaurantName]);
 
-    // Delete the restaurant
     logger.info(`DELETE /api/restaurants/${id} - deleting restaurant`);
-    const result = await db.run("DELETE FROM restaurants WHERE id = ?", id);
+    const result = await client.query("DELETE FROM restaurants WHERE id = $1", [id]);
 
-    // Commit transaction
-    await db.exec("COMMIT");
+    await client.query("COMMIT");
 
-    if (result.changes === 0) {
-      // This case should theoretically not be reached if the initial check passes, but it's good practice.
+    if (result.rowCount === 0) {
       logger.warn(`DELETE /api/restaurants/${id} - restaurant not found during deletion`);
       return NextResponse.json(
         { error: "Restaurant not found" },
@@ -52,8 +50,7 @@ export async function DELETE(
     logger.info(`DELETE /api/restaurants/${id} - restaurant and associated orders deleted successfully`);
     return NextResponse.json({ message: "Restaurant deleted successfully" });
   } catch (err) {
-    const db = await getDb();
-    await db.exec("ROLLBACK"); // Rollback on error
+    await client.query("ROLLBACK");
     logger.error(
       `DELETE /api/restaurants/${id} - error processing request`,
       err
@@ -62,5 +59,7 @@ export async function DELETE(
       { error: "Failed to delete restaurant and associated orders." },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }
