@@ -1,0 +1,11 @@
+{
+  "name": "restaurant",
+  "private": true,
+  "scripts": {
+    "start:all": "npm --prefix app run start:all",
+    "dev": "npm --prefix app run dev",
+    "db:up": "npm --prefix app run db:up",
+    "db:down": "npm --prefix app run db:down",
+    "db:stop": "npm --prefix app run db:stop"
+  }
+}

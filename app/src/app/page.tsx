@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChefHat, Search, Lock } from "lucide-react";
+import { AuthCard } from "@/components/ui/AuthCard";
+import { Input, Label } from "@/components/ui/Input";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Button } from "@/components/ui/Button";
 
 export default function GatewayCommandCenter() {
   const [username, setUsername] = useState("");
@@ -40,83 +44,57 @@ export default function GatewayCommandCenter() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-black text-gray-300 font-mono relative">
+    <div className="relative">
       <Link
         href="/restaurant"
-        className="absolute top-4 left-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+        className="fixed top-4 left-4 z-10 px-4 py-2 bg-[var(--color-surface-1)] border border-[var(--color-border-strong)] text-[var(--color-text-secondary)] rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-2)] hover:text-white transition-colors flex items-center gap-2 text-sm"
       >
-        <ChefHat size={20} />
+        <ChefHat size={18} />
         Kitchen Portal
       </Link>
       <Link
         href="/customer"
-        className="absolute bottom-4 left-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        className="fixed bottom-4 left-4 z-10 px-4 py-2 bg-[var(--color-surface-1)] border border-[var(--color-border-strong)] text-[var(--color-text-secondary)] rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-2)] hover:text-white transition-colors flex items-center gap-2 text-sm"
       >
-        <Search size={20} />
+        <Search size={18} />
         Customer Tracker
       </Link>
 
-      <div className="w-full max-w-md">
-        <form
-          onSubmit={handleLogin}
-          className="bg-gray-900 shadow-md rounded px-8 pt-6 pb-8 mb-4 border border-gray-700"
-        >
-          <h1 className="text-2xl text-center font-bold mb-6 text-red-500 flex items-center justify-center gap-2">
-            <Lock size={24} />
-            Admin Login
-          </h1>
-          <div className="mb-4">
-            <label
-              className="block text-gray-400 text-sm font-bold mb-2"
-              htmlFor="username"
-            >
-              Username
-            </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-800 border-gray-600 text-white leading-tight focus:outline-none focus:shadow-outline"
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </div>
-          <div className="mb-6">
-            <label
-              className="block text-gray-400 text-sm font-bold mb-2"
-              htmlFor="password"
-            >
-              Password
-            </label>
-            <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 bg-gray-800 border-gray-600 text-white mb-3 leading-tight focus:outline-none focus:shadow-outline"
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          <div className="mb-6">
-            <label className="flex items-center text-gray-400">
-              <input
-                type="checkbox"
-                className="form-checkbox h-5 w-5 bg-gray-800 border-gray-600 text-red-600 focus:ring-red-500 rounded"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-              />
-              <span className="ml-2">Remember Me</span>
-            </label>
-          </div>
-          {error && <p className="text-red-500 text-xs italic mb-4">{error}</p>}
-          <div className="flex items-center justify-between">
-            <button
-              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full"
-              type="submit"
-            >
-              Sign In
-            </button>
-          </div>
-        </form>
-      </div>
-    </main>
+      <AuthCard
+        title="Admin Access"
+        onSubmit={handleLogin}
+        error={error || null}
+      >
+        <div className="flex justify-center mb-2">
+          <Lock className="w-8 h-8 text-[var(--color-brand-text)]" />
+        </div>
+        <div>
+          <Label htmlFor="username">Username</Label>
+          <Input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <Checkbox
+          label="Remember Me"
+          checked={rememberMe}
+          onChange={(e) => setRememberMe(e.target.checked)}
+        />
+        <Button type="submit" size="lg" className="w-full">
+          Sign In
+        </Button>
+      </AuthCard>
+    </div>
   );
 }

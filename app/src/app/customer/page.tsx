@@ -1,23 +1,22 @@
 "use client";
 
-import { useState, FormEvent, useEffect, FC } from "react";
-import { Clock, Flame, CheckCircle } from "lucide-react";
+import { useState, FormEvent, useEffect, useRef, FC } from "react";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Input, Label } from "@/components/ui/Input";
+import { StatusIcon } from "@/components/ui/StatusBadge";
+import { getStatusVisual, type CustomerOrderStatus } from "@/lib/order-status";
 
-// --- TYPES ---
-type OrderStatus = "Received" | "Making" | "Finished";
 type Order = {
   id: number;
   restaurant_name: string;
   order_number: string;
-  status: OrderStatus;
+  status: CustomerOrderStatus;
   updated_at: string;
 };
 
-// --- TIME HELPER ---
 const timeSince = (date: string) => {
-  const seconds = Math.floor(
-    (new Date().getTime() - new Date(date).getTime()) / 1000,
-  );
+  const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
   let interval = seconds / 31536000;
   if (interval > 1) return Math.floor(interval) + " years ago";
   interval = seconds / 2592000;
@@ -32,116 +31,82 @@ const timeSince = (date: string) => {
   return Math.floor(seconds) + " seconds ago";
 };
 
-// --- ORDER STATUS CARD ---
+const STATUS_DESCRIPTION: Record<CustomerOrderStatus, string> = {
+  Received: "We've got your order and will start preparing it soon.",
+  Making: "Our chefs are putting their love and care into your meal.",
+  Finished: "Your order is ready. Come and get it!",
+};
+
 const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
   const [lastUpdated, setLastUpdated] = useState(timeSince(order.updated_at));
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setLastUpdated(timeSince(order.updated_at));
-    }, 1000);
+    const timer = setInterval(() => setLastUpdated(timeSince(order.updated_at)), 1000);
     return () => clearInterval(timer);
   }, [order.updated_at]);
 
-  const statusConfig = {
-    Received: {
-      Icon: Clock,
-      color: "slate",
-      title: "Order Placed",
-      description: "We've got your order and will start preparing it soon.",
-    },
-    Making: {
-      Icon: Flame,
-      color: "amber",
-      title: "In the Kitchen",
-      description: "Our chefs are putting their love and care into your meal.",
-    },
-    Finished: {
-      Icon: CheckCircle,
-      color: "emerald",
-      title: "Ready for Pickup!",
-      description: "Your order is ready. Come and get it!",
-    },
-  };
-
-  const { Icon, color, title, description } = statusConfig[order.status];
-
-  const colorClasses = {
-    slate: {
-      border: "border-slate-700",
-      text: "text-slate-300",
-      icon: "text-slate-500",
-      bg: "bg-slate-800/50",
-      pulse: "shadow-slate-800/50",
-    },
-    amber: {
-      border: "border-amber-500/50",
-      text: "text-amber-300",
-      icon: "text-amber-500",
-      bg: "bg-amber-950/30",
-      pulse: "shadow-amber-500/30",
-    },
-    emerald: {
-      border: "border-emerald-500/50",
-      text: "text-emerald-300",
-      icon: "text-emerald-500",
-      bg: "bg-emerald-950/30",
-      pulse: "shadow-emerald-500/30",
-    },
-  };
-
-  const currentColors = colorClasses[color];
+  const visual = getStatusVisual(order.status);
+  const title =
+    order.status === "Received"
+      ? "Order Placed"
+      : order.status === "Making"
+        ? "In the Kitchen"
+        : "Ready for Pickup!";
 
   return (
     <div
-      className={`relative mt-12 w-full p-8 rounded-2xl overflow-hidden transition-all duration-500 ease-in-out ${currentColors.border} ${currentColors.bg} border-2`}
+      className={`mt-8 w-full p-8 rounded-[var(--radius-md)] border ${visual.border} ${visual.bg} text-center`}
     >
-      <div
-        className={`absolute inset-0 -z-10 bg-gradient-to-br from-slate-900 via-${color}-950/50 to-slate-900 animate-pulse-gradient`}
-      />
-      <div className="text-center">
-        <Icon
-          className={`w-24 h-24 mx-auto ${currentColors.icon} transition-colors duration-500 ease-in-out mb-4 animate-pulse`}
-        />
-        <h2
-          className={`text-4xl font-bold ${currentColors.text} transition-colors duration-500 ease-in-out`}
-        >
-          {title}
-        </h2>
-        <p className="text-slate-400 mt-2 text-lg">{description}</p>
-        <p className="text-xs text-slate-500 mt-6">
-          Order #{order.order_number} &bull; Last updated {lastUpdated}
-        </p>
-      </div>
+      <StatusIcon status={order.status} className="w-16 h-16 mx-auto mb-4 animate-pulse" />
+      <h2 className={`text-3xl font-bold ${visual.text}`}>{title}</h2>
+      <p className="text-[var(--color-text-secondary)] mt-2 text-base">
+        {STATUS_DESCRIPTION[order.status]}
+      </p>
+      <p className="text-xs text-[var(--color-text-muted)] mt-6">
+        Order #{order.order_number} &bull; Last updated {lastUpdated}
+      </p>
     </div>
   );
 };
 
+type ConnectionState = "connecting" | "live" | "reconnecting";
 
-// --- CUSTOMER PAGE ---
+const ConnectionIndicator: FC<{ state: ConnectionState }> = ({ state }) => {
+  const config = {
+    connecting: { dot: "bg-[var(--color-text-muted)]", label: "Connecting…" },
+    live: { dot: "bg-[var(--color-success)] animate-pulse", label: "Live" },
+    reconnecting: { dot: "bg-[var(--color-danger)] animate-pulse", label: "Reconnecting…" },
+  }[state];
+
+  return (
+    <div className="flex items-center gap-2 justify-center text-xs text-[var(--color-text-muted)] mt-4">
+      <span className={`w-2 h-2 rounded-full ${config.dot}`} />
+      {config.label}
+    </div>
+  );
+};
+
 export default function CustomerPage() {
   const [restaurantName, setRestaurantName] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connection, setConnection] = useState<ConnectionState>("connecting");
+  const orderRef = useRef<Order | null>(null);
+  useEffect(() => {
+    orderRef.current = order;
+  }, [order]);
 
   const fetchOrderStatus = async (restName: string, ordNum: string) => {
     try {
-      const query = new URLSearchParams({
-        restaurant_name: restName,
-        order_number: ordNum,
-      });
+      const query = new URLSearchParams({ restaurant_name: restName, order_number: ordNum });
       const response = await fetch(`/api/orders/search?${query}`);
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to track order");
-      }
+      if (!response.ok) throw new Error(data.error || "Failed to track order");
       setOrder(data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred",
-      );
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
       setOrder(null);
     }
   };
@@ -161,11 +126,6 @@ export default function CustomerPage() {
     setIsLoading(false);
   };
 
-  // Real-time updates via WebSocket, replacing the previous 5s poll.
-  // The broadcast payload's status vocabulary doesn't always match this
-  // page's OrderStatus enum (see SYSTEM_MEMORY.md status-vocab quirk), so on
-  // any relevant event we just refetch via the existing REST lookup rather
-  // than trust the raw broadcast status string.
   useEffect(() => {
     if (!order || order.status === "Finished") return;
 
@@ -174,17 +134,18 @@ export default function CustomerPage() {
     let closedByEffect = false;
 
     const connect = () => {
+      setConnection("connecting");
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+      socket.onopen = () => setConnection("live");
 
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (
-            (data.type === "order_updated" || data.type === "order_deleted") &&
-            order
-          ) {
-            fetchOrderStatus(order.restaurant_name, order.order_number);
+          const current = orderRef.current;
+          if ((data.type === "order_updated" || data.type === "order_deleted") && current) {
+            fetchOrderStatus(current.restaurant_name, current.order_number);
           }
         } catch {
           // ignore malformed messages
@@ -193,6 +154,7 @@ export default function CustomerPage() {
 
       socket.onclose = () => {
         if (!closedByEffect) {
+          setConnection("reconnecting");
           reconnectTimer = setTimeout(connect, 2000);
         }
       };
@@ -205,96 +167,66 @@ export default function CustomerPage() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, [order]);
+  }, [order?.id]);
 
-  const formatInput = (value: string) => {
-    return value.toUpperCase().replace(/[^A-Z0-9- ]/g, "");
-  };
+  const formatInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9- ]/g, "");
 
   return (
-    <>
-      <style jsx global>{`
-        @keyframes pulse-gradient {
-          0%, 100% {
-            opacity: 0.3;
-          }
-          50% {
-            opacity: 0.6;
-          }
-        }
-        .animate-pulse-gradient {
-          animation: pulse-gradient 5s ease-in-out infinite;
-        }
-      `}</style>
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center font-sans p-4">
-        <main className="w-full max-w-2xl mx-auto">
-          <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-10 rounded-2xl shadow-2xl">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-white mb-2">
-                Track Your Order
-              </h1>
-              <p className="text-slate-400 mb-8">
-                Enter your details to see the real-time status of your meal.
-              </p>
-            </div>
-            <form onSubmit={handleTrackOrder} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label
-                    htmlFor="restaurantName"
-                    className="block text-lg font-medium text-slate-300 mb-2"
-                  >
-                    Restaurant
-                  </label>
-                  <input
-                    id="restaurantName"
-                    type="text"
-                    value={restaurantName}
-                    onChange={(e) =>
-                      setRestaurantName(formatInput(e.target.value))
-                    }
-                    placeholder="e.g., 'THE GOLDEN SPOON'"
-                    className="w-full p-4 text-lg bg-slate-950 text-white border-2 border-slate-800 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-600 transition-all"
-                    required
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="orderNumber"
-                    className="block text-lg font-medium text-slate-300 mb-2"
-                  >
-                    Order #
-                  </label>
-                  <input
-                    id="orderNumber"
-                    type="text"
-                    value={orderNumber}
-                    onChange={(e) => setOrderNumber(formatInput(e.target.value))}
-                    placeholder="e.g., 'ORD-12345'"
-                    className="w-full p-4 text-lg bg-slate-950 text-white border-2 border-slate-800 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-600 transition-all"
-                    required
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full px-8 py-4 text-xl font-semibold text-white bg-amber-600 rounded-xl shadow-lg hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-amber-500 disabled:bg-slate-700 transition-all duration-200 transform hover:scale-[1.02]"
-              >
-                {isLoading ? "Searching..." : "Find My Order"}
-              </button>
-            </form>
-
-            {error && (
-              <div className="mt-8 bg-red-900/50 border border-red-700 p-4 rounded-xl">
-                <p className="font-semibold text-red-300 text-center">{error}</p>
-              </div>
-            )}
-
-            {order && <OrderStatusCard order={order} />}
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <main className="w-full max-w-2xl mx-auto">
+        <Card className="p-6 sm:p-10">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl sm:text-4xl font-bold text-[var(--color-text-primary)] mb-2">
+              Track Your Order
+            </h1>
+            <p className="text-[var(--color-text-secondary)]">
+              Enter your details to see the real-time status of your meal.
+            </p>
           </div>
-        </main>
-      </div>
-    </>
+          <form onSubmit={handleTrackOrder} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label htmlFor="restaurantName">Restaurant</Label>
+                <Input
+                  id="restaurantName"
+                  type="text"
+                  value={restaurantName}
+                  onChange={(e) => setRestaurantName(formatInput(e.target.value))}
+                  placeholder="e.g., 'THE GOLDEN SPOON'"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="orderNumber">Order #</Label>
+                <Input
+                  id="orderNumber"
+                  type="text"
+                  value={orderNumber}
+                  onChange={(e) => setOrderNumber(formatInput(e.target.value))}
+                  placeholder="e.g., 'ORD-12345'"
+                  required
+                />
+              </div>
+            </div>
+            <Button type="submit" variant="primary" size="lg" disabled={isLoading} className="w-full">
+              {isLoading ? "Searching..." : "Find My Order"}
+            </Button>
+          </form>
+
+          {error && (
+            <div className="mt-8 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
+              <p className="font-semibold text-red-300 text-center">{error}</p>
+            </div>
+          )}
+
+          {order && (
+            <>
+              <OrderStatusCard order={order} />
+              <ConnectionIndicator state={connection} />
+            </>
+          )}
+        </Card>
+      </main>
+    </div>
   );
 }

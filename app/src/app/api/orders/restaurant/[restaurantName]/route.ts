@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
       `GET /api/orders/restaurant/${restaurantName} - fetching orders`,
     );
 
-    let sql = `SELECT * FROM orders WHERE restaurant_name = $1`;
+    let sql = `SELECT * FROM orders WHERE restaurant_name ILIKE $1`;
     const queryParams: any[] = [restaurantName];
 
     if (status && ["Received", "Making", "Finished"].includes(status)) {

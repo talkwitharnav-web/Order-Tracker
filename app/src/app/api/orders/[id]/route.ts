@@ -17,9 +17,11 @@ export async function PUT(
     logger.info(`PUT /api/orders/${id} - updating status`, { status });
 
     const allowedStatuses = ["Received", "Preparing", "Complete"];
-    const incomingStatusLower = status.toLowerCase();
 
-    if (!status || !allowedStatuses.map(s => s.toLowerCase()).includes(incomingStatusLower)) {
+    if (
+      typeof status !== "string" ||
+      !allowedStatuses.map(s => s.toLowerCase()).includes(status.toLowerCase())
+    ) {
       logger.warn(`PUT /api/orders/${id} - validation error: Invalid status "${status}"`);
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }

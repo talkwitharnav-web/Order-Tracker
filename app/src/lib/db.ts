@@ -41,4 +41,18 @@ export async function initDb() {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_updated_at ON orders (updated_at);
   `);
+  // Case-insensitive uniqueness: prevents the same order (e.g. "ASDF"/"asdf")
+  // being created twice for a restaurant regardless of which client (Kitchen
+  // vs Customer) normalized casing differently.
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_unique_restaurant_order
+    ON orders (LOWER(restaurant_name), LOWER(order_number));
+  `);
+  // Same reasoning as above, applied to restaurant registration: the plain
+  // UNIQUE on name is case-sensitive, so "Golden Spoon" and "GOLDEN SPOON"
+  // could otherwise both register and desync login/lookup behavior.
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurants_unique_name_ci
+    ON restaurants (LOWER(name));
+  `);
 }

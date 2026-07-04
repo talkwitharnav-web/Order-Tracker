@@ -6,7 +6,11 @@
     "dev": "node server.js",
     "build": "next build",
     "start": "cross-env NODE_ENV=production node server.js",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:up": "docker compose -f ../docker-compose.yml up -d",
+    "db:down": "docker compose -f ../docker-compose.yml down",
+    "db:stop": "docker compose -f ../docker-compose.yml stop",
+    "start:all": "npm run db:up && npm run dev"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

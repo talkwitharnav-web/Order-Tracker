@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --color-surface-0: #020617; /* page background — slate-950 */
+  --color-surface-1: #0f172a; /* card background — slate-900 */
+  --color-surface-2: #1e293b; /* raised/hover background — slate-800 */
+  --color-border: #1e293b; /* slate-800 */
+  --color-border-strong: #334155; /* slate-700 */
+
+  /* Text */
+  --color-text-primary: #f8fafc; /* slate-50 */
+  --color-text-secondary: #94a3b8; /* slate-400 */
+  --color-text-muted: #64748b; /* slate-500 */
+
+  /* Brand (single accent, used everywhere) */
+  --color-brand: #d97706; /* amber-600 */
+  --color-brand-hover: #b45309; /* amber-700 */
+  --color-brand-text: #fbbf24; /* amber-400, for text-on-dark */
+
+  /* Status (single mapping, used everywhere status appears) */
+  --color-status-received-bg: rgba(100, 116, 139, 0.15);
+  --color-status-received-border: rgba(100, 116, 139, 0.4);
+  --color-status-received-text: #cbd5e1; /* slate-300 */
+  --color-status-received-icon: #94a3b8; /* slate-400 */
+
+  --color-status-preparing-bg: rgba(245, 158, 11, 0.12);
+  --color-status-preparing-border: rgba(245, 158, 11, 0.4);
+  --color-status-preparing-text: #fcd34d; /* amber-300 */
+  --color-status-preparing-icon: #f59e0b; /* amber-500 */
+
+  --color-status-complete-bg: rgba(16, 185, 129, 0.12);
+  --color-status-complete-border: rgba(16, 185, 129, 0.4);
+  --color-status-complete-text: #6ee7b7; /* emerald-300 */
+  --color-status-complete-icon: #10b981; /* emerald-500 */
+
+  /* Semantic */
+  --color-danger: #dc2626; /* red-600 */
+  --color-danger-hover: #b91c1c; /* red-700 */
+  --color-success: #16a34a; /* green-600 */
+
+  /* Radius scale — exactly three sizes used app-wide */
+  --radius-sm: 0.5rem; /* buttons, inputs, badges */
+  --radius-md: 0.75rem; /* cards, panels, modals */
+  --radius-full: 9999px; /* pills, avatars, icon buttons */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-surface-0: var(--color-surface-0);
+  --color-surface-1: var(--color-surface-1);
+  --color-surface-2: var(--color-surface-2);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+
+  --color-brand: var(--color-brand);
+  --color-brand-hover: var(--color-brand-hover);
+  --color-brand-text: var(--color-brand-text);
+
+  --color-danger: var(--color-danger);
+  --color-danger-hover: var(--color-danger-hover);
+  --color-success: var(--color-success);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-full: var(--radius-full);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-surface-0);
+  color: var(--color-text-primary);
 }

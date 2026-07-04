@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Database, Trash2, Key, ShieldAlert } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Modal, ModalActions } from "@/components/ui/Modal";
+import { ToastProvider, useToast } from "@/components/ui/Toast";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
-// --- INTERFACES ---
 interface Restaurant {
   id: number;
   name: string;
@@ -21,106 +26,32 @@ interface Order {
   created_at: string;
 }
 
-interface ModalState {
+interface ConfirmState {
   isOpen: boolean;
   title: string;
   message: string;
+  danger: boolean;
   onConfirm: () => void;
 }
 
-interface ToastState {
-  message: string;
-  type: "success" | "error";
-}
-
-// --- MODAL COMPONENT ---
-const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel }: ModalState & { onCancel: () => void }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
-      <div className="bg-gray-900 border border-red-500 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-2xl font-bold text-red-500 mb-4">{title}</h2>
-        <p className="text-gray-300 mb-6">{message}</p>
-        <div className="flex justify-end gap-4">
-          <button onClick={onCancel} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
-          <button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors">Confirm</button>
-        </div>
-      </div>
-    </div>
-  );
+const EMPTY_CONFIRM: ConfirmState = {
+  isOpen: false,
+  title: "",
+  message: "",
+  danger: false,
+  onConfirm: () => {},
 };
 
-// --- TOAST COMPONENT ---
-const Toast = ({ message, type, onDismiss }: ToastState & { onDismiss: () => void }) => (
-  <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right duration-300 fade-in">
-    <div className={`rounded-lg shadow-lg p-4 text-white ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
-      <div className="flex items-center">
-        <span>{message}</span>
-        <button onClick={onDismiss} className="ml-4 text-xl font-bold">&times;</button>
-      </div>
-    </div>
-  </div>
-);
-
-// --- PASSWORD RESET MODAL COMPONENT ---
-const PasswordResetModal = ({
-  isOpen,
-  onConfirm,
-  onCancel,
-  newPassword,
-  setNewPassword,
-}: {
-  isOpen: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-  newPassword: string;
-  setNewPassword: (pw: string) => void;
-}) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
-      <div className="bg-gray-900 border border-amber-500 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-2xl font-bold text-amber-500 mb-4">Change Password</h2>
-        <input
-          type="text"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          placeholder="Enter new password"
-          className="w-full bg-gray-800 text-white rounded p-2 border border-gray-700 mb-6 focus:outline-none focus:ring-2 focus:ring-amber-500"
-        />
-        <div className="flex justify-end gap-4">
-          <button onClick={onCancel} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors">Cancel</button>
-          <button onClick={onConfirm} className="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition-colors">Confirm</button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-
-// --- ADMIN PAGE ---
-export default function AdminDbPage() {
+function AdminDbContent() {
   const router = useRouter();
+  const showToast = useToast();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [modalState, setModalState] = useState<ModalState>({ isOpen: false, title: "", message: "", onConfirm: () => {} });
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(EMPTY_CONFIRM);
   const [passwordResetTarget, setPasswordResetTarget] = useState<number | null>(null);
-  const [newPassword, setNewPassword] = useState('');
+  const [newPassword, setNewPassword] = useState("");
 
-  const showToast = (message: string, type: "success" | "error") => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setToast({ message, type });
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast(null);
-      toastTimeoutRef.current = null;
-    }, 3000);
-  };
-  
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch("/api/dev/db");
@@ -133,7 +64,7 @@ export default function AdminDbPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     if (localStorage.getItem("isAdmin") !== "true") {
@@ -141,54 +72,58 @@ export default function AdminDbPage() {
     } else {
       fetchData();
     }
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
   }, [router, fetchData]);
 
-  const closeModal = () => setModalState({ isOpen: false, title: "", message: "", onConfirm: () => {} });
+  const closeConfirm = () => setConfirmState(EMPTY_CONFIRM);
 
   const performAction = async (action: () => Promise<Response>, successMessage: string) => {
-    closeModal();
+    closeConfirm();
     try {
       const res = await action();
-      const resJson = await res.json().catch(() => ({})); // Gracefully handle empty responses
+      const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {
-          throw new Error(resJson.error || `Action failed with status: ${res.status}`);
+        throw new Error(resJson.error || `Action failed with status: ${res.status}`);
       }
       showToast(successMessage, "success");
-      fetchData(); // Refresh data
+      fetchData();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
   };
 
   const handleSeed = () => {
-    setModalState({
+    setConfirmState({
       isOpen: true,
       title: "Seed Database",
       message: "Are you sure you want to seed the database? This will clear existing data.",
-      onConfirm: () => performAction(() => fetch("/api/dev/seed", { method: "POST" }), "Database seeded successfully!"),
+      danger: false,
+      onConfirm: () =>
+        performAction(() => fetch("/api/dev/seed", { method: "POST" }), "Database seeded successfully!"),
     });
   };
 
   const handlePurge = () => {
-    setModalState({
+    setConfirmState({
       isOpen: true,
       title: "Purge Database",
       message: "Are you sure you want to purge the database? THIS ACTION IS IRREVERSIBLE.",
-      onConfirm: () => performAction(() => fetch("/api/dev/db", { method: "DELETE" }), "Database purged successfully!"),
+      danger: true,
+      onConfirm: () =>
+        performAction(() => fetch("/api/dev/db", { method: "DELETE" }), "Database purged successfully!"),
     });
   };
 
   const handleDelete = (type: "restaurant" | "order", id: number) => {
-    setModalState({
+    setConfirmState({
       isOpen: true,
       title: `Delete ${type}`,
       message: `Are you sure you want to delete this ${type}? This cannot be undone.`,
-      onConfirm: () => performAction(() => fetch(`/api/${type}s/${id}`, { method: "DELETE" }), `${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`),
+      danger: true,
+      onConfirm: () =>
+        performAction(
+          () => fetch(`/api/${type}s/${id}`, { method: "DELETE" }),
+          `${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`,
+        ),
     });
   };
 
@@ -204,96 +139,142 @@ export default function AdminDbPage() {
     );
   };
 
-  const handlePasswordReset = () => {
+  const handlePasswordReset = async () => {
     if (!passwordResetTarget) return;
-
-    const action = () => fetch(`/api/restaurants/${passwordResetTarget}/password`, {
+    try {
+      const res = await fetch(`/api/restaurants/${passwordResetTarget}/password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newPassword }),
-    });
-
-    // We can't use performAction directly as it closes all modals
-    // and we need to keep the password modal open on failure.
-    (async () => {
-      try {
-        const res = await action();
-        const resJson = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            throw new Error(resJson.error || `Action failed with status: ${res.status}`);
-        }
-        showToast("Password updated successfully!", "success");
-        setNewPassword('');
-        setPasswordResetTarget(null);
-        fetchData();
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
-      }
-    })();
+      });
+      const resJson = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(resJson.error || `Action failed with status: ${res.status}`);
+      showToast("Password updated successfully!", "success");
+      setNewPassword("");
+      setPasswordResetTarget(null);
+      fetchData();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
+    }
   };
 
-  if (isLoading) return <div className="flex justify-center items-center min-h-screen bg-black text-white">Loading...</div>;
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen text-[var(--color-text-secondary)]">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <>
-      <ConfirmationModal {...modalState} onCancel={closeModal} />
-      <PasswordResetModal
+      <Modal isOpen={confirmState.isOpen} title={confirmState.title} onClose={closeConfirm} danger={confirmState.danger}>
+        <p className="text-[var(--color-text-secondary)] mb-6">{confirmState.message}</p>
+        <ModalActions
+          onCancel={closeConfirm}
+          onConfirm={confirmState.onConfirm}
+          danger={confirmState.danger}
+          confirmLabel="Confirm"
+        />
+      </Modal>
+
+      <Modal
         isOpen={passwordResetTarget !== null}
-        onCancel={() => {
+        title="Change Password"
+        onClose={() => {
           setPasswordResetTarget(null);
-          setNewPassword('');
+          setNewPassword("");
         }}
-        onConfirm={handlePasswordReset}
-        newPassword={newPassword}
-        setNewPassword={setNewPassword}
-      />
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+      >
+        <Input
+          type="text"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="Enter new password"
+          className="mb-2"
+        />
+        <ModalActions
+          onCancel={() => {
+            setPasswordResetTarget(null);
+            setNewPassword("");
+          }}
+          onConfirm={handlePasswordReset}
+          confirmLabel="Update Password"
+        />
+      </Modal>
 
-      <div className="bg-black text-white min-h-screen p-8 font-mono">
-        <header className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-red-500">ADMIN DASHBOARD</h1>
-          <Link href="/" className="bg-gray-800 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-            Back to Home
-          </Link>
-        </header>
+      <div className="min-h-screen p-4 sm:p-8">
+        <PageHeader
+          title="Admin Dashboard"
+          backHref="/"
+          actions={
+            <>
+              <Button variant="secondary" onClick={handleSeed}>
+                <Database size={16} />
+                Seed Database
+              </Button>
+              <Button variant="danger" onClick={handlePurge}>
+                <ShieldAlert size={16} />
+                Purge Database
+              </Button>
+            </>
+          }
+        />
 
-        <div className="mb-8 flex gap-4">
-          <button onClick={handleSeed} className="flex items-center bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-4 rounded">
-            <Database size={18} className="mr-2" />
-            Seed Database
-          </button>
-          <button onClick={handlePurge} className="flex items-center bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
-            <ShieldAlert size={18} className="mr-2" />
-            Purge Database
-          </button>
-        </div>
-
-        <section className="mb-12">
-          <h2 className="text-2xl font-semibold mb-4 border-b border-gray-700 pb-2">Restaurants</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-gray-900 border border-gray-700 w-full table-auto">
+        <section className="mb-10">
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">Restaurants</h2>
+          <Card className="p-0 overflow-x-auto">
+            <table className="min-w-full text-sm">
               <thead>
-                <tr>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">ID</th>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">Name</th>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">Hashed Password</th>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">Raw Password</th>
-                  <th className="py-2 px-4 border-b border-gray-700 w-1 whitespace-nowrap text-right">Actions</th>
+                <tr className="border-b border-[var(--color-border)]">
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                    ID
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                    Name
+                  </th>
+                  <th
+                    scope="col"
+                    className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium hidden lg:table-cell"
+                  >
+                    Hashed Password
+                  </th>
+                  <th
+                    scope="col"
+                    className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium hidden md:table-cell"
+                  >
+                    Raw Password
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-right text-[var(--color-text-muted)] font-medium">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {restaurants.map((r) => (
-                  <tr key={r.id}>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">{r.id}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">{r.name}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 break-all text-left">{r.password}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">{r.raw_password}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 w-1 whitespace-nowrap text-right">
+                  <tr key={r.id} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="py-3 px-4 text-[var(--color-text-secondary)]">{r.id}</td>
+                    <td className="py-3 px-4 text-[var(--color-text-primary)] font-medium">{r.name}</td>
+                    <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs break-all hidden lg:table-cell">
+                      {r.password}
+                    </td>
+                    <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs hidden md:table-cell">
+                      {r.raw_password}
+                    </td>
+                    <td className="py-3 px-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button onClick={() => setPasswordResetTarget(r.id)} className="p-2 bg-amber-600 hover:bg-amber-700 text-white rounded">
+                        <button
+                          onClick={() => setPasswordResetTarget(r.id)}
+                          aria-label={`Reset password for ${r.name}`}
+                          className="p-2 bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white rounded-[var(--radius-sm)] transition-colors"
+                        >
                           <Key size={16} />
                         </button>
-                        <button onClick={() => handleDelete("restaurant", r.id)} className="p-2 bg-red-700 hover:bg-red-800 text-white rounded">
+                        <button
+                          onClick={() => handleDelete("restaurant", r.id)}
+                          aria-label={`Delete ${r.name}`}
+                          className="p-2 bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white rounded-[var(--radius-sm)] transition-colors"
+                        >
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -302,43 +283,68 @@ export default function AdminDbPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold mb-4 border-b border-gray-700 pb-2">Orders</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-gray-900 border border-gray-700 w-full table-auto">
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">Orders</h2>
+          <Card className="p-0 overflow-x-auto">
+            <table className="min-w-full text-sm">
               <thead>
-                <tr>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">ID</th>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">Restaurant Name</th>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">Order Number</th>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">Status</th>
-                  <th className="py-2 px-4 border-b border-gray-700 text-left">Created At</th>
-                  <th className="py-2 px-4 border-b border-gray-700 w-1 whitespace-nowrap text-right">Actions</th>
+                <tr className="border-b border-[var(--color-border)]">
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                    ID
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                    Restaurant
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                    Order #
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                    Status
+                  </th>
+                  <th
+                    scope="col"
+                    className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium hidden md:table-cell"
+                  >
+                    Created At
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-right text-[var(--color-text-muted)] font-medium">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {orders.map((o) => (
-                  <tr key={o.id}>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">{o.id}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">{o.restaurant_name}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">{o.order_number}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">
-                      <select
-                        value={o.status}
-                        onChange={(e) => handleStatusChange(o.id, e.target.value)}
-                        className="bg-gray-800 text-white rounded p-1 border border-gray-700 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-                      >
-                        <option value="Received">Received</option>
-                        <option value="Preparing">Preparing</option>
-                        <option value="Complete">Complete</option>
-                      </select>
+                  <tr key={o.id} className="border-b border-[var(--color-border)] last:border-0">
+                    <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.id}</td>
+                    <td className="py-3 px-4 text-[var(--color-text-primary)]">{o.restaurant_name}</td>
+                    <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.order_number}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={o.status} />
+                        <select
+                          value={o.status}
+                          onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                          aria-label={`Change status for order ${o.order_number}`}
+                          className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] rounded-[var(--radius-sm)] p-1 text-xs border border-[var(--color-border-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                        >
+                          <option value="Received">Received</option>
+                          <option value="Preparing">Preparing</option>
+                          <option value="Complete">Complete</option>
+                        </select>
+                      </div>
                     </td>
-                    <td className="py-2 px-4 border-b border-gray-800 text-left">{new Date(o.created_at).toLocaleString()}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 w-1 whitespace-nowrap text-right">
-                      <button onClick={() => handleDelete("order", o.id)} className="p-2 bg-red-700 hover:bg-red-800 text-white rounded">
+                    <td className="py-3 px-4 text-[var(--color-text-muted)] hidden md:table-cell">
+                      {new Date(o.created_at).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        onClick={() => handleDelete("order", o.id)}
+                        aria-label={`Delete order ${o.order_number}`}
+                        className="p-2 bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white rounded-[var(--radius-sm)] transition-colors"
+                      >
                         <Trash2 size={16} />
                       </button>
                     </td>
@@ -346,9 +352,17 @@ export default function AdminDbPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         </section>
       </div>
     </>
+  );
+}
+
+export default function AdminDbPage() {
+  return (
+    <ToastProvider>
+      <AdminDbContent />
+    </ToastProvider>
   );
 }

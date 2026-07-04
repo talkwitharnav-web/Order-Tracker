@@ -20,12 +20,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await query(
-      "INSERT INTO orders (restaurant_name, order_number) VALUES ($1, $2) RETURNING id",
-      [restaurant_name, order_number],
-    );
-
-    const id = result.rows[0].id;
+    let id: number;
+    try {
+      const result = await query(
+        "INSERT INTO orders (restaurant_name, order_number) VALUES ($1, $2) RETURNING id",
+        [restaurant_name, order_number],
+      );
+      id = result.rows[0].id;
+    } catch (insertErr) {
+      if (
+        insertErr instanceof Error &&
+        "code" in insertErr &&
+        (insertErr as { code?: string }).code === "23505"
+      ) {
+        logger.warn("POST /api/orders - duplicate order rejected", {
+          restaurant_name,
+          order_number,
+        });
+        return NextResponse.json(
+          { error: "An order with this number already exists for this restaurant" },
+          { status: 409 },
+        );
+      }
+      throw insertErr;
+    }
 
     logger.info("POST /api/orders - order created successfully", {
       orderId: id,
@@ -75,7 +93,7 @@ export async function GET(request: Request) {
     }
 
     const result = await query(
-      "SELECT * FROM orders WHERE restaurant_name = $1 AND order_number = $2",
+      "SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 ORDER BY created_at DESC LIMIT 1",
       [restaurant_name, order_number],
     );
     const order = result.rows[0];

@@ -1,25 +1,25 @@
 "use client";
 
-import { useState, useEffect, FC } from "react";
-import Link from "next/link";
+import { useState, useEffect, useCallback, FC } from "react";
+import { useRouter } from "next/navigation";
 import { KitchenDashboard } from "../restaurant/Dashboard";
 import CustomerPage from "../customer/page";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
+import { Modal, ModalActions } from "@/components/ui/Modal";
 
-// --- Components ---
-
-const DataTable: FC<{ title: string; data: any[] }> = ({ title, data }) => (
+const DataTable: FC<{ title: string; data: Record<string, unknown>[] }> = ({ title, data }) => (
   <div className="mb-8">
-    <h2 className="text-2xl font-bold text-amber-500 mb-4">{title}</h2>
+    <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">{title}</h2>
     {data.length > 0 ? (
-      <div className="overflow-x-auto bg-slate-800/50 border border-slate-700 rounded-lg p-4 max-h-[500px]">
-        <table className="w-full text-left">
-          <thead className="sticky top-0 bg-slate-800">
-            <tr className="border-b border-slate-600">
+      <Card className="p-0 overflow-x-auto max-h-[500px]">
+        <table className="w-full text-left text-sm">
+          <thead className="sticky top-0 bg-[var(--color-surface-2)]">
+            <tr>
               {Object.keys(data[0]).map((key) => (
-                <th
-                  key={key}
-                  className="p-3 text-sm font-semibold text-slate-300"
-                >
+                <th key={key} scope="col" className="p-3 font-medium text-[var(--color-text-muted)]">
                   {key}
                 </th>
               ))}
@@ -27,11 +27,11 @@ const DataTable: FC<{ title: string; data: any[] }> = ({ title, data }) => (
           </thead>
           <tbody>
             {data.map((row, i) => (
-              <tr key={i} className="border-b border-slate-700 last:border-0">
-                {Object.values(row).map((val: any, j) => (
+              <tr key={i} className="border-b border-[var(--color-border)] last:border-0">
+                {Object.values(row).map((val, j) => (
                   <td
                     key={j}
-                    className="p-3 text-sm text-slate-400 font-mono whitespace-nowrap"
+                    className="p-3 text-[var(--color-text-secondary)] font-mono text-xs whitespace-nowrap"
                   >
                     {String(val)}
                   </td>
@@ -40,23 +40,26 @@ const DataTable: FC<{ title: string; data: any[] }> = ({ title, data }) => (
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
     ) : (
-      <p className="text-slate-500">No data in this table.</p>
+      <p className="text-[var(--color-text-muted)]">No data in this table.</p>
     )}
   </div>
 );
 
 type SimMode = "ADMIN" | "KITCHEN" | "CUSTOMER";
 
-const AdminDashboard: FC = () => {
-  const [data, setData] = useState<any>(null);
+function AdminDashboard() {
+  const [data, setData] = useState<{ restaurants: Record<string, unknown>[]; orders: Record<string, unknown>[] } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPurging, setIsPurging] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [simMode, setSimMode] = useState<SimMode>("ADMIN");
   const [simRestaurantName, setSimRestaurantName] = useState("");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const response = await fetch("/api/dev/db");
       if (!response.ok) throw new Error("Failed to fetch database contents");
@@ -65,32 +68,25 @@ const AdminDashboard: FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-    const intervalId = setInterval(fetchData, 5000); // Poll every 5 seconds
+    const intervalId = setInterval(fetchData, 5000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [fetchData]);
 
   const handlePurge = async () => {
-    if (
-      window.confirm(
-        "ARE YOU SURE you want to permanently delete all data from the database? This cannot be undone.",
-      )
-    ) {
-      setIsPurging(true);
-      try {
-        const response = await fetch("/api/dev/db", { method: "DELETE" });
-        if (!response.ok) throw new Error("Failed to purge database");
-        await fetchData(); // Refresh data after purge
-      } catch (err) => {
-        setError(
-          err instanceof Error ? err.message : "Unknown error during purge",
-        );
-      } finally {
-        setIsPurging(false);
-      }
+    setConfirmOpen(false);
+    setIsPurging(true);
+    try {
+      const response = await fetch("/api/dev/db", { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to purge database");
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error during purge");
+    } finally {
+      setIsPurging(false);
     }
   };
 
@@ -99,26 +95,19 @@ const AdminDashboard: FC = () => {
       case "KITCHEN":
         return (
           <div className="mt-4">
-            <div className="flex gap-4 mb-4">
-              <input
-                type="text"
-                placeholder="Enter restaurant name to simulate"
-                value={simRestaurantName}
-                onChange={(e) => setSimRestaurantName(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-              />
-            </div>
+            <Input
+              type="text"
+              placeholder="Enter restaurant name to simulate"
+              value={simRestaurantName}
+              onChange={(e) => setSimRestaurantName(e.target.value)}
+              className="mb-4"
+            />
             {simRestaurantName ? (
-              <div className="h-[80vh] overflow-y-auto">
-                <KitchenDashboard
-                  restaurantName={simRestaurantName}
-                  onLogout={() => {
-                    /* no-op in sim */
-                  }}
-                />
+              <div className="h-[80vh] overflow-y-auto rounded-[var(--radius-md)]">
+                <KitchenDashboard restaurantName={simRestaurantName} onLogout={() => {}} />
               </div>
             ) : (
-              <p className="text-slate-500">
+              <p className="text-[var(--color-text-muted)]">
                 Enter a restaurant name to begin kitchen simulation.
               </p>
             )}
@@ -126,7 +115,7 @@ const AdminDashboard: FC = () => {
         );
       case "CUSTOMER":
         return (
-          <div className="mt-4 h-[80vh] overflow-y-auto">
+          <div className="mt-4 h-[80vh] overflow-y-auto rounded-[var(--radius-md)]">
             <CustomerPage />
           </div>
         );
@@ -144,49 +133,44 @@ const AdminDashboard: FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 font-sans text-white p-8">
-      <header className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold">God Mode</h1>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            className="text-amber-500 hover:text-amber-400 transition-colors"
-          >
-            &larr; Back to Home
-          </Link>
-          <button
-            onClick={fetchData}
-            disabled={isPurging}
-            className="bg-slate-800 text-slate-300 px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-700 disabled:opacity-50"
-          >
-            Refresh
-          </button>
-          <button
-            onClick={handlePurge}
-            disabled={isPurging}
-            className="bg-red-900/80 text-red-200 px-4 py-2 rounded-lg border border-red-700 hover:bg-red-800 disabled:opacity-50"
-          >
-            {isPurging ? "Purging..." : "Purge DB"}
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen p-4 sm:p-8">
+      <Modal isOpen={confirmOpen} title="Purge Database" onClose={() => setConfirmOpen(false)} danger>
+        <p className="text-[var(--color-text-secondary)] mb-6">
+          Are you sure you want to permanently delete all data from the database? This cannot be undone.
+        </p>
+        <ModalActions onCancel={() => setConfirmOpen(false)} onConfirm={handlePurge} danger confirmLabel="Purge" />
+      </Modal>
+
+      <PageHeader
+        title="God Mode"
+        backHref="/"
+        actions={
+          <>
+            <Button variant="secondary" onClick={fetchData} disabled={isPurging}>
+              Refresh
+            </Button>
+            <Button variant="danger" onClick={() => setConfirmOpen(true)} disabled={isPurging}>
+              {isPurging ? "Purging..." : "Purge DB"}
+            </Button>
+          </>
+        }
+      />
 
       <main>
-        {error && <p className="text-red-400">{error}</p>}
-        <div className="mb-8 p-4 bg-slate-900 border border-slate-700 rounded-xl">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-indigo-400">
-              Simulation Zone
-            </h2>
-            <div className="flex gap-2">
+        {error && <p className="text-red-400 mb-4">{error}</p>}
+        <Card className="mb-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Simulation Zone</h2>
+            <div className="flex flex-wrap gap-2">
               {(["ADMIN", "KITCHEN", "CUSTOMER"] as SimMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setSimMode(mode)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  aria-pressed={simMode === mode}
+                  className={`px-4 py-2 rounded-[var(--radius-sm)] text-sm font-semibold transition-colors ${
                     simMode === mode
-                      ? "bg-indigo-600 text-white"
-                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                      ? "bg-[var(--color-brand)] text-white"
+                      : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-strong)] hover:text-white"
                   }`}
                 >
                   {mode.charAt(0) + mode.slice(1).toLowerCase()} View
@@ -195,108 +179,40 @@ const AdminDashboard: FC = () => {
             </div>
           </div>
           {simMode !== "ADMIN" && (
-            <div className="mt-4 p-4 rounded-lg ring-4 ring-indigo-500/50 relative bg-slate-950/50">
-              <div className="sticky top-0 bg-slate-950/80 backdrop-blur-sm z-10 py-2 px-4 mb-4 rounded-t-lg">
-                <h3 className="text-lg font-bold text-center text-indigo-300">
-                  SIMULATION MODE - {simMode}
+            <div className="mt-4 p-4 rounded-[var(--radius-sm)] ring-2 ring-[var(--color-brand)]/40 relative bg-[var(--color-surface-0)]/50">
+              <div className="sticky top-0 bg-[var(--color-surface-0)]/90 backdrop-blur-sm z-10 py-2 px-4 mb-4 rounded-[var(--radius-sm)]">
+                <h3 className="text-sm font-bold text-center text-[var(--color-brand-text)] uppercase tracking-wide">
+                  Simulation Mode — {simMode}
                 </h3>
               </div>
               <div className="pt-2">{renderSimMode()}</div>
             </div>
           )}
-        </div>
+        </Card>
 
         {simMode === "ADMIN" && renderSimMode()}
       </main>
     </div>
   );
-};
-
-
-const AdminLoginPage: FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (username === "darkglory" && password === "Re$t@ur@nt@dm!n") {
-      sessionStorage.setItem("isAdminAuthenticated", "true");
-      onLoginSuccess();
-    } else {
-      setError("Invalid username or password.");
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <form
-          onSubmit={handleLogin}
-          className="bg-slate-900 shadow-2xl shadow-amber-900/10 rounded-xl p-8 border border-slate-700"
-        >
-          <h1 className="text-3xl font-bold text-center text-amber-500 mb-6">
-            Admin Access
-          </h1>
-          {error && <p className="text-red-500 text-center mb-4">{error}</p>}
-          <div className="mb-4">
-            <label
-              htmlFor="username"
-              className="block text-slate-400 text-sm font-bold mb-2"
-            >
-              Username
-            </label>
-            <input
-              type="text"
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
-              required
-            />
-          </div>
-          <div className="mb-6">
-            <label
-              htmlFor="password"
-              className="block text-slate-400 text-sm font-bold mb-2"
-            >
-              Password
-            </label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-colors"
-          >
-            Sign In
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};
-
+}
 
 export default function AdminPage() {
+  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const isAdmin = sessionStorage.getItem("isAdminAuthenticated") === "true";
+    const isAdmin = localStorage.getItem("isAdmin") === "true";
     if (isAdmin) {
       setIsAuthenticated(true);
+    } else {
+      router.push("/");
     }
-  }, []);
+    setChecked(true);
+  }, [router]);
 
-  if (!isAuthenticated) {
-    return <AdminLoginPage onLoginSuccess={() => setIsAuthenticated(true)} />;
-  }
+  if (!checked) return null;
+  if (!isAuthenticated) return null;
 
   return <AdminDashboard />;
 }

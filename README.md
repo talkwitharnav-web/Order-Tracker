@@ -4,18 +4,18 @@ A Next.js application for real-time restaurant order management. It uses a singl
 
 ## Features
 
-* **Shared Backend:** One Next.js server handling `/restaurant`, `/customer`, and `/admin` routes.
-* **State Management:** Optimistic UI updates on the frontend with a 5-second background polling interval for sync.
+* **Shared Backend:** One custom Node server (`app/server.js`) wrapping Next.js, handling `/restaurant`, `/customer`, and `/admin` routes plus a WebSocket endpoint.
+* **State Management:** The Customer Portal gets real-time order updates over WebSockets; the Kitchen Dashboard still uses a 5-second background poll.
 * **Admin Simulation:** Admin route includes live monitoring and component-level simulation for both kitchen and customer views.
 * **Input Masking:** Strict regex enforcing POS-style formatting (e.g., A-92) and preventing invalid spacing.
-* **Local DB:** Uses SQLite for zero-config local development.
+* **Local DB:** PostgreSQL 16, run locally via Docker Compose.
 
 ## Tech Stack
 
-* Next.js (App Router)
+* Next.js (App Router) + custom server for WebSockets
 * React
 * Tailwind CSS
-* SQLite
+* PostgreSQL
 * Lucide React
 
 ## Setup
@@ -23,11 +23,25 @@ A Next.js application for real-time restaurant order management. It uses a singl
 1. Clone the repository and navigate into the nested Next.js root:
    ```bash
    cd app
+   ```
 
-Install dependencies:
-npm install
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-Start development server:
-npm run dev
+3. Copy `.env.example` to `.env.local` (already done if you're on a checkout that includes it) — it points at the local Postgres container started below.
 
-The application starts on http://localhost:3000
+### Running everything for local dev
+
+This project needs two things running: the Postgres database (via Docker) and the Next.js dev server. If you're not sure which command to use, just run `npm run start:all` — it does both for you.
+
+These commands work from **either** the repo root (`Restaurant/`) or the `app/` folder — the root `package.json` just forwards them into `app/` for convenience, so you don't have to remember to `cd app` first.
+
+* **`npm run start:all`** — starts the local Postgres container, then starts the Next.js dev server. This is the one command you need for a normal day of work. The app will be at http://localhost:3000.
+* **Ctrl+C** — stops the dev server. This does *not* stop the database container — it keeps running in the background.
+* **`npm run db:down`** — stops *and removes* the database container (your data stays safe in a Docker volume, so nothing is lost, but the container itself goes away). Use this when you're fully done for the day/session and want a clean slate.
+* **`npm run db:stop`** — pauses the database container without removing it (slightly faster to resume than `db:up` after `db:down`, but for local dev either is fine). Use this if you just want to free up resources for a bit but plan to come back soon.
+* **`npm run db:up`** — starts the database container back up on its own, if you ever need the DB running without also starting Next.js.
+
+If you're unsure which of `db:down` vs `db:stop` to use: it doesn't matter much day-to-day — `db:down` is the "tidier" option and is what these docs assume, `db:stop` is marginally faster to undo. Either is safe; your data isn't deleted by either command.

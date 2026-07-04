@@ -18,9 +18,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if restaurant already exists
+    // Check if restaurant already exists (case-insensitive, matches how
+    // order lookups treat restaurant_name — see SYSTEM_MEMORY.md)
     const existing = await query(
-      "SELECT * FROM restaurants WHERE name = $1",
+      "SELECT * FROM restaurants WHERE name ILIKE $1",
       [name],
     );
     if (existing.rows[0]) {
@@ -32,10 +33,24 @@ export async function POST(req: Request) {
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-    await query(
-      "INSERT INTO restaurants (name, password, raw_password) VALUES ($1, $2, $3)",
-      [name, hashedPassword, password],
-    );
+    try {
+      await query(
+        "INSERT INTO restaurants (name, password, raw_password) VALUES ($1, $2, $3)",
+        [name, hashedPassword, password],
+      );
+    } catch (insertErr) {
+      if (
+        insertErr instanceof Error &&
+        "code" in insertErr &&
+        (insertErr as { code?: string }).code === "23505"
+      ) {
+        return NextResponse.json(
+          { error: "Restaurant with this name already exists" },
+          { status: 409 },
+        );
+      }
+      throw insertErr;
+    }
 
     logger.info(
       `POST /api/restaurants/register - restaurant "${name}" created successfully`,

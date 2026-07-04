@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     }
 
     const result = await query(
-      "SELECT * FROM restaurants WHERE name = $1",
+      "SELECT * FROM restaurants WHERE name ILIKE $1",
       [name],
     );
     const restaurant = result.rows[0];
