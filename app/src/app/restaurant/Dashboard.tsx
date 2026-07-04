@@ -7,6 +7,7 @@ import {
   Flame,
   CheckCircle,
   Trash2 as TrashIcon,
+  Inbox,
 } from "lucide-react";
 
 // --- TYPES ---
@@ -84,16 +85,23 @@ const Sidebar: FC<{
   const navItems: Tab[] = ["Home", "Received", "Preparing", "Complete"];
   const navIcons: Record<Tab, React.ComponentType<{ className?: string }>> = {
     Home: Home,
-    Received: Clock,
+    Received: Inbox,
     Preparing: Flame,
     Complete: CheckCircle,
   };
 
+  const iconClasses: Record<Tab, string> = {
+    Home: "w-5 h-5 mr-2",
+    Received: "w-5 h-5 mr-2 text-blue-400",
+    Preparing: "w-5 h-5 mr-2 text-orange-500",
+    Complete: "w-5 h-5 mr-2 text-green-500",
+  };
+
   return (
     <div className="w-64 bg-slate-900 text-slate-200 flex flex-col p-4 border-r border-slate-800">
-      <div className="mb-10 px-2">
-        <h2 className="text-2xl font-bold text-white">{restaurantName}</h2>
-        <span className="text-sm text-amber-500">Kitchen Dashboard</span>
+      <div className="flex flex-col items-start gap-1 w-full overflow-hidden px-2 mb-6">
+        <h2 className="text-xl font-bold tracking-tight text-white truncate w-full" title={restaurantName}>{restaurantName}</h2>
+        <span className="text-sm font-medium text-orange-500">Kitchen Dashboard</span>
       </div>
       <nav className="flex-grow space-y-2">
         {navItems.map((name) => {
@@ -108,7 +116,7 @@ const Sidebar: FC<{
                   : "text-slate-400 hover:bg-slate-800 hover:text-white"
               }`}
             >
-              <Icon className="w-5 h-5 mr-3" />
+              <Icon className={iconClasses[name]} />
               <span className="flex-1 text-left">{name}</span>
             </button>
           );
@@ -306,6 +314,18 @@ export const KitchenDashboard: FC<{ restaurantName: string; onLogout: () => void
   const [activeTab, setActiveTab] = useState<Tab>("Home");
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [orderToDelete, setOrderToDelete] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
 
   const fetchOrders = async (isInitial = false) => {
     if (isInitial) setIsLoading(true);
@@ -333,19 +353,28 @@ export const KitchenDashboard: FC<{ restaurantName: string; onLogout: () => void
       await api.updateOrderStatus(id, status);
     } catch (error) {
       console.error("Failed to update status", error);
+      setToast({ message: "Failed to update status", type: "error" });
       fetchOrders();
     }
   };
 
-  const handleDeleteOrder = async (id: number) => {
-    if (window.confirm("Are you sure you want to delete this order?")) {
-      try {
-        setOrders((prevOrders) => prevOrders.filter((o) => o.id !== id));
-        await api.deleteOrder(id);
-      } catch (error) {
-        console.error("Failed to delete order", error);
-        fetchOrders();
-      }
+  const requestDeleteOrder = (id: number) => {
+    setOrderToDelete(id);
+  };
+
+  const confirmDeleteOrder = async () => {
+    if (orderToDelete === null) return;
+
+    try {
+      setOrders((prevOrders) => prevOrders.filter((o) => o.id !== orderToDelete));
+      await api.deleteOrder(orderToDelete);
+      setToast({ message: "Order deleted successfully", type: "success" });
+    } catch (error) {
+      console.error("Failed to delete order", error);
+      setToast({ message: "Failed to delete order", type: "error" });
+      fetchOrders();
+    } finally {
+      setOrderToDelete(null);
     }
   };
 
@@ -368,7 +397,7 @@ export const KitchenDashboard: FC<{ restaurantName: string; onLogout: () => void
             orders={displayedOrders}
             restaurantName={restaurantName}
             onAddOrder={handleAddOrder}
-            onDeleteOrder={handleDeleteOrder}
+            onDeleteOrder={requestDeleteOrder}
           />
         );
       case "Received":
@@ -378,7 +407,7 @@ export const KitchenDashboard: FC<{ restaurantName: string; onLogout: () => void
           <OrderGrid
             orders={displayedOrders}
             onUpdateStatus={handleUpdateStatus}
-            onDelete={handleDeleteOrder}
+            onDelete={requestDeleteOrder}
           />
         );
       default:
@@ -398,6 +427,30 @@ export const KitchenDashboard: FC<{ restaurantName: string; onLogout: () => void
         <h1 className="text-4xl font-bold text-white mb-8">{activeTab}</h1>
         {renderContent()}
       </main>
+
+      {orderToDelete !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h2 className="text-2xl font-bold text-white mb-4">Confirm Deletion</h2>
+            <p className="text-slate-300 mb-6">Are you sure you want to delete this order? This action cannot be undone.</p>
+            <div className="flex justify-end gap-4">
+              <button onClick={() => setOrderToDelete(null)} className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors">Cancel</button>
+              <button onClick={confirmDeleteOrder} className="px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors">Confirm Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right duration-300 fade-in">
+          <div className={`rounded-lg shadow-lg p-4 text-white ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+            <div className="flex items-center">
+              <span>{toast.message}</span>
+              <button onClick={() => setToast(null)} className="ml-4 text-xl font-bold">&times;</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChefHat, Search, Lock } from "lucide-react";
 
 export default function GatewayCommandCenter() {
   const [username, setUsername] = useState("");
@@ -42,14 +43,16 @@ export default function GatewayCommandCenter() {
     <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-black text-gray-300 font-mono relative">
       <Link
         href="/restaurant"
-        className="absolute top-4 left-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-red-700 transition-colors"
+        className="absolute top-4 left-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
       >
+        <ChefHat size={20} />
         Kitchen Portal
       </Link>
       <Link
         href="/customer"
-        className="absolute bottom-4 left-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        className="absolute bottom-4 left-4 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
       >
+        <Search size={20} />
         Customer Tracker
       </Link>
 
@@ -58,7 +61,8 @@ export default function GatewayCommandCenter() {
           onSubmit={handleLogin}
           className="bg-gray-900 shadow-md rounded px-8 pt-6 pb-8 mb-4 border border-gray-700"
         >
-          <h1 className="text-2xl text-center font-bold mb-6 text-red-500">
+          <h1 className="text-2xl text-center font-bold mb-6 text-red-500 flex items-center justify-center gap-2">
+            <Lock size={24} />
             Admin Login
           </h1>
           <div className="mb-4">

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Database, Trash2, Key, ShieldAlert } from "lucide-react";
 
 // --- INTERFACES ---
 interface Restaurant {
@@ -236,7 +237,7 @@ export default function AdminDbPage() {
   return (
     <>
       <ConfirmationModal {...modalState} onCancel={closeModal} />
-      <PasswordResetModal 
+      <PasswordResetModal
         isOpen={passwordResetTarget !== null}
         onCancel={() => {
           setPasswordResetTarget(null);
@@ -247,7 +248,7 @@ export default function AdminDbPage() {
         setNewPassword={setNewPassword}
       />
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
-      
+
       <div className="bg-black text-white min-h-screen p-8 font-mono">
         <header className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-red-500">ADMIN DASHBOARD</h1>
@@ -257,34 +258,44 @@ export default function AdminDbPage() {
         </header>
 
         <div className="mb-8 flex gap-4">
-          <button onClick={handleSeed} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-4 rounded">Seed Database</button>
-          <button onClick={handlePurge} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Purge Database</button>
+          <button onClick={handleSeed} className="flex items-center bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-4 rounded">
+            <Database size={18} className="mr-2" />
+            Seed Database
+          </button>
+          <button onClick={handlePurge} className="flex items-center bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+            <ShieldAlert size={18} className="mr-2" />
+            Purge Database
+          </button>
         </div>
 
         <section className="mb-12">
           <h2 className="text-2xl font-semibold mb-4 border-b border-gray-700 pb-2">Restaurants</h2>
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-gray-900 border border-gray-700">
+            <table className="min-w-full bg-gray-900 border border-gray-700 w-full table-auto">
               <thead>
                 <tr>
-                  <th className="py-2 px-4 border-b border-gray-700">ID</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Name</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Hashed Password</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Raw Password</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Actions</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">ID</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">Name</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">Hashed Password</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">Raw Password</th>
+                  <th className="py-2 px-4 border-b border-gray-700 w-1 whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {restaurants.map((r) => (
                   <tr key={r.id}>
-                    <td className="py-2 px-4 border-b border-gray-800">{r.id}</td>
-                    <td className="py-2 px-4 border-b border-gray-800">{r.name}</td>
-                    <td className="py-2 px-4 border-b border-gray-800 break-all">{r.password}</td>
-                    <td className="py-2 px-4 border-b border-gray-800">{r.raw_password}</td>
-                    <td className="py-2 px-4 border-b border-gray-800">
-                      <div className="flex gap-2">
-                        <button onClick={() => setPasswordResetTarget(r.id)} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1 px-2 rounded">Change Password</button>
-                        <button onClick={() => handleDelete("restaurant", r.id)} className="bg-red-700 hover:bg-red-800 text-white text-xs font-bold py-1 px-2 rounded">Delete</button>
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">{r.id}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">{r.name}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 break-all text-left">{r.password}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">{r.raw_password}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 w-1 whitespace-nowrap text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => setPasswordResetTarget(r.id)} className="p-2 bg-amber-600 hover:bg-amber-700 text-white rounded">
+                          <Key size={16} />
+                        </button>
+                        <button onClick={() => handleDelete("restaurant", r.id)} className="p-2 bg-red-700 hover:bg-red-800 text-white rounded">
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -297,24 +308,24 @@ export default function AdminDbPage() {
         <section>
           <h2 className="text-2xl font-semibold mb-4 border-b border-gray-700 pb-2">Orders</h2>
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-gray-900 border border-gray-700">
+            <table className="min-w-full bg-gray-900 border border-gray-700 w-full table-auto">
               <thead>
                 <tr>
-                  <th className="py-2 px-4 border-b border-gray-700">ID</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Restaurant Name</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Order Number</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Status</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Created At</th>
-                  <th className="py-2 px-4 border-b border-gray-700">Actions</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">ID</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">Restaurant Name</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">Order Number</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">Status</th>
+                  <th className="py-2 px-4 border-b border-gray-700 text-left">Created At</th>
+                  <th className="py-2 px-4 border-b border-gray-700 w-1 whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td className="py-2 px-4 border-b border-gray-800">{o.id}</td>
-                    <td className="py-2 px-4 border-b border-gray-800">{o.restaurant_name}</td>
-                    <td className="py-2 px-4 border-b border-gray-800">{o.order_number}</td>
-                    <td className="py-2 px-4 border-b border-gray-800">
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">{o.id}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">{o.restaurant_name}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">{o.order_number}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">
                       <select
                         value={o.status}
                         onChange={(e) => handleStatusChange(o.id, e.target.value)}
@@ -325,9 +336,11 @@ export default function AdminDbPage() {
                         <option value="Complete">Complete</option>
                       </select>
                     </td>
-                    <td className="py-2 px-4 border-b border-gray-800">{new Date(o.created_at).toLocaleString()}</td>
-                    <td className="py-2 px-4 border-b border-gray-800">
-                      <button onClick={() => handleDelete("order", o.id)} className="bg-red-700 hover:bg-red-800 text-white text-xs font-bold py-1 px-2 rounded">Delete</button>
+                    <td className="py-2 px-4 border-b border-gray-800 text-left">{new Date(o.created_at).toLocaleString()}</td>
+                    <td className="py-2 px-4 border-b border-gray-800 w-1 whitespace-nowrap text-right">
+                      <button onClick={() => handleDelete("order", o.id)} className="p-2 bg-red-700 hover:bg-red-800 text-white rounded">
+                        <Trash2 size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}

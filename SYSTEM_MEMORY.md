@@ -1,5 +1,7 @@
 RULE: At the conclusion of every single task or prompt moving forward, the AI agent MUST silently update this SYSTEM_MEMORY.md file to reflect any new files created, functions modified, or architectural shifts before declaring the mission accomplished.
 
+You are strictly forbidden from overwriting, deleting, or summarizing the historical contents of this file. When asked to update this file, you MUST first read its entire contents. You must PRESERVE all existing architectural notes, file hierarchies, and route dictionaries. You may only APPEND new information or safely MODIFY specific lines that have explicitly changed.
+
 # SYSTEM MEMORY
 
 ## High-Level Overview
@@ -123,5 +125,18 @@ RULE: At the conclusion of every single task or prompt moving forward, the AI ag
 ### Components & Libs
 
 *   **`src/app/restaurant/Dashboard.tsx`**: The main dashboard interface for the kitchen, showing orders and allowing status updates. This is not a route but a major component.
+    - **Confirmation Modal**: A modal dialog is implemented to confirm critical actions, such as order deletion.
+      - **State**: It is controlled by the `orderToDelete` state variable in the `KitchenDashboard` component. A non-null value triggers the modal.
+      - **Actions**: It provides "Confirm" and "Cancel" actions.
+      - **Styling**: Dark theme, centered overlay.
+    - **Toast Notifications**: A toast notification system provides users with feedback on operations (success or error).
+      - **State**: Controlled by the `toast` state variable (`{ message: string, type: 'success' | 'error' }`).
+      - **Behavior**: Toasts appear in the top-right corner and auto-dismiss after 3 seconds.
+      - **Styling**: Color-coded based on `type` (green for success, red for error).
+    - **`Sidebar` Component (within `src/app/restaurant/Dashboard.tsx`)**: The navigation sidebar for the kitchen dashboard.
+      - **Header Alignment**: The restaurant name and "Kitchen Dashboard" subtitle in the sidebar header now use a flex column container (`flex flex-col items-start gap-1 w-full overflow-hidden px-2 mb-6`).
+        - **Restaurant Name**: Uses `text-xl font-bold tracking-tight text-white truncate w-full` with a `title` attribute for full name on hover.
+        - **Subtitle**: Uses `text-sm font-medium text-orange-500`.
+        - **Purpose**: Ensures consistent alignment and prevents layout breakage with long restaurant names.
 *   **`src/lib/db.ts`**: Contains all database initialization and connection logic for SQLite.
 *   **`src/lib/logger.ts`**: Contains the application's logging configuration.
