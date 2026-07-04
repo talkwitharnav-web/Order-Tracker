@@ -2,12 +2,12 @@
 
 ## 1. Architecture & Stack
 - Next.js 16.2.10 (App Router) + React 19.2.4, TypeScript, Tailwind v4
-- Custom server (`app/server.js`, plain Node/CJS) wraps Next's request handler + attaches a `ws` WebSocket server on the same HTTP server/port — required because App Router alone can't host a WS upgrade endpoint. `npm run dev`/`start` now run `node server.js`, not `next dev`/`next start` directly (see §7 WebSocket Architecture).
+- Custom server (`app/server.js`, plain Node/CJS) wraps Next's request handler + attaches a `ws` WebSocket server on the same HTTP server/port — required because App Router alone can't host a WS upgrade endpoint. `npm run dev`/`start` now run `node server.js`, not `next dev`/`next start` directly (see §8 WebSocket Architecture).
 - DB: **PostgreSQL** via `pg` `Pool`, in `app/src/lib/db.ts`. Reads connection string from `DATABASE_URL` env var (see `app/.env.example`). Exports `getPool()`, `query(text, params)` helper (parameterized `$1, $2...`), and `initDb()` (idempotent `CREATE TABLE IF NOT EXISTS`, no more SQLite-style try/catch migrations — Postgres DDL is simpler). Migrated from SQLite 2026-07; SQLite (`sqlite`/`sqlite3`, `orders.db` file) is fully removed.
-- Auth: bcrypt (10 salt rounds); no JWT/session tokens — restaurant "login" just returns 200 OK, client persists state itself; admin uses hardcoded creds + a single unified `localStorage.isAdmin` flag (no real auth backend).
+- Auth: bcrypt (10 salt rounds) for password storage/verification. Sessions are a signed httpOnly cookie (`src/lib/session.ts`, HMAC-SHA256, no DB-backed session table) — see §9. Admin credentials are still hardcoded (`darkglory`/see `api/admin/login/route.ts`) but are now checked server-side, not client-side.
 - Logging: `app/src/lib/logger.ts`
 - 3 user domains:
-  - **Customer** (`/customer`): public order tracking, real-time via WebSocket (no polling) — see §7
+  - **Customer** (`/customer`): public order tracking, real-time via WebSocket (no polling) — see §8
   - **Kitchen/Restaurant** (`/restaurant`): login/register + `Dashboard.tsx` (KitchenDashboard) to manage own orders; still polls every 5s (WS migration only targeted the customer portal per explicit scope)
   - **Admin** (`/admin`, `/admin/db`): superuser DB access, seeding/purging, two dashboards behind one shared login (see quirks)
 
@@ -16,7 +16,7 @@
 - **POS uppercase rule**: customer-facing tracking inputs (`restaurantName`, `orderNumber`) are force-uppercased and stripped to `[A-Z0-9- ]` via `formatInput()` in `customer/page.tsx`. Any new customer-input field touching order lookup must follow this same normalization.
 - **No native `window.confirm`/`alert`** — project standard is the shared `Modal`/`ModalActions` + `ToastProvider`/`useToast` in `src/components/ui/` (see §4 Design System). All pages, including `admin/page.tsx`, use the shared `Modal` as of the 2026-07 redesign.
 - **Status vocab inconsistency**: order lifecycle statuses differ by layer — API validation (`orders/[id]/route.ts` PUT) allows `Received|Preparing|Complete`; customer UI type (`customer/page.tsx`) expects `Received|Making|Finished`; restaurant-by-name filter route checks for `Making|Finished`. These are NOT interchangeable at the data/type level — verify which set an endpoint expects before changing status strings. The 2026-07 UI redesign unified how these DISPLAY (see §4's `order-status.ts`) but deliberately did not touch the underlying API contract — that remains a separate, larger decision.
-- Two admin entry points exist: `/` (`GatewayCommandCenter`, login, redirects to `/admin/db`) and `/admin` (`AdminPage`, "God Mode" dashboard with a Kitchen/Customer simulation view). Both read/write the same `localStorage.isAdmin` flag, so logging in from either unlocks both. As of the 2026-07 redesign, `/admin` has no login UI of its own — it redirects unauthenticated visitors to `/`, so there is exactly one admin login screen, just two dashboards behind it.
+- Two admin entry points exist: `/` (`GatewayCommandCenter`, login, redirects to `/admin/db`) and `/admin` (`AdminPage`, "God Mode" dashboard with a Kitchen/Customer simulation view). Both check the same `GET /api/session` cookie-backed session (see §9), so logging in from either unlocks both. `/admin` has no login UI of its own — it redirects unauthenticated visitors to `/`, so there is exactly one admin login screen, just two dashboards behind it.
 - `restaurants` table stores BOTH bcrypt `password` and plaintext `raw_password` — deliberate, see §3 for reasoning/directive. Not a bug to "fix" silently.
 - `/api/seed` (GET) and `/api/dev/seed` (POST) are two independent, non-identical seed routes — don't conflate.
 - **Postgres query placeholders**: use `$1, $2...` (not SQLite's `?`). Follow the `query()` helper pattern in `src/lib/db.ts` for any new route — never string-interpolate values into SQL.
@@ -44,6 +44,15 @@ Before this redesign the app had **4 incompatible visual themes** (black/red/mon
 - **What did NOT change**: no new dependencies were introduced (no Radix/Headless UI — deliberately, to keep the component surface small and easy for a non-expert dev to read); no routing changes; no changes to the WebSocket/Postgres logic beyond surfacing already-existing client-side connection state in a new "Live/Reconnecting" indicator on the Customer Tracker page; the cross-layer status vocabulary mismatch and the two-admin-dashboard structure are unchanged (documented, not fixed, per §2).
 - **Where things live**: `src/lib/order-status.ts` (status mapping), `src/components/ui/*.tsx` (all shared primitives). Every page under `src/app/` was rewritten to consume these rather than hardcoding styles — if a page still has inline hex/Tailwind-literal colors, it was missed and should be brought in line with this system.
 
+### 4.1 Notification stack (2026-07, macOS-style)
+`src/components/ui/Toast.tsx` was rewritten from a single-toast `ToastState | null` to a **list** of notifications with macOS Notification Center-style grouping:
+- **Collapsed** (default, 2+ active): shows a peeking stack (depth-scaled/offset cards, max 3 rendered) with a count badge. Clicking the stack expands it.
+- **Expanded**: every notification renders as its own full-width card with an individual "×" and a "Collapse" link.
+- **Dismiss semantics** (deliberately asymmetric, matching macOS): clicking "×" while **collapsed** clears the *entire* group (`dismissAll`); clicking "×" on a card while **expanded** removes only that one (`dismissOne`), auto-re-collapsing once only 1 remains.
+- **Auto-dismiss** (4s) is paused while expanded (the user is actively looking, don't yank content away) and resumes for any still-active items on re-collapse.
+- Entrance/exit use custom `@keyframes` in `globals.css` (`notification-pop-in`/`-out`) — a bouncy overshoot on entry, not a linear slide, per the "make it whimsical" ask. `useToast()`'s public signature (`showToast(message, type)`) is unchanged, so no call site (`Dashboard.tsx`, `admin/db/page.tsx`, etc.) needed to change.
+- Other whimsy added at the same time: `Button` gets `active:scale-95` on press; `StatusStepper` plays a small bounce (`animate-step-advance`) on the newly-current step when an order advances.
+
 ## 5. Bug Fix Log (2026-07, full sweep)
 Fixed in a dedicated bug-fix pass, prior to and separate from the UI redesign in §4:
 - **`admin/page.tsx` syntax error**: `} catch (err) => {` (invalid arrow-function-in-catch) fixed to `} catch (err) {`. This had been silently blocking `tsc --noEmit`/`next build` for the whole project — fixing it surfaced a second, previously-hidden bug (next item).
@@ -52,7 +61,16 @@ Fixed in a dedicated bug-fix pass, prior to and separate from the UI redesign in
 - **`orders/[id]/route.ts` PUT crash on malformed body**: `status.toLowerCase()` was called before checking `status` was a string, so a missing/non-string `status` threw inside the try block and returned a generic 500 instead of the intended 400 "Invalid status". Fixed with a `typeof status !== "string"` guard before calling `.toLowerCase()`.
 - **`Dashboard.tsx` unencoded restaurant name in URL**: `api.getOrders` built `/api/orders/restaurant/${restName}` without `encodeURIComponent`, breaking for restaurant names with spaces or special characters (e.g. "The Golden Spoon"). Fixed to `encodeURIComponent(restName)`.
 
-## 6. File Tree
+## 6. Session & Auth Architecture (2026-07)
+Replaced the old "Remember Me" (which just prefilled a form from `localStorage`-cached plaintext password — the user still had to click Sign In, and the password sat in the clear in the browser) with real server-issued sessions:
+- **`src/lib/session.ts`**: `createSessionToken({ type: "admin" } | { type: "restaurant", name })` / `verifySessionToken(token)`. Token = `base64url(JSON payload incl. exp).base64url(HMAC-SHA256 signature)`, signed with `process.env.SESSION_SECRET` (falls back to a hardcoded dev-only secret if unset — same precedent as the `raw_password` technical debt in §3; set a real `SESSION_SECRET` before any non-local deployment). No database session table — verification is a pure function, no I/O.
+- **Cookie name**: `session` (httpOnly, `sameSite=lax`, `secure` in production, `path=/`). **Persistence is controlled by the cookie's `maxAge`, not the token's `exp`** — the token itself is always valid for 30 days (`SESSION_TOKEN_MAX_AGE`) as a safety bound, but omitting `maxAge` at cookie-set time makes it a true session-only cookie (dies when the browser closes) regardless of token validity. "Remember Me" checked → cookie gets `maxAge: SESSION_COOKIE_MAX_AGE_REMEMBERED` (30 days); unchecked → no `maxAge`, session cookie.
+- **Routes**: `POST /api/restaurants/login` and the new `POST /api/admin/login` both accept a `rememberMe: boolean` in the body and set the cookie accordingly. `GET /api/session` reads/verifies the cookie and returns `{ authenticated, type, name? }` — this is what every protected page now calls on mount instead of reading `localStorage`. `POST /api/logout` clears the cookie (`maxAge: 0`), used by Kitchen's existing logout and the new Admin logout buttons (`admin/page.tsx`, `admin/db/page.tsx`).
+- **Admin auth moved server-side**: previously `src/app/page.tsx` compared the hardcoded username/password entirely in the browser (`username === "darkglory" && ...`). That check now lives in `POST /api/admin/login` (`src/app/api/admin/login/route.ts`) — necessary because a cookie can only be *set* by the server, so remembering the admin session required moving the credential check there too. The credentials themselves are unchanged (still hardcoded, still dev-only).
+- **Seamless restore**: `restaurant/page.tsx`, `src/app/page.tsx`, `admin/page.tsx`, and `admin/db/page.tsx` all call `GET /api/session` on mount; if authenticated, they skip the login form/redirect entirely (no button click required) instead of the old prefill-then-still-click-Sign-In behavior.
+- **What did NOT change**: no session table, no JWT library (plain `crypto.createHmac`, no new dependency), no change to bcrypt password hashing/verification itself.
+
+## 7. File Tree
 ```
 app/
 ├── server.js                     # custom server: HTTP + Next handler + ws upgrade on /ws
@@ -60,9 +78,13 @@ app/
 └── src/
     ├── app/
     │   ├── admin/
-    │   │   ├── page.tsx              # "God Mode" — redirects to `/` if not authed, sim modes, shared Modal for purge
-    │   │   └── db/page.tsx           # DB CRUD admin — uses shared Modal/Toast/PageHeader
+    │   │   ├── page.tsx              # "God Mode" — GET /api/session gate, sim modes, shared Modal for purge, Logout button
+    │   │   └── db/page.tsx           # DB CRUD admin — GET /api/session gate, shared Modal/Toast/PageHeader, Logout button
     │   ├── api/
+    │   │   ├── admin/
+    │   │   │   └── login/route.ts    # POST admin login (server-side cred check) — sets session cookie, see §6
+    │   │   ├── session/route.ts      # GET current session ({ authenticated, type, name? }) — see §6
+    │   │   ├── logout/route.ts       # POST clears the session cookie — see §6
     │   │   ├── dev/
     │   │   │   ├── db/route.ts       # GET/DELETE full db dump & purge
     │   │   │   └── seed/route.ts     # POST seed (Golden Spoon + 5 orders)
@@ -75,37 +97,38 @@ app/
     │   │   │   ├── [id]/
     │   │   │   │   ├── password/route.ts  # PUT reset password
     │   │   │   │   └── route.ts           # DELETE restaurant + its orders
-    │   │   │   ├── login/route.ts    # POST bcrypt login
+    │   │   │   ├── login/route.ts    # POST bcrypt login, sets session cookie — see §6
     │   │   │   └── register/route.ts # POST create restaurant
     │   │   └── seed/route.ts         # GET legacy seed (3 sample orders)
     │   ├── customer/page.tsx         # public order tracker, WebSocket live updates + connection indicator, POS-uppercase inputs
     │   ├── restaurant/
     │   │   ├── Dashboard.tsx         # KitchenDashboard: responsive Nav (top bar+hamburger on mobile, sidebar on md:+), StatusStepper, still polls 5s
-    │   │   ├── page.tsx              # login gate (AuthCard) -> KitchenDashboard
+    │   │   ├── page.tsx              # login gate (AuthCard), GET /api/session on mount for seamless restore -> KitchenDashboard
     │   │   └── register/page.tsx     # restaurant signup (AuthCard)
     │   ├── layout.tsx
-    │   ├── page.tsx                  # landing / admin login entry (AuthCard)
-    │   └── globals.css                # design tokens (see §4 Design System)
+    │   ├── page.tsx                  # landing / admin login entry (AuthCard), GET /api/session on mount for seamless restore
+    │   └── globals.css                # design tokens + notification/stepper keyframes (see §4 Design System)
     ├── components/
     │   └── ui/                       # shared design-system primitives — see §4
-    │       ├── Button.tsx
+    │       ├── Button.tsx             # active:scale-95 press effect
     │       ├── Card.tsx
     │       ├── Input.tsx              # Input + Label
     │       ├── Checkbox.tsx
     │       ├── StatusBadge.tsx        # StatusBadge + StatusIcon
-    │       ├── StatusStepper.tsx
+    │       ├── StatusStepper.tsx      # bounces on step advance (animate-step-advance)
     │       ├── Modal.tsx              # Modal + ModalActions
-    │       ├── Toast.tsx              # ToastProvider + useToast
+    │       ├── Toast.tsx              # ToastProvider + useToast — macOS-style notification stack, see §4.1
     │       ├── PageHeader.tsx
     │       └── AuthCard.tsx
     └── lib/
         ├── db.ts                     # pg Pool singleton, query() helper, initDb migrations
         ├── ws-hub.ts                 # WS client registry + broadcast(), shared via globalThis with server.js
         ├── order-status.ts           # unified status→visual mapping — see §4
+        ├── session.ts                # signed session cookie sign/verify — see §6
         └── logger.ts
 ```
 
-## 7. WebSocket Architecture
+## 8. WebSocket Architecture
 - **Why a custom server**: Next.js 16 App Router has no way to attach a raw `ws` upgrade handler to a route — `server.js` creates a plain `http.Server`, wraps Next's request handler for normal HTTP, and intercepts the `upgrade` event itself. Non-`/ws` upgrade requests (notably Next's own dev-mode HMR websocket) are delegated to `app.getUpgradeHandler()` so dev mode still works.
 - **Client registry**: `src/lib/ws-hub.ts` holds a `Set<WebSocket>` stashed on `globalThis` (key `__orderTrackerWsClients`) so both `server.js` (which accepts the raw upgrade and registers connections) and the Next-compiled API routes (which call `broadcast()`) share the same in-memory set — this only works because both run in the **same Node process** (the custom-server pattern). This will NOT work if the app is ever split across multiple processes/instances (e.g. horizontal scaling) — a real pub/sub (Redis, etc.) would be needed then. Not built now; flagging for future-you.
 - **Endpoint**: `ws://<host>/ws` (or `wss://` behind TLS).
@@ -115,18 +138,24 @@ app/
 - **Consumer**: `customer/page.tsx` opens a WS connection once an order is being tracked (and not yet `Finished`), reconnects with a 2s fixed backoff on close, and shows a Live/Connecting/Reconnecting indicator (added in the §4 redesign) so a dropped connection is visible instead of silently stale. On any `order_updated`/`order_deleted` event it does NOT trust the broadcast payload's status string directly — it refetches via the existing `/api/orders/search` REST call, because the broadcasted `status` values come from the Kitchen/API vocabulary which doesn't match the customer page's own `OrderStatus` enum — see §2's status-vocab quirk. This is a deliberate simplification, not a bug: it means every event triggers one REST round-trip rather than a fully push-driven UI, but avoids trusting/mistranslating a status string across the vocab mismatch.
 - **Kitchen Dashboard** (`restaurant/Dashboard.tsx`) was intentionally left on its 5s poll — WS wiring only targeted the Customer Portal per the scoped request. It would receive the same broadcasts for free if migrated later.
 
-## 8. Route Dictionary
+## 9. Route Dictionary
 
 ### Pages
-- `src/app/page.tsx` — Landing + Admin login portal (`AuthCard`); hardcoded creds (`darkglory`/see source) write `localStorage.isAdmin`; links to Kitchen/Customer.
-- `src/app/admin/page.tsx` — "God Mode": redirects to `/` if `localStorage.isAdmin` isn't set (no embedded login of its own); ADMIN/KITCHEN/CUSTOMER sim toggle (amber accent); purge via shared `Modal`. Tables: `restaurants`, `orders` (read via `/api/dev/db`).
-- `src/app/admin/db/page.tsx` — Full DB admin CRUD UI; localStorage `isAdmin` gate; uses shared `Modal`/`ModalActions`/`ToastProvider`/`PageHeader`/`StatusBadge`. Tables: `restaurants`, `orders`.
-- `src/app/customer/page.tsx` — Order tracker; POS-uppercase input formatting; initial lookup via `/api/orders/search`, then live updates via WebSocket (`/ws`) until status `Finished`, plus a Live/Reconnecting connection indicator — see §7 and §4. Tables: `orders` (read-only).
-- `src/app/restaurant/page.tsx` — Kitchen login gate (`AuthCard`) → renders `Dashboard.tsx` KitchenDashboard. Tables: `restaurants` (auth).
+- `src/app/page.tsx` — Landing + Admin login portal (`AuthCard`); checks `GET /api/session` on mount and redirects straight to `/admin/db` if already authenticated (seamless restore); submits to `POST /api/admin/login`; links to Kitchen/Customer.
+- `src/app/admin/page.tsx` — "God Mode": checks `GET /api/session` on mount, redirects to `/` if not authenticated as admin; ADMIN/KITCHEN/CUSTOMER sim toggle (amber accent); purge via shared `Modal`; Logout button (`POST /api/logout`). Tables: `restaurants`, `orders` (read via `/api/dev/db`).
+- `src/app/admin/db/page.tsx` — Full DB admin CRUD UI; `GET /api/session` gate; uses shared `Modal`/`ModalActions`/`ToastProvider`/`PageHeader`/`StatusBadge`; Logout button in `PageHeader` actions. Tables: `restaurants`, `orders`.
+- `src/app/customer/page.tsx` — Order tracker; POS-uppercase input formatting; initial lookup via `/api/orders/search`, then live updates via WebSocket (`/ws`) until status `Finished`, plus a Live/Reconnecting connection indicator — see §8 and §4. Tables: `orders` (read-only).
+- `src/app/restaurant/page.tsx` — Kitchen login gate (`AuthCard`); checks `GET /api/session` on mount and skips straight to `Dashboard.tsx` KitchenDashboard if already authenticated (seamless restore, no more localStorage password prefill); submits to `POST /api/restaurants/login` with `rememberMe`. Tables: `restaurants` (auth).
 - `src/app/restaurant/register/page.tsx` — Restaurant signup form (`AuthCard`) → auto-login → redirect. Tables: `restaurants` (insert).
-- `src/app/restaurant/Dashboard.tsx` — KitchenDashboard component (not a route): order list/status mgmt via `StatusStepper`, shared `Modal`/`Toast`, responsive `Nav` (top bar+hamburger on mobile, sidebar on `md:`+). Tables: `orders` (read/update).
+- `src/app/restaurant/Dashboard.tsx` — KitchenDashboard component (not a route): order list/status mgmt via `StatusStepper`, shared `Modal`/`Toast`, responsive `Nav` (top bar+hamburger on mobile, sidebar on `md:`+); `onLogout` now calls `POST /api/logout`. Tables: `orders` (read/update).
 
 ### API Routes
+- `src/app/api/session/route.ts`
+  - `GET` — reads/verifies the `session` cookie (see §6); returns `{ authenticated: false }` or `{ authenticated: true, type: "admin" | "restaurant", name? }`. No table access.
+- `src/app/api/logout/route.ts`
+  - `POST` — clears the `session` cookie (`maxAge: 0`). No table access.
+- `src/app/api/admin/login/route.ts`
+  - `POST` — server-side check against hardcoded admin creds; accepts `rememberMe`; sets session cookie on success. No table access (admin has no DB row).
 - `src/app/api/orders/route.ts`
   - `POST` — create order; requires `restaurant_name`, `order_number`; default status `Received`; broadcasts `order_updated` via ws-hub. Table: `orders` (insert).
   - `GET` — lookup by `restaurant_name`+`order_number` query params (duplicate of `/api/orders/search`). Table: `orders` (select).
@@ -138,7 +167,7 @@ app/
 - `src/app/api/orders/search/route.ts`
   - `GET` — single order lookup via `restaurant_name`+`order_number` query params. Table: `orders` (select).
 - `src/app/api/restaurants/login/route.ts`
-  - `POST` — bcrypt-compare `name`+`password`; no token issued, just 200/401. Table: `restaurants` (select).
+  - `POST` — bcrypt-compare `name`+`password`; accepts `rememberMe`; sets session cookie on success (see §6), 401 on failure. Table: `restaurants` (select).
 - `src/app/api/restaurants/register/route.ts`
   - `POST` — create restaurant; 409 if name exists; stores bcrypt hash + `raw_password`. Table: `restaurants` (insert).
 - `src/app/api/restaurants/[id]/route.ts`

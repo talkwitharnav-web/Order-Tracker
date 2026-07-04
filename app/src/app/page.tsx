@@ -14,34 +14,41 @@ export default function GatewayCommandCenter() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
+  const [checkingSession, setCheckingSession] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const savedUsername = localStorage.getItem("admin_username");
-    const savedPassword = localStorage.getItem("admin_password");
-    if (savedUsername && savedPassword) {
-      setUsername(savedUsername);
-      setPassword(savedPassword);
-      setRememberMe(true);
-    }
-  }, []);
+    fetch("/api/session")
+      .then((res) => res.json())
+      .then((session) => {
+        if (session.authenticated && session.type === "admin") {
+          router.replace("/admin/db");
+        } else {
+          setCheckingSession(false);
+        }
+      });
+  }, [router]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === "darkglory" && password === "Re$t@ur@nt@dm!n") {
-      localStorage.setItem("isAdmin", "true");
-      if (rememberMe) {
-        localStorage.setItem("admin_username", username);
-        localStorage.setItem("admin_password", password);
-      } else {
-        localStorage.removeItem("admin_username");
-        localStorage.removeItem("admin_password");
+    setError("");
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, rememberMe }),
+      });
+      if (!response.ok) {
+        setError("Invalid credentials. Please try again.");
+        return;
       }
       router.push("/admin/db");
-    } else {
+    } catch {
       setError("Invalid credentials. Please try again.");
     }
   };
+
+  if (checkingSession) return null;
 
   return (
     <div className="relative">

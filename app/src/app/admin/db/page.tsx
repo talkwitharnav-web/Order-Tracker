@@ -67,12 +67,21 @@ function AdminDbContent() {
   }, [showToast]);
 
   useEffect(() => {
-    if (localStorage.getItem("isAdmin") !== "true") {
-      router.push("/");
-    } else {
-      fetchData();
-    }
+    fetch("/api/session")
+      .then((res) => res.json())
+      .then((session) => {
+        if (session.authenticated && session.type === "admin") {
+          fetchData();
+        } else {
+          router.push("/");
+        }
+      });
   }, [router, fetchData]);
+
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/");
+  };
 
   const closeConfirm = () => setConfirmState(EMPTY_CONFIRM);
 
@@ -216,6 +225,9 @@ function AdminDbContent() {
               <Button variant="danger" onClick={handlePurge}>
                 <ShieldAlert size={16} />
                 Purge Database
+              </Button>
+              <Button variant="ghost" onClick={handleLogout}>
+                Logout
               </Button>
             </>
           }

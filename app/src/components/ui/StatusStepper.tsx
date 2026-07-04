@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, useEffect, useRef, useState } from "react";
 import { ORDERED_STATUS_KEYS, normalizeStatus, type ApiOrderStatus, type StatusKey } from "@/lib/order-status";
 
 const STEP_LABEL: Record<StatusKey, string> = {
@@ -25,6 +25,18 @@ export const StatusStepper: FC<{
 }> = ({ status, onAdvance }) => {
   const currentKey = normalizeStatus(status);
   const currentIndex = ORDERED_STATUS_KEYS.indexOf(currentKey);
+  const [justAdvanced, setJustAdvanced] = useState(false);
+  const prevIndexRef = useRef(currentIndex);
+
+  useEffect(() => {
+    if (currentIndex > prevIndexRef.current) {
+      setJustAdvanced(true);
+      const timer = setTimeout(() => setJustAdvanced(false), 350);
+      prevIndexRef.current = currentIndex;
+      return () => clearTimeout(timer);
+    }
+    prevIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Order status">
@@ -42,6 +54,8 @@ export const StatusStepper: FC<{
               onClick={() => isNext && next && onAdvance(next)}
               aria-current={isCurrent ? "step" : undefined}
               className={`flex-1 py-2 px-2 text-xs font-semibold rounded-[var(--radius-sm)] transition-colors text-center ${
+                isCurrent && justAdvanced ? "animate-step-advance" : ""
+              } ${
                 isDone
                   ? "bg-[var(--color-status-complete-bg)] text-[var(--color-status-complete-text)] border border-[var(--color-status-complete-border)]"
                   : isCurrent

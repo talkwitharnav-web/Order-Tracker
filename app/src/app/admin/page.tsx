@@ -76,6 +76,11 @@ function AdminDashboard() {
     return () => clearInterval(intervalId);
   }, [fetchData]);
 
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "/";
+  };
+
   const handlePurge = async () => {
     setConfirmOpen(false);
     setIsPurging(true);
@@ -152,6 +157,9 @@ function AdminDashboard() {
             <Button variant="danger" onClick={() => setConfirmOpen(true)} disabled={isPurging}>
               {isPurging ? "Purging..." : "Purge DB"}
             </Button>
+            <Button variant="ghost" onClick={handleLogout}>
+              Logout
+            </Button>
           </>
         }
       />
@@ -202,13 +210,16 @@ export default function AdminPage() {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const isAdmin = localStorage.getItem("isAdmin") === "true";
-    if (isAdmin) {
-      setIsAuthenticated(true);
-    } else {
-      router.push("/");
-    }
-    setChecked(true);
+    fetch("/api/session")
+      .then((res) => res.json())
+      .then((session) => {
+        if (session.authenticated && session.type === "admin") {
+          setIsAuthenticated(true);
+        } else {
+          router.push("/");
+        }
+        setChecked(true);
+      });
   }, [router]);
 
   if (!checked) return null;

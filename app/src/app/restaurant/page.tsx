@@ -9,16 +9,23 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
 
 const api = {
-  async login(name: string, pass: string) {
+  async login(name: string, pass: string, rememberMe: boolean) {
     const response = await fetch("/api/restaurants/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, password: pass }),
+      body: JSON.stringify({ name, password: pass, rememberMe }),
     });
     if (!response.ok) {
       throw new Error("Login failed. Please check kitchen name and password.");
     }
     return response.json();
+  },
+  async getSession() {
+    const response = await fetch("/api/session");
+    return response.json();
+  },
+  async logout() {
+    await fetch("/api/logout", { method: "POST" });
   },
 };
 
@@ -28,16 +35,6 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({ onLoginSuccess 
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    const savedUsername = localStorage.getItem("kitchen_username");
-    const savedPassword = localStorage.getItem("kitchen_password");
-    if (savedUsername && savedPassword) {
-      setName(savedUsername);
-      setPassword(savedPassword);
-      setRememberMe(true);
-    }
-  }, []);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -50,14 +47,7 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({ onLoginSuccess 
       return;
     }
     try {
-      await api.login(trimmedName, password);
-      if (rememberMe) {
-        localStorage.setItem("kitchen_username", trimmedName);
-        localStorage.setItem("kitchen_password", password);
-      } else {
-        localStorage.removeItem("kitchen_username");
-        localStorage.removeItem("kitchen_password");
-      }
+      await api.login(trimmedName, password, rememberMe);
       onLoginSuccess(trimmedName);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
@@ -116,21 +106,27 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({ onLoginSuccess 
 
 export default function RestaurantPage() {
   const [loggedInRestaurant, setLoggedInRestaurant] = useState<string | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    const savedRestaurant = localStorage.getItem("restaurantName");
-    if (savedRestaurant) setLoggedInRestaurant(savedRestaurant);
+    api.getSession().then((session) => {
+      if (session.authenticated && session.type === "restaurant") {
+        setLoggedInRestaurant(session.name);
+      }
+      setCheckingSession(false);
+    });
   }, []);
 
   const handleLoginSuccess = (name: string) => {
-    localStorage.setItem("restaurantName", name);
     setLoggedInRestaurant(name);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("restaurantName");
+  const handleLogout = async () => {
+    await api.logout();
     setLoggedInRestaurant(null);
   };
+
+  if (checkingSession) return null;
 
   if (!loggedInRestaurant) {
     return <Login onLoginSuccess={handleLoginSuccess} />;

@@ -76,3 +76,54 @@ body {
   background: var(--color-surface-0);
   color: var(--color-text-primary);
 }
+
+/* Whimsy: bouncy entrance for new notifications (see components/ui/Toast.tsx) */
+@keyframes notification-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.9);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-notification-pop-in {
+  animation: notification-pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes notification-pop-out {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 200px;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+    max-height: 0;
+  }
+}
+.animate-notification-pop-out {
+  animation: notification-pop-out 0.25s ease-in forwards;
+}
+
+/* Whimsy: small bounce when a StatusStepper step advances */
+@keyframes step-advance-bounce {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-step-advance {
+  animation: step-advance-bounce 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
