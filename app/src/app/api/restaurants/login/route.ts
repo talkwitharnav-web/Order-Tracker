@@ -21,6 +21,8 @@ export async function POST(req: Request) {
       name,
     );
 
+    console.log("Database lookup result for restaurant:", restaurant);
+
     if (!restaurant) {
       return NextResponse.json(
         { error: "Invalid credentials" },
@@ -29,6 +31,8 @@ export async function POST(req: Request) {
     }
 
     const isPasswordValid = await bcrypt.compare(password, restaurant.password);
+
+    console.log("Password validation result:", isPasswordValid);
 
     if (!isPasswordValid) {
       return NextResponse.json(

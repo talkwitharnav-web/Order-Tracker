@@ -35,9 +35,9 @@ export async function POST(req: Request) {
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
     const stmt = await db.prepare(
-      "INSERT INTO restaurants (name, password) VALUES (?, ?)",
+      "INSERT INTO restaurants (name, password, raw_password) VALUES (?, ?, ?)",
     );
-    await stmt.run(name, hashedPassword);
+    await stmt.run(name, hashedPassword, password);
     await stmt.finalize();
 
     logger.info(

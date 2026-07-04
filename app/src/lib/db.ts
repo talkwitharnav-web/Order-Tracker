@@ -28,7 +28,8 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS restaurants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
-      password TEXT NOT NULL
+      password TEXT NOT NULL,
+      raw_password TEXT
     );
   `);
   await db.exec(`

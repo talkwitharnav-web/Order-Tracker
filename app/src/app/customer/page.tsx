@@ -47,7 +47,7 @@ const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
     Received: {
       Icon: Clock,
       color: "slate",
-      title: "Order Received",
+      title: "Order Placed",
       description: "We've got your order and will start preparing it soon.",
     },
     Making: {
@@ -132,7 +132,7 @@ export default function CustomerPage() {
         restaurant_name: restName,
         order_number: ordNum,
       });
-      const response = await fetch(`/api/orders?${query}`);
+      const response = await fetch(`/api/orders/search?${query}`);
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || "Failed to track order");
@@ -171,9 +171,8 @@ export default function CustomerPage() {
     return () => clearInterval(interval);
   }, [order]);
 
-  const formatOrderNumber = (value: string) => {
-    const cleaned = value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
-    setOrderNumber(cleaned);
+  const formatInput = (value: string) => {
+    return value.toUpperCase().replace(/[^A-Z0-9- ]/g, "");
   };
 
   return (
@@ -216,9 +215,9 @@ export default function CustomerPage() {
                     type="text"
                     value={restaurantName}
                     onChange={(e) =>
-                      setRestaurantName(e.target.value.replace(/\s{2,}/g, " "))
+                      setRestaurantName(formatInput(e.target.value))
                     }
-                    placeholder="e.g., 'The Golden Spoon'"
+                    placeholder="e.g., 'THE GOLDEN SPOON'"
                     className="w-full p-4 text-lg bg-slate-950 text-white border-2 border-slate-800 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-600 transition-all"
                     required
                   />
@@ -234,7 +233,7 @@ export default function CustomerPage() {
                     id="orderNumber"
                     type="text"
                     value={orderNumber}
-                    onChange={(e) => formatOrderNumber(e.target.value)}
+                    onChange={(e) => setOrderNumber(formatInput(e.target.value))}
                     placeholder="e.g., 'ORD-12345'"
                     className="w-full p-4 text-lg bg-slate-950 text-white border-2 border-slate-800 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-600 transition-all"
                     required

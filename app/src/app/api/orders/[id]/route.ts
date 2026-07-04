@@ -45,9 +45,9 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: { id:string } },
 ) {
-  const { id } = await params;
+  const { id } = params;
   logger.info(`DELETE /api/orders/${id} - request received`);
 
   try {

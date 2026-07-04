@@ -2,6 +2,8 @@
 
 import { useState, useEffect, FC } from "react";
 import Link from "next/link";
+import { KitchenDashboard } from "../restaurant/Dashboard";
+import CustomerPage from "../customer/page";
 
 // --- Components ---
 
@@ -9,9 +11,9 @@ const DataTable: FC<{ title: string; data: any[] }> = ({ title, data }) => (
   <div className="mb-8">
     <h2 className="text-2xl font-bold text-amber-500 mb-4">{title}</h2>
     {data.length > 0 ? (
-      <div className="overflow-x-auto bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+      <div className="overflow-x-auto bg-slate-800/50 border border-slate-700 rounded-lg p-4 max-h-[500px]">
         <table className="w-full text-left">
-          <thead>
+          <thead className="sticky top-0 bg-slate-800">
             <tr className="border-b border-slate-600">
               {Object.keys(data[0]).map((key) => (
                 <th
@@ -45,14 +47,16 @@ const DataTable: FC<{ title: string; data: any[] }> = ({ title, data }) => (
   </div>
 );
 
+type SimMode = "ADMIN" | "KITCHEN" | "CUSTOMER";
+
 const AdminDashboard: FC = () => {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isPurging, setIsPurging] = useState(false);
+  const [simMode, setSimMode] = useState<SimMode>("ADMIN");
+  const [simRestaurantName, setSimRestaurantName] = useState("");
 
   const fetchData = async () => {
-    setIsLoading(true);
     try {
       const response = await fetch("/api/dev/db");
       if (!response.ok) throw new Error("Failed to fetch database contents");
@@ -60,10 +64,14 @@ const AdminDashboard: FC = () => {
       setData(dbData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+    const intervalId = setInterval(fetchData, 5000); // Poll every 5 seconds
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handlePurge = async () => {
     if (
@@ -76,7 +84,7 @@ const AdminDashboard: FC = () => {
         const response = await fetch("/api/dev/db", { method: "DELETE" });
         if (!response.ok) throw new Error("Failed to purge database");
         await fetchData(); // Refresh data after purge
-      } catch (err) {
+      } catch (err) => {
         setError(
           err instanceof Error ? err.message : "Unknown error during purge",
         );
@@ -86,14 +94,59 @@ const AdminDashboard: FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const renderSimMode = () => {
+    switch (simMode) {
+      case "KITCHEN":
+        return (
+          <div className="mt-4">
+            <div className="flex gap-4 mb-4">
+              <input
+                type="text"
+                placeholder="Enter restaurant name to simulate"
+                value={simRestaurantName}
+                onChange={(e) => setSimRestaurantName(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              />
+            </div>
+            {simRestaurantName ? (
+              <div className="h-[80vh] overflow-y-auto">
+                <KitchenDashboard
+                  restaurantName={simRestaurantName}
+                  onLogout={() => {
+                    /* no-op in sim */
+                  }}
+                />
+              </div>
+            ) : (
+              <p className="text-slate-500">
+                Enter a restaurant name to begin kitchen simulation.
+              </p>
+            )}
+          </div>
+        );
+      case "CUSTOMER":
+        return (
+          <div className="mt-4 h-[80vh] overflow-y-auto">
+            <CustomerPage />
+          </div>
+        );
+      case "ADMIN":
+      default:
+        return (
+          data && (
+            <>
+              <DataTable title="Restaurants" data={data.restaurants} />
+              <DataTable title="Master Live Feed (Orders)" data={data.orders} />
+            </>
+          )
+        );
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 font-sans text-white p-8">
       <header className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold">Admin Dashboard</h1>
+        <h1 className="text-4xl font-bold">God Mode</h1>
         <div className="flex items-center gap-4">
           <Link
             href="/"
@@ -103,10 +156,10 @@ const AdminDashboard: FC = () => {
           </Link>
           <button
             onClick={fetchData}
-            disabled={isLoading || isPurging}
+            disabled={isPurging}
             className="bg-slate-800 text-slate-300 px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-700 disabled:opacity-50"
           >
-            {isLoading ? "Refreshing..." : "Refresh"}
+            Refresh
           </button>
           <button
             onClick={handlePurge}
@@ -119,14 +172,41 @@ const AdminDashboard: FC = () => {
       </header>
 
       <main>
-        {isLoading && <p>Loading database...</p>}
         {error && <p className="text-red-400">{error}</p>}
-        {data && (
-          <>
-            <DataTable title="Restaurants" data={data.restaurants} />
-            <DataTable title="Orders" data={data.orders} />
-          </>
-        )}
+        <div className="mb-8 p-4 bg-slate-900 border border-slate-700 rounded-xl">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-indigo-400">
+              Simulation Zone
+            </h2>
+            <div className="flex gap-2">
+              {(["ADMIN", "KITCHEN", "CUSTOMER"] as SimMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setSimMode(mode)}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    simMode === mode
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {mode.charAt(0) + mode.slice(1).toLowerCase()} View
+                </button>
+              ))}
+            </div>
+          </div>
+          {simMode !== "ADMIN" && (
+            <div className="mt-4 p-4 rounded-lg ring-4 ring-indigo-500/50 relative bg-slate-950/50">
+              <div className="sticky top-0 bg-slate-950/80 backdrop-blur-sm z-10 py-2 px-4 mb-4 rounded-t-lg">
+                <h3 className="text-lg font-bold text-center text-indigo-300">
+                  SIMULATION MODE - {simMode}
+                </h3>
+              </div>
+              <div className="pt-2">{renderSimMode()}</div>
+            </div>
+          )}
+        </div>
+
+        {simMode === "ADMIN" && renderSimMode()}
       </main>
     </div>
   );
