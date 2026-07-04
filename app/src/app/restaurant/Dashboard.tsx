@@ -10,13 +10,13 @@ import {
 } from "lucide-react";
 
 // --- TYPES ---
-export type OrderStatus = "Received" | "Making" | "Finished";
+export type OrderStatus = "Received" | "Preparing" | "Complete";
 export type Order = {
   id: number;
   order_number: string;
   status: OrderStatus;
 };
-type Tab = "Home" | "Received" | "Making" | "Finished";
+type Tab = "Home" | "Received" | "Preparing" | "Complete";
 
 // --- ICONS ---
 const StatusIcon: FC<{ status: OrderStatus }> = ({ status }) => {
@@ -26,9 +26,9 @@ const StatusIcon: FC<{ status: OrderStatus }> = ({ status }) => {
   switch (status) {
     case "Received":
       return <Clock {...iconProps} />;
-    case "Making":
+    case "Preparing":
       return <Flame {...iconProps} />;
-    case "Finished":
+    case "Complete":
       return <CheckCircle {...iconProps} />;
     default:
       return null;
@@ -81,12 +81,12 @@ const Sidebar: FC<{
   onLogout: () => void;
   restaurantName: string;
 }> = ({ activeTab, setActiveTab, onLogout, restaurantName }) => {
-  const navItems: Tab[] = ["Home", "Received", "Making", "Finished"];
+  const navItems: Tab[] = ["Home", "Received", "Preparing", "Complete"];
   const navIcons: Record<Tab, React.ComponentType<{ className?: string }>> = {
     Home: Home,
     Received: Clock,
-    Making: Flame,
-    Finished: CheckCircle,
+    Preparing: Flame,
+    Complete: CheckCircle,
   };
 
   return (
@@ -131,8 +131,8 @@ const OrderCard: FC<{
 }> = ({ order, onUpdateStatus, onDelete }) => {
   const statusClasses: Record<OrderStatus, string> = {
     Received: "bg-slate-200 text-slate-800",
-    Making: "bg-amber-200 text-amber-800",
-    Finished: "bg-emerald-200 text-emerald-800",
+    Preparing: "bg-amber-200 text-amber-800",
+    Complete: "bg-emerald-200 text-emerald-800",
   };
 
   return (
@@ -153,18 +153,18 @@ const OrderCard: FC<{
       <div className="flex flex-col gap-2 mt-4">
         {order.status === "Received" && (
           <button
-            onClick={() => onUpdateStatus(order.id, "Making")}
+            onClick={() => onUpdateStatus(order.id, "Preparing")}
             className="w-full py-2 text-sm font-medium rounded-lg shadow-sm bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-amber-500 transition-all"
           >
-            Mark Making
+            Mark Preparing
           </button>
         )}
-        {order.status === "Making" && (
+        {order.status === "Preparing" && (
           <button
-            onClick={() => onUpdateStatus(order.id, "Finished")}
+            onClick={() => onUpdateStatus(order.id, "Complete")}
             className="w-full py-2 text-sm font-medium rounded-lg shadow-sm bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-amber-500 transition-all"
           >
-            Mark Finished
+            Mark Complete
           </button>
         )}
         <button
@@ -252,7 +252,7 @@ const HomeTab: FC<{
                   className={`ml-4 px-2 py-0.5 text-xs font-semibold rounded-full ${
                     order.status === "Received"
                       ? "bg-slate-200 text-slate-800"
-                      : order.status === "Making"
+                      : order.status === "Preparing"
                         ? "bg-amber-200 text-amber-800"
                         : "bg-emerald-200 text-emerald-800"
                   }`}
@@ -372,8 +372,8 @@ export const KitchenDashboard: FC<{ restaurantName: string; onLogout: () => void
           />
         );
       case "Received":
-      case "Making":
-      case "Finished":
+      case "Preparing":
+      case "Complete":
         return (
           <OrderGrid
             orders={displayedOrders}

@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
-export async function GET(
-  request: Request,
-  { params }: { params: { restaurantName: string } },
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ restaurantName: string }> }) {
   const { restaurantName } = await params;
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");

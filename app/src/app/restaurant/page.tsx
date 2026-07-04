@@ -13,8 +13,9 @@ const api = {
       body: JSON.stringify({ name, password: pass }),
     });
     if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || "Login failed");
+      // Do not try to parse the body on failed responses.
+      // The body may not be JSON, causing a crash.
+      throw new Error("Login failed. Please check kitchen name and password.");
     }
     return response.json();
   },
@@ -26,8 +27,19 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({
 }) => {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const savedUsername = localStorage.getItem("kitchen_username");
+    const savedPassword = localStorage.getItem("kitchen_password");
+    if (savedUsername && savedPassword) {
+      setName(savedUsername);
+      setPassword(savedPassword);
+      setRememberMe(true);
+    }
+  }, []);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,6 +53,13 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({
     }
     try {
       await api.login(trimmedName, password);
+      if (rememberMe) {
+        localStorage.setItem("kitchen_username", trimmedName);
+        localStorage.setItem("kitchen_password", password);
+      } else {
+        localStorage.removeItem("kitchen_username");
+        localStorage.removeItem("kitchen_password");
+      }
       onLoginSuccess(trimmedName);
     } catch (err) {
       setError(
@@ -92,6 +111,17 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({
                 className="w-full p-4 text-lg bg-slate-900 text-white border border-slate-700 rounded-xl shadow-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 placeholder:text-slate-500"
                 required
               />
+            </div>
+            <div className="pb-2">
+              <label className="flex items-center text-slate-400">
+                <input
+                  type="checkbox"
+                  className="form-checkbox h-5 w-5 bg-slate-900 border-slate-700 text-amber-600 focus:ring-amber-500 rounded"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+                <span className="ml-2">Remember Me</span>
+              </label>
             </div>
             <button
               type="submit"

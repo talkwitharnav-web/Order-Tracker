@@ -25,9 +25,10 @@ export async function POST() {
     const password = "password123";
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     await db.run(
-      "INSERT INTO restaurants (name, password) VALUES (?, ?)",
+      "INSERT INTO restaurants (name, password, raw_password) VALUES (?, ?, ?)",
       restaurantName,
       hashedPassword,
+      password,
     );
     logger.info(`POST /api/dev/seed - created restaurant: ${restaurantName}`);
 

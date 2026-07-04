@@ -4,9 +4,9 @@ import { logger } from "@/lib/logger";
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = params;
+  const { id } = await params;
   logger.info(`PUT /api/orders/${id} - request received`);
 
   try {
@@ -16,8 +16,11 @@ export async function PUT(
 
     logger.info(`PUT /api/orders/${id} - updating status`, { status });
 
-    if (!status || !["Received", "Making", "Finished"].includes(status)) {
-      logger.warn(`PUT /api/orders/${id} - validation error`, { status });
+    const allowedStatuses = ["Received", "Preparing", "Complete"];
+    const incomingStatusLower = status.toLowerCase();
+
+    if (!status || !allowedStatuses.map(s => s.toLowerCase()).includes(incomingStatusLower)) {
+      logger.warn(`PUT /api/orders/${id} - validation error: Invalid status "${status}"`);
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
@@ -45,9 +48,9 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id:string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = params;
+  const { id } = await params;
   logger.info(`DELETE /api/orders/${id} - request received`);
 
   try {
