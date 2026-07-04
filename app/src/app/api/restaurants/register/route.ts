@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import bcrypt from "bcrypt";
+import {
+  createSessionToken,
+  RESTAURANT_SESSION_COOKIE_NAME,
+  SESSION_COOKIE_MAX_AGE_DEFAULT,
+} from "@/lib/session";
 
 const SALT_ROUNDS = 10;
 
@@ -55,10 +60,22 @@ export async function POST(req: Request) {
     logger.info(
       `POST /api/restaurants/register - restaurant "${name}" created successfully`,
     );
-    return NextResponse.json(
+
+    // Registering logs the kitchen straight in — no reason to make a
+    // first-time signup immediately re-enter the same credentials they just typed.
+    const token = createSessionToken({ type: "restaurant", name });
+    const response = NextResponse.json(
       { message: "Restaurant registered successfully" },
       { status: 201 },
     );
+    response.cookies.set(RESTAURANT_SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: SESSION_COOKIE_MAX_AGE_DEFAULT,
+    });
+    return response;
   } catch (err) {
     logger.error(
       "POST /api/restaurants/register - error processing request",

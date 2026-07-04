@@ -49,14 +49,31 @@ export function verifySessionToken(token: string | undefined | null): SessionPay
   }
 }
 
-export const SESSION_COOKIE_NAME = "session";
+/**
+ * Admin and restaurant (kitchen) sessions use separate cookie names so the
+ * two roles can be logged in independently in the same browser — they used
+ * to share one "session" cookie, which meant logging into either one
+ * silently clobbered the other's cookie (and its remembered/non-remembered
+ * maxAge), which is what made "Remember Me" look flaky for kitchen logins.
+ */
+export const ADMIN_SESSION_COOKIE_NAME = "admin_session";
+export const RESTAURANT_SESSION_COOKIE_NAME = "restaurant_session";
+
 /**
  * Token validity window — a safety bound independent of the cookie's own
  * lifetime. Always generous; browser persistence (remembered vs. session-only)
  * is controlled purely by the cookie's `maxAge` option at set-time, not by
- * this value (see login routes: omitting `maxAge` makes it a session cookie
- * that disappears when the browser closes, even though the token itself
- * would still verify if resent).
+ * this value.
  */
 export const SESSION_TOKEN_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 export const SESSION_COOKIE_MAX_AGE_REMEMBERED = 60 * 60 * 24 * 30; // 30 days
+/**
+ * Default cookie lifetime when "Remember Me" is NOT checked. Previously this
+ * case omitted `maxAge` entirely, making it a pure session-lifetime cookie —
+ * some browsers/tab-management behavior can discard those on ordinary
+ * navigation (not just on explicit browser close), which made it look like
+ * the app randomly "forgot" a logged-in admin/kitchen session. A short but
+ * non-zero default (1 day) avoids relying on that fragile behavior while
+ * still being meaningfully shorter than the remembered duration.
+ */
+export const SESSION_COOKIE_MAX_AGE_DEFAULT = 60 * 60 * 24; // 1 day

@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { StatusIcon } from "@/components/ui/StatusBadge";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getStatusVisual, type CustomerOrderStatus } from "@/lib/order-status";
 
 type Order = {
@@ -63,7 +64,7 @@ const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
         {STATUS_DESCRIPTION[order.status]}
       </p>
       <p className="text-xs text-[var(--color-text-muted)] mt-6">
-        Order #{order.order_number} &bull; Last updated {lastUpdated}
+        Order &ldquo;{order.order_number}&rdquo; &bull; Last updated {lastUpdated}
       </p>
     </div>
   );
@@ -116,7 +117,7 @@ export default function CustomerPage() {
     const trimmedRestName = restaurantName.trim();
     const trimmedOrdNum = orderNumber.trim();
     if (!trimmedRestName || !trimmedOrdNum) {
-      setError("Please enter both a restaurant and order number.");
+      setError("Please enter both a restaurant and order name.");
       return;
     }
     setIsLoading(true);
@@ -173,10 +174,11 @@ export default function CustomerPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
+      <ThemeToggle className="fixed top-4 right-4 z-20" />
       <main className="w-full max-w-2xl mx-auto">
         <Card className="p-6 sm:p-10">
           <div className="text-center mb-8">
-            <h1 className="text-3xl sm:text-4xl font-bold text-[var(--color-text-primary)] mb-2">
+            <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mb-2">
               Track Your Order
             </h1>
             <p className="text-[var(--color-text-secondary)]">
@@ -197,7 +199,7 @@ export default function CustomerPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="orderNumber">Order #</Label>
+                <Label htmlFor="orderNumber">Order Name</Label>
                 <Input
                   id="orderNumber"
                   type="text"
@@ -215,7 +217,7 @@ export default function CustomerPage() {
 
           {error && (
             <div className="mt-8 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
-              <p className="font-semibold text-red-300 text-center">{error}</p>
+              <p className="font-semibold text-[var(--color-danger)] text-center">{error}</p>
             </div>
           )}
 

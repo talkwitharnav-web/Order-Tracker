@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
+import { requireRestaurantOrAdmin } from "@/lib/auth";
 
 export async function PUT(
   request: Request,
@@ -25,6 +26,17 @@ export async function PUT(
       logger.warn(`PUT /api/orders/${id} - validation error: Invalid status "${status}"`);
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
+
+    const existing = await query<{ restaurant_name: string }>(
+      "SELECT restaurant_name FROM orders WHERE id = $1",
+      [id],
+    );
+    if (existing.rows.length === 0) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const auth = await requireRestaurantOrAdmin(existing.rows[0].restaurant_name);
+    if (!auth.ok) return auth.response;
 
     const result = await query(
       "UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2",
@@ -59,6 +71,17 @@ export async function DELETE(
 
   try {
     await initDb();
+
+    const existing = await query<{ restaurant_name: string }>(
+      "SELECT restaurant_name FROM orders WHERE id = $1",
+      [id],
+    );
+    if (existing.rows.length === 0) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    const auth = await requireRestaurantOrAdmin(existing.rows[0].restaurant_name);
+    if (!auth.ok) return auth.response;
 
     logger.info(`DELETE /api/orders/${id} - deleting order`);
 

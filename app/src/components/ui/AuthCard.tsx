@@ -11,7 +11,7 @@ export const AuthCard: FC<{
   <div className="min-h-screen flex items-center justify-center p-4">
     <main className="w-full max-w-md mx-auto">
       <Card className="p-6 sm:p-10">
-        <h1 className="text-3xl sm:text-4xl font-bold text-[var(--color-text-primary)] mb-8 text-center">
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mb-8 text-center">
           {title}
         </h1>
         <form onSubmit={onSubmit} className="space-y-6">
@@ -19,7 +19,7 @@ export const AuthCard: FC<{
         </form>
         {error && (
           <div className="mt-6 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
-            <p className="font-semibold text-red-300 text-center">{error}</p>
+            <p className="font-semibold text-[var(--color-danger)] text-center">{error}</p>
           </div>
         )}
         {footer && <div className="mt-8 text-center">{footer}</div>}

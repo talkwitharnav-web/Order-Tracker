@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { requireAdmin } from "@/lib/auth";
 
 export async function DELETE(
   request: Request,
@@ -8,6 +9,9 @@ export async function DELETE(
 ) {
   const { id } = await params;
   logger.info(`DELETE /api/restaurants/${id} - request received`);
+
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
 
   await initDb();
   const client = await getPool().connect();

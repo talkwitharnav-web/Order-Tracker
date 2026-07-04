@@ -4,12 +4,19 @@ import { logger } from "@/lib/logger";
 import bcrypt from "bcrypt";
 import {
   createSessionToken,
-  SESSION_COOKIE_NAME,
+  RESTAURANT_SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_REMEMBERED,
+  SESSION_COOKIE_MAX_AGE_DEFAULT,
 } from "@/lib/session";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   logger.info("POST /api/restaurants/login - request received");
+
+  if (!checkRateLimit(`restaurant-login:${getClientIp(req)}`)) {
+    return NextResponse.json({ error: "Too many login attempts. Try again in a minute." }, { status: 429 });
+  }
+
   try {
     const { name, password, rememberMe } = await req.json();
 
@@ -26,8 +33,6 @@ export async function POST(req: Request) {
     );
     const restaurant = result.rows[0];
 
-    console.log("Database lookup result for restaurant:", restaurant);
-
     if (!restaurant) {
       return NextResponse.json(
         { error: "Invalid credentials" },
@@ -36,8 +41,6 @@ export async function POST(req: Request) {
     }
 
     const isPasswordValid = await bcrypt.compare(password, restaurant.password);
-
-    console.log("Password validation result:", isPasswordValid);
 
     if (!isPasswordValid) {
       return NextResponse.json(
@@ -52,12 +55,12 @@ export async function POST(req: Request) {
 
     const token = createSessionToken({ type: "restaurant", name: restaurant.name });
     const response = NextResponse.json({ message: "Login successful" });
-    response.cookies.set(SESSION_COOKIE_NAME, token, {
+    response.cookies.set(RESTAURANT_SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      ...(rememberMe ? { maxAge: SESSION_COOKIE_MAX_AGE_REMEMBERED } : {}),
+      maxAge: rememberMe ? SESSION_COOKIE_MAX_AGE_REMEMBERED : SESSION_COOKIE_MAX_AGE_DEFAULT,
     });
     return response;
   } catch (err) {

@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET() {
   logger.info("GET /api/dev/db - request received");
+
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
   try {
     await initDb();
 
@@ -24,6 +29,10 @@ export async function GET() {
 
 export async function DELETE() {
   logger.warn("DELETE /api/dev/db - request received to PURGE DATABASE");
+
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
   try {
     await initDb();
 

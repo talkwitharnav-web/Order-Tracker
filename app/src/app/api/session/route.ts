@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/session";
+import {
+  verifySessionToken,
+  ADMIN_SESSION_COOKIE_NAME,
+  RESTAURANT_SESSION_COOKIE_NAME,
+} from "@/lib/session";
 
 export async function GET() {
   const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const payload = verifySessionToken(token);
 
-  if (!payload) {
-    return NextResponse.json({ authenticated: false });
+  const adminPayload = verifySessionToken(cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value);
+  if (adminPayload?.type === "admin") {
+    return NextResponse.json({ authenticated: true, type: "admin" });
   }
 
-  if (payload.type === "restaurant") {
-    return NextResponse.json({ authenticated: true, type: "restaurant", name: payload.name });
+  const restaurantPayload = verifySessionToken(cookieStore.get(RESTAURANT_SESSION_COOKIE_NAME)?.value);
+  if (restaurantPayload?.type === "restaurant") {
+    return NextResponse.json({ authenticated: true, type: "restaurant", name: restaurantPayload.name });
   }
-  return NextResponse.json({ authenticated: true, type: "admin" });
+
+  return NextResponse.json({ authenticated: false });
 }

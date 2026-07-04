@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { requireAdmin } from "@/lib/auth";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
@@ -8,6 +9,10 @@ const SALT_ROUNDS = 10;
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   logger.info(`PUT /api/restaurants/${id}/password - request received`);
+
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
   try {
     await initDb();
     const { newPassword } = await req.json();

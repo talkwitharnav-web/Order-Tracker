@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusStepper } from "@/components/ui/StatusStepper";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
 
 export type OrderStatus = ApiOrderStatus;
@@ -77,6 +78,8 @@ const Nav: FC<{
         onClick={() => onSelect(tab)}
         aria-current={activeTab === tab ? "page" : undefined}
         className={`flex items-center gap-2 px-4 py-3 rounded-[var(--radius-sm)] text-sm font-semibold transition-colors w-full md:w-auto ${
+          tab === "Home" ? "justify-center md:justify-start" : ""
+        } ${
           activeTab === tab
             ? "bg-[var(--color-brand)] text-white"
             : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-white"
@@ -89,6 +92,8 @@ const Nav: FC<{
 
   return (
     <>
+      <ThemeToggle className="fixed top-4 right-4 z-20" />
+
       {/* Mobile top bar */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
         <div className="min-w-0">
@@ -100,7 +105,7 @@ const Nav: FC<{
         <button
           onClick={() => setMobileOpen((o) => !o)}
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          className="p-2 text-[var(--color-text-secondary)]"
+          className="p-2 text-[var(--color-text-secondary)] mr-10"
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
@@ -156,7 +161,7 @@ const OrderCard: FC<{
     <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
     <button
       onClick={() => onDelete(order.id)}
-      className="w-full mt-4 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-red-300 hover:bg-[var(--color-danger)]/20 transition-colors"
+      className="w-full mt-4 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/20 transition-colors"
     >
       Delete
     </button>
@@ -195,7 +200,7 @@ const HomeTab: FC<{
         <form onSubmit={handleCreateOrder} className="flex flex-col sm:flex-row sm:items-end gap-4">
           <div className="flex-grow">
             <label htmlFor="orderNumber" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-              Order Number
+              Order Name
             </label>
             <Input
               id="orderNumber"

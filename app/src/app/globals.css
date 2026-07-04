@@ -1,48 +1,105 @@
 @import "tailwindcss";
 
+/*
+ * "Warm bistro" theme: two hand-designed variants (light + dark), not a
+ * simple lightness inversion of one palette. Both lean on warm parchment/
+ * espresso neutrals with a terracotta brand accent and an olive secondary,
+ * replacing the old cool slate + amber ("cyberpunk / jail jumpsuit") look.
+ * Default (no data-theme attribute) is the light variant; [data-theme="dark"]
+ * on <html> (set by ThemeToggle, see components/ui/ThemeToggle.tsx) swaps in
+ * the dark variant. Tailwind's `@theme inline` mapping below is
+ * theme-agnostic — it just aliases whichever values are active.
+ */
 :root {
   /* Surfaces */
-  --color-surface-0: #020617; /* page background — slate-950 */
-  --color-surface-1: #0f172a; /* card background — slate-900 */
-  --color-surface-2: #1e293b; /* raised/hover background — slate-800 */
-  --color-border: #1e293b; /* slate-800 */
-  --color-border-strong: #334155; /* slate-700 */
+  --color-surface-0: #faf6ee; /* page background — warm parchment */
+  --color-surface-1: #ffffff; /* card background */
+  --color-surface-2: #f3ead9; /* raised/hover background — warm cream */
+  --color-border: #e8dcc6; /* soft tan */
+  --color-border-strong: #d8c6a3; /* deeper tan */
 
   /* Text */
-  --color-text-primary: #f8fafc; /* slate-50 */
-  --color-text-secondary: #94a3b8; /* slate-400 */
-  --color-text-muted: #64748b; /* slate-500 */
+  --color-text-primary: #2b2320; /* deep charcoal-brown */
+  --color-text-secondary: #6b5c4d; /* warm taupe */
+  --color-text-muted: #94826d; /* lighter warm taupe */
 
-  /* Brand (single accent, used everywhere) */
-  --color-brand: #d97706; /* amber-600 */
-  --color-brand-hover: #b45309; /* amber-700 */
-  --color-brand-text: #fbbf24; /* amber-400, for text-on-dark */
+  /* Brand (terracotta accent) */
+  --color-brand: #c1602f;
+  --color-brand-hover: #a34e23;
+  --color-brand-text: #a34e23; /* text-on-light use */
+
+  /* Secondary accent (olive) — used sparingly for variety/whimsy touches */
+  --color-accent-olive: #6b7a4f;
+  --color-accent-olive-text: #55613e;
 
   /* Status (single mapping, used everywhere status appears) */
-  --color-status-received-bg: rgba(100, 116, 139, 0.15);
-  --color-status-received-border: rgba(100, 116, 139, 0.4);
-  --color-status-received-text: #cbd5e1; /* slate-300 */
-  --color-status-received-icon: #94a3b8; /* slate-400 */
+  --color-status-received-bg: rgba(107, 92, 77, 0.1);
+  --color-status-received-border: rgba(107, 92, 77, 0.3);
+  --color-status-received-text: #6b5c4d;
+  --color-status-received-icon: #6b5c4d;
 
-  --color-status-preparing-bg: rgba(245, 158, 11, 0.12);
-  --color-status-preparing-border: rgba(245, 158, 11, 0.4);
-  --color-status-preparing-text: #fcd34d; /* amber-300 */
-  --color-status-preparing-icon: #f59e0b; /* amber-500 */
+  --color-status-preparing-bg: rgba(193, 96, 47, 0.1);
+  --color-status-preparing-border: rgba(193, 96, 47, 0.35);
+  --color-status-preparing-text: #a34e23;
+  --color-status-preparing-icon: #c1602f;
 
-  --color-status-complete-bg: rgba(16, 185, 129, 0.12);
-  --color-status-complete-border: rgba(16, 185, 129, 0.4);
-  --color-status-complete-text: #6ee7b7; /* emerald-300 */
-  --color-status-complete-icon: #10b981; /* emerald-500 */
+  --color-status-complete-bg: rgba(107, 122, 79, 0.12);
+  --color-status-complete-border: rgba(107, 122, 79, 0.35);
+  --color-status-complete-text: #55613e;
+  --color-status-complete-icon: #6b7a4f;
 
   /* Semantic */
-  --color-danger: #dc2626; /* red-600 */
-  --color-danger-hover: #b91c1c; /* red-700 */
-  --color-success: #16a34a; /* green-600 */
+  --color-danger: #b3402c;
+  --color-danger-hover: #96331f;
+  --color-success: #4f7942;
 
   /* Radius scale — exactly three sizes used app-wide */
   --radius-sm: 0.5rem; /* buttons, inputs, badges */
   --radius-md: 0.75rem; /* cards, panels, modals */
   --radius-full: 9999px; /* pills, avatars, icon buttons */
+}
+
+[data-theme="dark"] {
+  /* Surfaces — warm espresso/charcoal, not cool slate */
+  --color-surface-0: #211a15; /* page background — dark espresso */
+  --color-surface-1: #2b221c; /* card background */
+  --color-surface-2: #362b23; /* raised/hover background */
+  --color-border: #3d3128; /* warm brown-gray */
+  --color-border-strong: #4f4034; /* deeper warm brown-gray */
+
+  /* Text */
+  --color-text-primary: #f5ecdf; /* warm cream */
+  --color-text-secondary: #c9b8a4; /* muted warm tan */
+  --color-text-muted: #96826c; /* dim warm tan */
+
+  /* Brand — brighter terracotta for contrast on dark */
+  --color-brand: #e07a45;
+  --color-brand-hover: #ec9463;
+  --color-brand-text: #f0a276;
+
+  --color-accent-olive: #9caf7a;
+  --color-accent-olive-text: #b3c493;
+
+  /* Status */
+  --color-status-received-bg: rgba(201, 184, 164, 0.1);
+  --color-status-received-border: rgba(201, 184, 164, 0.3);
+  --color-status-received-text: #c9b8a4;
+  --color-status-received-icon: #c9b8a4;
+
+  --color-status-preparing-bg: rgba(224, 122, 69, 0.14);
+  --color-status-preparing-border: rgba(224, 122, 69, 0.4);
+  --color-status-preparing-text: #f0a276;
+  --color-status-preparing-icon: #e07a45;
+
+  --color-status-complete-bg: rgba(156, 175, 122, 0.14);
+  --color-status-complete-border: rgba(156, 175, 122, 0.4);
+  --color-status-complete-text: #b3c493;
+  --color-status-complete-icon: #9caf7a;
+
+  /* Semantic */
+  --color-danger: #d9694c;
+  --color-danger-hover: #e4886e;
+  --color-success: #8fb377;
 }
 
 @theme inline {
@@ -60,6 +117,9 @@
   --color-brand-hover: var(--color-brand-hover);
   --color-brand-text: var(--color-brand-text);
 
+  --color-accent-olive: var(--color-accent-olive);
+  --color-accent-olive-text: var(--color-accent-olive-text);
+
   --color-danger: var(--color-danger);
   --color-danger-hover: var(--color-danger-hover);
   --color-success: var(--color-success);
@@ -68,13 +128,30 @@
   --radius-md: var(--radius-md);
   --radius-full: var(--radius-full);
 
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-nunito-sans);
+  --font-display: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--color-surface-0);
+  background-color: var(--color-surface-0);
+  background-image:
+    radial-gradient(ellipse 1100px 650px at 10% -15%, color-mix(in srgb, var(--color-brand) 16%, transparent) 0%, transparent 62%),
+    radial-gradient(ellipse 1000px 700px at 105% 115%, color-mix(in srgb, var(--color-accent-olive) 14%, transparent) 0%, transparent 58%),
+    radial-gradient(ellipse 800px 500px at 50% 40%, var(--color-surface-2) 0%, transparent 65%);
+  background-attachment: fixed;
   color: var(--color-text-primary);
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Tailwind v4's preflight resets button cursor to default (unlike v3) — restore
+   the expected pointer cursor on all interactive elements app-wide. */
+button:not(:disabled),
+a,
+[role="button"],
+select,
+summary {
+  cursor: pointer;
 }
 
 /* Whimsy: bouncy entrance for new notifications (see components/ui/Toast.tsx) */
@@ -127,3 +204,316 @@ body {
 .animate-step-advance {
   animation: step-advance-bounce 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+/* Whimsy: bored chef sprite shown on "/" when an admin session is already active (see components/ui/ChefSprite.tsx) */
+.chef-sprite-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: chef-sprite-hello 0.4s ease both;
+}
+@keyframes chef-sprite-hello {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.chef-sprite-wrap.chef-sprite-out {
+  animation: chef-sprite-bye 0.35s ease-in forwards;
+}
+@keyframes chef-sprite-bye {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.85);
+  }
+}
+.chef-speech-bubble {
+  position: relative;
+  background: var(--color-surface-1, #fff);
+  border: 1px solid var(--color-border-strong, #ccc);
+  color: var(--color-text-primary, #111);
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: chef-bubble-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.3s;
+}
+.chef-speech-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: var(--color-surface-1, #fff);
+  border-right: 1px solid var(--color-border-strong, #ccc);
+  border-bottom: 1px solid var(--color-border-strong, #ccc);
+}
+@keyframes chef-bubble-pop {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+.chef-sprite {
+  transform-origin: 50% 95%;
+}
+.chef-arm-left {
+  transform-origin: 28px 63px;
+}
+.chef-arm-right {
+  transform-origin: 72px 63px;
+}
+.chef-hat {
+  transform-origin: 50px 28px;
+}
+.chef-eyes {
+  transform-origin: 50px 45px;
+}
+
+@keyframes chef-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.chef-anim-bounce { animation: chef-bounce 1.1s ease-in-out infinite; }
+
+@keyframes chef-spin-hat-kf {
+  0%, 80%, 100% { transform: rotate(0deg); }
+  85%, 95% { transform: rotate(15deg); }
+  90% { transform: rotate(-15deg); }
+}
+.chef-anim-spin-hat .chef-hat { animation: chef-spin-hat-kf 2.4s ease-in-out infinite; }
+
+@keyframes chef-wave-kf {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  70% { transform: rotate(-40deg); }
+  80% { transform: rotate(-10deg); }
+  90% { transform: rotate(-40deg); }
+}
+.chef-anim-wave .chef-arm-right { animation: chef-wave-kf 1.8s ease-in-out infinite; }
+
+@keyframes chef-wiggle-kf {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-4deg); }
+  75% { transform: rotate(4deg); }
+}
+.chef-anim-wiggle { animation: chef-wiggle-kf 0.9s ease-in-out infinite; }
+
+@keyframes chef-stir-left-kf {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  50% { transform: rotate(25deg) translateY(-4px); }
+}
+.chef-anim-stir .chef-arm-left { animation: chef-stir-left-kf 0.6s ease-in-out infinite; }
+
+@keyframes chef-tiptoe-kf {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.chef-anim-tiptoe { animation: chef-tiptoe-kf 0.4s ease-in-out infinite; }
+
+@keyframes chef-shrug-kf {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  75% { transform: rotate(-25deg); }
+}
+.chef-anim-shrug .chef-arm-left,
+.chef-anim-shrug .chef-arm-right { animation: chef-shrug-kf 1.6s ease-in-out infinite; }
+
+@keyframes chef-nod-kf {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+.chef-anim-nod { animation: chef-nod-kf 1.2s ease-in-out infinite; }
+
+@keyframes chef-sway-kf {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(6deg); }
+}
+.chef-anim-sway { animation: chef-sway-kf 1.6s ease-in-out infinite; }
+
+@keyframes chef-jump-kf {
+  0%, 85%, 100% { transform: translateY(0); }
+  92% { transform: translateY(-14px); }
+}
+.chef-anim-jump { animation: chef-jump-kf 2.2s ease-in-out infinite; }
+
+@keyframes chef-lookaround-kf {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+.chef-anim-lookaround .chef-eyes { animation: chef-lookaround-kf 2.4s ease-in-out infinite; }
+
+@keyframes chef-yawn-kf {
+  0%, 70%, 100% { transform: rotate(0deg); }
+  85% { transform: rotate(-60deg); }
+}
+.chef-anim-yawn .chef-arm-left { animation: chef-yawn-kf 3s ease-in-out infinite; }
+
+@keyframes chef-tapfoot-kf {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.8); }
+}
+.chef-anim-tapfoot { animation: chef-tapfoot-kf 0.35s ease-in-out infinite; }
+
+@keyframes chef-spin-full-kf {
+  0%, 70%, 100% { transform: rotate(0deg); }
+  90% { transform: rotate(360deg); }
+}
+.chef-anim-spin-full { animation: chef-spin-full-kf 3s ease-in-out infinite; }
+
+@keyframes chef-shake-kf {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+.chef-anim-shake { animation: chef-shake-kf 0.3s ease-in-out infinite; }
+
+@keyframes chef-peek-kf {
+  0%, 60%, 100% { transform: translateX(0) rotate(0deg); }
+  80% { transform: translateX(6px) rotate(4deg); }
+}
+.chef-anim-peek { animation: chef-peek-kf 2.6s ease-in-out infinite; }
+
+@keyframes chef-salute-kf {
+  0%, 60%, 100% { transform: rotate(0deg) translateY(0); }
+  75% { transform: rotate(-100deg) translateY(-4px); }
+}
+.chef-anim-salute .chef-arm-right { animation: chef-salute-kf 2.4s ease-in-out infinite; }
+
+@keyframes chef-hop-twice-kf {
+  0%, 20%, 40%, 100% { transform: translateY(0); }
+  10%, 30% { transform: translateY(-8px); }
+}
+.chef-anim-hop-twice { animation: chef-hop-twice-kf 2.4s ease-in-out infinite; }
+
+@keyframes chef-wobble-kf {
+  0%, 100% { transform: rotate(0deg); }
+  33% { transform: rotate(-5deg); }
+  66% { transform: rotate(5deg); }
+}
+.chef-anim-wobble { animation: chef-wobble-kf 1.4s ease-in-out infinite; }
+
+@keyframes chef-facepalm-kf {
+  0%, 60%, 100% { transform: rotate(0deg) translateY(0); }
+  80% { transform: rotate(70deg) translateY(-10px); }
+}
+.chef-anim-facepalm .chef-arm-left { animation: chef-facepalm-kf 2.8s ease-in-out infinite; }
+
+@keyframes chef-fistpump-kf {
+  0%, 60%, 100% { transform: rotate(0deg) translateY(0); }
+  75% { transform: rotate(-140deg) translateY(-6px); }
+}
+.chef-anim-fistpump .chef-arm-right { animation: chef-fistpump-kf 2s ease-in-out infinite; }
+
+@keyframes chef-doublearms-kf {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  80% { transform: rotate(-30deg); }
+}
+.chef-anim-doublearms .chef-arm-left,
+.chef-anim-doublearms .chef-arm-right { animation: chef-doublearms-kf 1.8s ease-in-out infinite; }
+.chef-anim-doublearms .chef-arm-right { animation-direction: reverse; }
+
+@keyframes chef-heartbeat-kf {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.06); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.06); }
+  60% { transform: scale(1); }
+}
+.chef-anim-heartbeat { animation: chef-heartbeat-kf 2.4s ease-in-out infinite; }
+
+@keyframes chef-sidestep-kf {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+.chef-anim-sidestep { animation: chef-sidestep-kf 2.4s ease-in-out infinite; }
+
+@keyframes chef-blink-kf {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+.chef-anim-blink .chef-eyes { animation: chef-blink-kf 2.6s ease-in-out infinite; }
+
+@keyframes chef-tilt-kf {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  80% { transform: rotate(18deg); }
+}
+.chef-anim-tilt { animation: chef-tilt-kf 2.6s ease-in-out infinite; }
+
+@keyframes chef-hatpoke-kf {
+  0%, 70%, 100% { transform: translateY(0) rotate(0deg); }
+  85% { transform: translateY(-4px) rotate(-8deg); }
+}
+.chef-anim-hatpoke .chef-hat { animation: chef-hatpoke-kf 2.2s ease-in-out infinite; }
+
+@keyframes chef-armswing-kf {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(20deg); }
+}
+.chef-anim-armswing .chef-arm-left,
+.chef-anim-armswing .chef-arm-right { animation: chef-armswing-kf 1.1s ease-in-out infinite; }
+.chef-anim-armswing .chef-arm-right { animation-direction: reverse; }
+
+@keyframes chef-squish-kf {
+  0%, 100% { transform: scaleY(1) scaleX(1); }
+  50% { transform: scaleY(0.9) scaleX(1.06); }
+}
+.chef-anim-squish { animation: chef-squish-kf 1.3s ease-in-out infinite; }
+
+@keyframes chef-gasp-kf {
+  0%, 70%, 100% { transform: scale(1); }
+  80% { transform: scale(1.15); }
+}
+.chef-anim-gasp .chef-eyes { animation: chef-gasp-kf 3.2s ease-in-out infinite; }
+
+@keyframes chef-drift-kf {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(4px, -6px) rotate(3deg); }
+}
+.chef-anim-drift { animation: chef-drift-kf 3.4s ease-in-out infinite; }
+
+@keyframes chef-armscross-kf {
+  0%, 60%, 100% { transform: rotate(0deg) translateX(0); }
+  80% { transform: rotate(45deg) translateX(6px); }
+}
+.chef-anim-armscross .chef-arm-left,
+.chef-anim-armscross .chef-arm-right { animation: chef-armscross-kf 2.6s ease-in-out infinite; }
+.chef-anim-armscross .chef-arm-right { animation-direction: reverse; }
+
+@keyframes chef-bobblehead-kf {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-6deg); }
+  50% { transform: rotate(0deg); }
+  75% { transform: rotate(6deg); }
+}
+.chef-anim-bobblehead .chef-hat { animation: chef-bobblehead-kf 1.4s ease-in-out infinite; }
+
+@keyframes chef-shimmy-kf {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  25% { transform: translateX(-3px) rotate(-2deg); }
+  75% { transform: translateX(3px) rotate(2deg); }
+}
+.chef-anim-shimmy { animation: chef-shimmy-kf 0.7s ease-in-out infinite; }
+
+@keyframes chef-suspicious-kf {
+  0%, 60%, 100% { transform: translateX(0); }
+  70%, 90% { transform: translateX(3px); }
+  80% { transform: translateX(-3px); }
+}
+.chef-anim-suspicious .chef-eyes { animation: chef-suspicious-kf 3s ease-in-out infinite; }

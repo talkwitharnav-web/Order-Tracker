@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 interface Restaurant {
   id: number;
@@ -79,7 +80,11 @@ function AdminDbContent() {
   }, [router, fetchData]);
 
   const handleLogout = async () => {
-    await fetch("/api/logout", { method: "POST" });
+    await fetch("/api/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "admin" }),
+    });
     router.push("/");
   };
 
@@ -213,6 +218,7 @@ function AdminDbContent() {
       </Modal>
 
       <div className="min-h-screen p-4 sm:p-8">
+        <ThemeToggle className="fixed top-4 right-4 z-20" />
         <PageHeader
           title="Admin Dashboard"
           backHref="/"
@@ -311,7 +317,7 @@ function AdminDbContent() {
                     Restaurant
                   </th>
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
-                    Order #
+                    Order Name
                   </th>
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
                     Status

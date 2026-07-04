@@ -7,7 +7,13 @@ import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
-export default function RegisterPage() {
+export default function RegisterPage({
+  onRegistered,
+  onBack,
+}: {
+  onRegistered?: (name: string) => void;
+  onBack?: () => void;
+}) {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +44,11 @@ export default function RegisterPage() {
         throw new Error(data.error || "Registration failed");
       }
 
-      localStorage.setItem("restaurantName", trimmedName);
-      router.push("/restaurant");
+      if (onRegistered) {
+        onRegistered(trimmedName);
+      } else {
+        router.push("/restaurant");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
     } finally {
@@ -53,12 +62,22 @@ export default function RegisterPage() {
       onSubmit={handleRegister}
       error={error}
       footer={
-        <Link
-          href="/restaurant"
-          className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
-        >
-          Already have an account? Login
-        </Link>
+        onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
+          >
+            &larr; Back to Kitchen Portal
+          </button>
+        ) : (
+          <Link
+            href="/restaurant"
+            className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
+          >
+            Already have an account? Login
+          </Link>
+        )
       }
     >
       <div>

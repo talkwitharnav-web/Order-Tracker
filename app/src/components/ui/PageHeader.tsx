@@ -18,7 +18,7 @@ export const PageHeader: FC<{
           <ArrowLeft className="w-5 h-5" />
         </Link>
       )}
-      <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)]">{title}</h1>
+      <h1 className="font-display text-2xl sm:text-3xl font-semibold text-[var(--color-text-primary)]">{title}</h1>
     </div>
     {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
   </header>

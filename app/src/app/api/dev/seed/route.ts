@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { requireAdmin } from "@/lib/auth";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
 
 export async function POST() {
   logger.info("POST /api/dev/seed - request received");
+
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
   try {
     await initDb();
 

@@ -32,6 +32,25 @@ app.prepare().then(() => {
     const { pathname } = parse(req.url);
 
     if (pathname === "/ws") {
+      // Reject WS upgrades from other origins — broadcasts contain live order
+      // data for every restaurant, so this stops arbitrary external sites
+      // from connecting and passively listening in (not full per-restaurant
+      // auth, but closes the "any random site" attack surface cheaply).
+      const origin = req.headers.origin;
+      const allowedHost = req.headers.host;
+      if (origin && allowedHost) {
+        let originHost;
+        try {
+          originHost = new URL(origin).host;
+        } catch {
+          originHost = null;
+        }
+        if (originHost !== allowedHost) {
+          socket.destroy();
+          return;
+        }
+      }
+
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
       });

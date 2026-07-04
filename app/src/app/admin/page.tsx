@@ -77,7 +77,11 @@ function AdminDashboard() {
   }, [fetchData]);
 
   const handleLogout = async () => {
-    await fetch("/api/logout", { method: "POST" });
+    await fetch("/api/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "admin" }),
+    });
     window.location.href = "/";
   };
 
@@ -165,7 +169,7 @@ function AdminDashboard() {
       />
 
       <main>
-        {error && <p className="text-red-400 mb-4">{error}</p>}
+        {error && <p className="text-[var(--color-danger)] mb-4">{error}</p>}
         <Card className="mb-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Simulation Zone</h2>

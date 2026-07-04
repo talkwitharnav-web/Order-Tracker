@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
+import { requireRestaurantOrAdmin } from "@/lib/auth";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
@@ -19,6 +20,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const auth = await requireRestaurantOrAdmin(restaurant_name);
+    if (!auth.ok) return auth.response;
 
     let id: number;
     try {
@@ -38,7 +42,7 @@ export async function POST(request: Request) {
           order_number,
         });
         return NextResponse.json(
-          { error: "An order with this number already exists for this restaurant" },
+          { error: `An order named "${order_number}" already exists for this restaurant` },
           { status: 409 },
         );
       }

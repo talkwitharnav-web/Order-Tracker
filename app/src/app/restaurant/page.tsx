@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, FormEvent, FC } from "react";
-import Link from "next/link";
 import { KitchenDashboard } from "./Dashboard";
+import RegisterPage from "./register/page";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
+import { KitchenPortalLanding } from "@/components/ui/KitchenPortalLanding";
 
 const api = {
   async login(name: string, pass: string, rememberMe: boolean) {
@@ -25,11 +26,20 @@ const api = {
     return response.json();
   },
   async logout() {
-    await fetch("/api/logout", { method: "POST" });
+    await fetch("/api/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "restaurant" }),
+    });
+  },
+  async getRestaurantCount() {
+    const response = await fetch("/api/restaurants");
+    const data = await response.json();
+    return typeof data.count === "number" ? data.count : 1;
   },
 };
 
-const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({ onLoginSuccess }) => {
+const Login: FC<{ onLoginSuccess: (name: string) => void; onBack: () => void }> = ({ onLoginSuccess, onBack }) => {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -62,12 +72,13 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({ onLoginSuccess 
       onSubmit={handleLogin}
       error={error}
       footer={
-        <Link
-          href="/restaurant/register"
+        <button
+          type="button"
+          onClick={onBack}
           className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
         >
-          Need a kitchen account? Register
-        </Link>
+          &larr; Back to Kitchen Portal
+        </button>
       }
     >
       <div>
@@ -104,14 +115,20 @@ const Login: FC<{ onLoginSuccess: (name: string) => void }> = ({ onLoginSuccess 
   );
 };
 
+type View = "landing" | "login" | "register";
+
 export default function RestaurantPage() {
   const [loggedInRestaurant, setLoggedInRestaurant] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [noRestaurantsYet, setNoRestaurantsYet] = useState(false);
+  const [view, setView] = useState<View>("landing");
 
   useEffect(() => {
-    api.getSession().then((session) => {
+    Promise.all([api.getSession(), api.getRestaurantCount()]).then(([session, count]) => {
       if (session.authenticated && session.type === "restaurant") {
         setLoggedInRestaurant(session.name);
+      } else if (count === 0) {
+        setNoRestaurantsYet(true);
       }
       setCheckingSession(false);
     });
@@ -124,12 +141,38 @@ export default function RestaurantPage() {
   const handleLogout = async () => {
     await api.logout();
     setLoggedInRestaurant(null);
+    setView("landing");
   };
 
   if (checkingSession) return null;
 
+  // No kitchens registered anywhere yet — there's nothing to log into, so
+  // skip the landing page's "Log In" choice entirely and go straight to
+  // registration (see restaurant/register/page.tsx's onRegistered callback).
+  if (!loggedInRestaurant && noRestaurantsYet) {
+    return (
+      <RegisterPage
+        onRegistered={(name) => {
+          setNoRestaurantsYet(false);
+          handleLoginSuccess(name);
+        }}
+      />
+    );
+  }
+
   if (!loggedInRestaurant) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    if (view === "login") {
+      return <Login onLoginSuccess={handleLoginSuccess} onBack={() => setView("landing")} />;
+    }
+    if (view === "register") {
+      return <RegisterPage onRegistered={handleLoginSuccess} onBack={() => setView("landing")} />;
+    }
+    return (
+      <KitchenPortalLanding
+        onChooseLogin={() => setView("login")}
+        onChooseRegister={() => setView("register")}
+      />
+    );
   }
 
   return <KitchenDashboard restaurantName={loggedInRestaurant} onLogout={handleLogout} />;
