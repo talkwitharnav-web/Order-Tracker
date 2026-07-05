@@ -21,6 +21,11 @@ const OPTIONS: { key: A11yPrefKey; label: string; description: string }[] = [
     label: "Enhanced Focus Outline",
     description: "A bolder, more visible ring on keyboard focus.",
   },
+  {
+    key: "cvd",
+    label: "Colorblind-Friendly Palette",
+    description: "Swaps status/brand colors for a palette verified distinguishable across common color vision types.",
+  },
 ];
 
 /**
@@ -37,6 +42,7 @@ export const AccessibilityMenu: FC = () => {
     contrast: false,
     motion: false,
     focus: false,
+    cvd: false,
   });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +51,7 @@ export const AccessibilityMenu: FC = () => {
       contrast: getA11yPref("contrast"),
       motion: getA11yPref("motion"),
       focus: getA11yPref("focus"),
+      cvd: getA11yPref("cvd"),
     });
   }, []);
 

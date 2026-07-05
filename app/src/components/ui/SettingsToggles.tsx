@@ -1,8 +1,11 @@
-import { FC, ReactNode } from "react";
+"use client";
+
+import { FC, ReactNode, useRef } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { AccessibilityMenu } from "@/components/ui/AccessibilityMenu";
 import { UiSizeToggle } from "@/components/ui/UiSizeToggle";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
+import { useReservedTopRight } from "@/lib/useReservedTopRight";
 
 /**
  * One unified top-right toolbar for every display-preference control (UI
@@ -18,8 +21,13 @@ import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
  * toolbar doesn't grow a new icon every time another accessibility option
  * is added.
  */
-export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = ({ className, health }) => (
+export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = ({ className, health }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useReservedTopRight(ref);
+
+  return (
   <div
+    ref={ref}
     className={`fixed top-4 right-4 z-20 flex items-center gap-1 px-1.5 h-9 rounded-[var(--radius-full)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] ${className ?? ""}`}
   >
     {health && (
@@ -37,4 +45,5 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
       <ThemeToggle />
     </ThemedTooltip>
   </div>
-);
+  );
+};

@@ -48,6 +48,10 @@ const themeInitScript = `
     if (focus === "enhanced") {
       document.documentElement.setAttribute("data-focus", "enhanced");
     }
+    var cvd = localStorage.getItem("cvd");
+    if (cvd === "safe") {
+      document.documentElement.setAttribute("data-cvd", "safe");
+    }
   } catch (e) {}
 })();
 `;

@@ -7,18 +7,20 @@
  * options share one get/set shape instead of three near-duplicate
  * useState+toggle blocks.
  */
-export type A11yPrefKey = "contrast" | "motion" | "focus";
+export type A11yPrefKey = "contrast" | "motion" | "focus" | "cvd";
 
 const ATTR_NAME: Record<A11yPrefKey, string> = {
   contrast: "data-contrast",
   motion: "data-motion",
   focus: "data-focus",
+  cvd: "data-cvd",
 };
 
 const ON_VALUE: Record<A11yPrefKey, string> = {
   contrast: "high",
   motion: "reduced",
   focus: "enhanced",
+  cvd: "safe",
 };
 
 export function getA11yPref(key: A11yPrefKey): boolean {

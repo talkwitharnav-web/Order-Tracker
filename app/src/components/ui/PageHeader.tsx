@@ -7,7 +7,7 @@ export const PageHeader: FC<{
   backHref?: string;
   actions?: ReactNode;
 }> = ({ title, backHref, actions }) => (
-  <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8">
+  <header className="clear-top-right flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8">
     <div className="flex items-center gap-3">
       {backHref && (
         <Link

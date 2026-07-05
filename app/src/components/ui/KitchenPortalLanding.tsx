@@ -45,7 +45,7 @@ export const KitchenPortalLanding: FC<{
     <main className="w-full max-w-md mx-auto">
       <Card className="p-6 sm:p-10 text-center">
         <div className="flex justify-center mb-2">
-          <ChefSprite lines={SPRITE_LINES} />
+          <ChefSprite lines={SPRITE_LINES} size={168} />
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mt-2 mb-2">
           Kitchen Portal

@@ -78,7 +78,7 @@ const DEFAULT_LINES = [
 /** How far a pupil can drift from its socket's center, in SVG viewBox units. */
 const PUPIL_RANGE = 1.8;
 
-export const ChefSprite: FC<{ className?: string; lines?: string[] }> = ({ className, lines }) => {
+export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: number }> = ({ className, lines, size = 140 }) => {
   const [action] = useState(() => ACTIONS[Math.floor(Math.random() * ACTIONS.length)]);
   const [line] = useState(() => {
     const pool = lines && lines.length > 0 ? lines : DEFAULT_LINES;
@@ -124,8 +124,9 @@ export const ChefSprite: FC<{ className?: string; lines?: string[] }> = ({ class
       <svg
         ref={svgRef}
         viewBox="0 0 100 118"
-        width="140"
-        height="165"
+        width={size}
+        height={Math.round(size * (118 / 100))}
+        shapeRendering="geometricPrecision"
         className={`chef-sprite ${action}`}
         role="img"
         aria-label="A cheerful chef mascot"
@@ -160,7 +161,7 @@ export const ChefSprite: FC<{ className?: string; lines?: string[] }> = ({ class
             style={{ transition: isTracking ? "none" : "cx 0.3s ease, cy 0.3s ease" }}
           />
         </g>
-        <path d="M44 52 Q50 56 56 52" stroke="#8a5a3a" strokeWidth="2" fill="none" strokeLinecap="round" />
+        <path d="M44 52 Q50 56 56 52" stroke="#8a5a3a" strokeWidth="2.25" fill="none" strokeLinecap="round" />
 
         {/*
           Speech bubble lives inside the SVG, anchored right above the mouth
@@ -207,17 +208,17 @@ export const ChefSprite: FC<{ className?: string; lines?: string[] }> = ({ class
                C 60 0, 67 12, 65 30
                Z"
             fill="url(#chef-hat-shade)"
-            stroke="#cfcfcf"
-            strokeWidth="0.75"
+            stroke="#bfbfbf"
+            strokeWidth="1.25"
           />
-          <path d="M40 28 C 39 14, 42 4, 45 1" stroke="#d4d4d4" strokeWidth="1" fill="none" strokeLinecap="round" />
-          <path d="M50 29 C 49 13, 50 2, 50 0" stroke="#d4d4d4" strokeWidth="1" fill="none" strokeLinecap="round" />
-          <path d="M60 28 C 61 14, 58 4, 55 1" stroke="#d4d4d4" strokeWidth="1" fill="none" strokeLinecap="round" />
-          <rect x="33" y="28" width="34" height="9" rx="2" fill="url(#chef-hat-shade)" stroke="#cfcfcf" strokeWidth="0.75" />
+          <path d="M40 28 C 39 14, 42 4, 45 1" stroke="#c9c9c9" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+          <path d="M50 29 C 49 13, 50 2, 50 0" stroke="#c9c9c9" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+          <path d="M60 28 C 61 14, 58 4, 55 1" stroke="#c9c9c9" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+          <rect x="33" y="28" width="34" height="9" rx="2" fill="url(#chef-hat-shade)" stroke="#bfbfbf" strokeWidth="1.25" />
           <path
             d="M34 32 q2 -2 4 0 q2 2 4 0 q2 -2 4 0 q2 2 4 0 q2 -2 4 0 q2 2 4 0 q2 -2 4 0 q2 2 4 0"
-            stroke="#d8d8d8"
-            strokeWidth="1.1"
+            stroke="#cfcfcf"
+            strokeWidth="1.5"
             fill="none"
             strokeLinecap="round"
           />

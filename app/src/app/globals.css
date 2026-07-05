@@ -217,6 +217,83 @@
 }
 
 /*
+ * Colorblind-Friendly Palette — opt-in, independent of theme/contrast/motion
+ * (fourth option in AccessibilityMenu.tsx's dropdown). Researched before
+ * building: a screen-wide CVD *simulation* filter (deuteranopia/protanopia
+ * color-matrix overlay) is a design/QA testing technique, not a real
+ * end-user accommodation — it distorts everything including colors that were
+ * already fine, and doesn't fix anything, just shifts the confusion around.
+ * The actual evidence-backed fix is what this does instead: swap the
+ * brand/status/danger/success hues for an Okabe-Ito-derived palette (blue /
+ * orange / teal / vermillion / reddish-purple) verified via a deuteranopia+
+ * protanopia+tritanopia simulation matrix to stay well-separated under all
+ * three common CVD types, instead of the default warm-bistro palette's
+ * earth-tones which simulate down to near-identical yellow-browns (received/
+ * preparing/complete/success/danger were all within a ~30-50 unit RGB
+ * distance of each other post-simulation — verified with a Node script
+ * before choosing these replacements). This is additive/opt-in rather than
+ * the new default because it's a real aesthetic departure from warm-bistro,
+ * same reasoning as high-contrast mode being separate from the normal theme.
+ * Status is still never color-only (icon+text everywhere, see order-status.ts)
+ * — this mode is about the colors being *more comfortably distinguishable*
+ * on top of that, not a fix to a non-redundant signal.
+ */
+[data-cvd="safe"] {
+  --color-brand: #0072B2;
+  --color-brand-hover: #005a8c;
+  --color-brand-text: #005a8c;
+
+  --color-accent-olive: #CC79A7;
+  --color-accent-olive-text: #a85a85;
+
+  --color-status-received-bg: rgba(0, 114, 178, 0.1);
+  --color-status-received-border: rgba(0, 114, 178, 0.35);
+  --color-status-received-text: #005a8c;
+  --color-status-received-icon: #0072B2;
+
+  --color-status-preparing-bg: rgba(230, 159, 0, 0.12);
+  --color-status-preparing-border: rgba(230, 159, 0, 0.4);
+  --color-status-preparing-text: #8a6000;
+  --color-status-preparing-icon: #E69F00;
+
+  --color-status-complete-bg: rgba(0, 158, 115, 0.12);
+  --color-status-complete-border: rgba(0, 158, 115, 0.4);
+  --color-status-complete-text: #00694a;
+  --color-status-complete-icon: #009E73;
+
+  --color-danger: #D55E00;
+  --color-danger-hover: #a84900;
+  --color-success: #CC79A7;
+}
+[data-theme="dark"][data-cvd="safe"] {
+  --color-brand: #56B4E9;
+  --color-brand-hover: #7cc4ee;
+  --color-brand-text: #56B4E9;
+
+  --color-accent-olive: #e0a8c8;
+  --color-accent-olive-text: #e0a8c8;
+
+  --color-status-received-bg: rgba(86, 180, 233, 0.14);
+  --color-status-received-border: rgba(86, 180, 233, 0.4);
+  --color-status-received-text: #56B4E9;
+  --color-status-received-icon: #56B4E9;
+
+  --color-status-preparing-bg: rgba(240, 228, 66, 0.14);
+  --color-status-preparing-border: rgba(240, 228, 66, 0.4);
+  --color-status-preparing-text: #F0E442;
+  --color-status-preparing-icon: #F0E442;
+
+  --color-status-complete-bg: rgba(0, 158, 115, 0.16);
+  --color-status-complete-border: rgba(0, 158, 115, 0.45);
+  --color-status-complete-text: #4fd6ae;
+  --color-status-complete-icon: #4fd6ae;
+
+  --color-danger: #ff9d5c;
+  --color-danger-hover: #ffb37f;
+  --color-success: #e0a8c8;
+}
+
+/*
  * Reduce Motion — WCAG 2.3.3, backed by a real user-togglable OS setting on
  * every major platform (macOS/Windows/Android all ship one). Two ways in:
  * the standard `prefers-reduced-motion` media query (respected automatically
@@ -310,6 +387,31 @@ html[data-ui-size="small"] {
 }
 html[data-ui-size="big"] {
   font-size: 125%; /* 20px effective base */
+}
+
+/*
+ * Reserved top-right clearance — see lib/useReservedTopRight.ts. SettingsToggles
+ * is a `fixed` top-right pill cluster whose width isn't constant (it grows
+ * whenever a new toggle/tooltip is added), so anything else that also wants
+ * the top-right corner of a page (PageHeader's action row, in normal flow)
+ * needs live clearance rather than a hardcoded padding guess that would go
+ * stale the next time the toolbar's contents change. Defaults here cover the
+ * case before JS has measured anything (first paint, or JS disabled) using
+ * the toolbar's typical minimum size; useReservedTopRight overwrites these
+ * with the real measured value once mounted.
+ */
+:root {
+  --reserved-top-right-w: 190px;
+  --reserved-top-right-h: 36px;
+}
+.clear-top-right {
+  padding-top: calc(var(--reserved-top-right-h) + 12px);
+}
+@media (min-width: 640px) {
+  .clear-top-right {
+    padding-top: 0;
+    padding-right: calc(var(--reserved-top-right-w) + 16px);
+  }
 }
 
 body {

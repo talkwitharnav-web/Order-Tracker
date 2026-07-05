@@ -12,6 +12,7 @@ import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
+import { ChefSprite } from "@/components/ui/ChefSprite";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 interface Restaurant {
@@ -226,25 +227,32 @@ function AdminDbContent() {
 
       <div className="min-h-screen p-4 sm:p-8">
         <SettingsToggles health={<HealthPin />} />
-        <PageHeader
-          title="Admin Dashboard"
-          backHref="/"
-          actions={
-            <>
-              <Button variant="secondary" onClick={handleSeed}>
-                <Database size={16} />
-                Seed Database
-              </Button>
-              <Button variant="danger" onClick={handlePurge}>
-                <ShieldAlert size={16} />
-                Purge Database
-              </Button>
-              <Button variant="ghost" onClick={handleLogout}>
-                Logout
-              </Button>
-            </>
-          }
-        />
+        <div className="flex items-start gap-4 mb-2">
+          <div className="hidden lg:block shrink-0 -mt-2 -mb-4">
+            <ChefSprite size={200} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <PageHeader
+              title="Admin Dashboard"
+              backHref="/"
+              actions={
+                <>
+                  <Button variant="secondary" onClick={handleSeed}>
+                    <Database size={16} />
+                    Seed Database
+                  </Button>
+                  <Button variant="danger" onClick={handlePurge}>
+                    <ShieldAlert size={16} />
+                    Purge Database
+                  </Button>
+                  <Button variant="ghost" onClick={handleLogout}>
+                    Logout
+                  </Button>
+                </>
+              }
+            />
+          </div>
+        </div>
 
         <section className="mb-10">
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">Restaurants</h2>
