@@ -22,6 +22,24 @@ export async function isAdminRequest(): Promise<boolean> {
 }
 
 /**
+ * Verified session for ANY logged-in caller — admin or any kitchen. For
+ * routes that expose no restaurant-specific data (so there's nothing to
+ * scope access to) but still shouldn't be reachable by a fully anonymous
+ * caller, e.g. the server health check.
+ */
+export async function requireAnyAuthenticated(): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  const cookieStore = await cookies();
+
+  const adminPayload = verifySessionToken(cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value);
+  if (adminPayload?.type === "admin") return { ok: true };
+
+  const restaurantPayload = verifySessionToken(cookieStore.get(RESTAURANT_SESSION_COOKIE_NAME)?.value);
+  if (restaurantPayload?.type === "restaurant") return { ok: true };
+
+  return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+}
+
+/**
  * Verified session for either an admin, or the restaurant named `restaurantName`
  * (case-insensitive, matching how the rest of the app treats restaurant names).
  * Lets a kitchen manage its own orders while still letting admin manage any.

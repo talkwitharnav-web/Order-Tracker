@@ -8,34 +8,48 @@ import { Input, Label } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
 import { KitchenPortalLanding } from "@/components/ui/KitchenPortalLanding";
+import { SessionWelcomeBack } from "@/components/ui/SessionWelcomeBack";
+import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 const api = {
   async login(name: string, pass: string, rememberMe: boolean) {
-    const response = await fetch("/api/restaurants/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, password: pass, rememberMe }),
-    });
-    if (!response.ok) {
+    try {
+      return await fetchJson("/api/restaurants/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, password: pass, rememberMe }),
+      });
+    } catch {
       throw new Error("Login failed. Please check kitchen name and password.");
     }
-    return response.json();
   },
   async getSession() {
-    const response = await fetch("/api/session");
-    return response.json();
+    try {
+      return await fetchJson<{ authenticated: boolean; type?: string; name?: string }>("/api/session");
+    } catch {
+      return { authenticated: false };
+    }
   },
   async logout() {
-    await fetch("/api/logout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "restaurant" }),
-    });
+    try {
+      await fetchWithRetry("/api/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "restaurant" }),
+      });
+    } catch {
+      // best-effort; UI still navigates back to the login view regardless
+    }
   },
   async getRestaurantCount() {
-    const response = await fetch("/api/restaurants");
-    const data = await response.json();
-    return typeof data.count === "number" ? data.count : 1;
+    try {
+      const data = await fetchJson<{ count?: number }>("/api/restaurants");
+      return typeof data.count === "number" ? data.count : 1;
+    } catch {
+      // Fail-safe default: never wrongly lock users into the registration
+      // screen just because this one status check couldn't reach the server.
+      return 1;
+    }
   },
 };
 
@@ -119,14 +133,18 @@ type View = "landing" | "login" | "register";
 
 export default function RestaurantPage() {
   const [loggedInRestaurant, setLoggedInRestaurant] = useState<string | null>(null);
+  // A valid session was found, but the user hasn't confirmed "yes, still me"
+  // yet — see SessionWelcomeBack. Separate from loggedInRestaurant so the
+  // Dashboard itself never mounts until the user actively continues.
+  const [awaitingContinue, setAwaitingContinue] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [noRestaurantsYet, setNoRestaurantsYet] = useState(false);
   const [view, setView] = useState<View>("landing");
 
   useEffect(() => {
     Promise.all([api.getSession(), api.getRestaurantCount()]).then(([session, count]) => {
-      if (session.authenticated && session.type === "restaurant") {
-        setLoggedInRestaurant(session.name);
+      if (session.authenticated && session.type === "restaurant" && session.name) {
+        setAwaitingContinue(session.name);
       } else if (count === 0) {
         setNoRestaurantsYet(true);
       }
@@ -141,10 +159,24 @@ export default function RestaurantPage() {
   const handleLogout = async () => {
     await api.logout();
     setLoggedInRestaurant(null);
+    setAwaitingContinue(null);
     setView("landing");
   };
 
   if (checkingSession) return null;
+
+  if (awaitingContinue) {
+    return (
+      <SessionWelcomeBack
+        restaurantName={awaitingContinue}
+        onContinue={() => {
+          setLoggedInRestaurant(awaitingContinue);
+          setAwaitingContinue(null);
+        }}
+        onLogout={handleLogout}
+      />
+    );
+  }
 
   // No kitchens registered anywhere yet — there's nothing to log into, so
   // skip the landing page's "Log In" choice entirely and go straight to

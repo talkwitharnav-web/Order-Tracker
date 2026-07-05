@@ -9,7 +9,9 @@ import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusStepper } from "@/components/ui/StatusStepper";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { HealthPin } from "@/components/ui/HealthPin";
 import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
+import { fetchJson } from "@/lib/api-client";
 
 export type OrderStatus = ApiOrderStatus;
 export type Order = {
@@ -28,37 +30,34 @@ const TAB_ITEMS: { tab: Tab; Icon: typeof Home }[] = [
 
 // --- API HELPERS ---
 const api = {
-  async getOrders(restName: string) {
+  async getOrders(restName: string): Promise<Order[]> {
     const url = `/api/orders/restaurant/${encodeURIComponent(restName)}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("Failed to fetch orders");
-    return response.json();
+    // No retries here: this is called every 5s by the poll loop, so a
+    // transient failure just gets picked up on the next tick anyway —
+    // retrying would only pile up redundant in-flight requests.
+    return fetchJson<Order[]>(url, {}, { retries: 0 });
   },
   async createOrder(restName: string, orderNum: string): Promise<Order> {
-    const response = await fetch("/api/orders", {
+    // No retries: creating an order isn't idempotent from the client's
+    // point of view (a "timed out" request could have actually landed), and
+    // the DB's unique-order-name index would just turn a retry into a
+    // confusing 409 rather than silently creating a duplicate — but better
+    // to surface that once than to blind-retry a possibly-already-created order.
+    return fetchJson<Order>("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ restaurant_name: restName, order_number: orderNum }),
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || "Failed to create order");
-    }
-    return response.json();
+    }, { retries: 0 });
   },
   async updateOrderStatus(id: number, status: OrderStatus) {
-    const response = await fetch(`/api/orders/${id}`, {
+    return fetchJson(`/api/orders/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    if (!response.ok) throw new Error("Failed to update status");
-    return response.json();
   },
   async deleteOrder(id: number) {
-    const response = await fetch(`/api/orders/${id}`, { method: "DELETE" });
-    if (!response.ok) throw new Error("Failed to delete order");
-    return response.json();
+    return fetchJson(`/api/orders/${id}`, { method: "DELETE" });
   },
 };
 
@@ -93,6 +92,7 @@ const Nav: FC<{
   return (
     <>
       <ThemeToggle className="fixed top-4 right-4 z-20" />
+      <HealthPin />
 
       {/* Mobile top bar */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
@@ -291,13 +291,26 @@ function KitchenDashboardContent({
     flashTimeoutRef.current = setTimeout(() => setRecentlyUpdatedId(null), 1200);
   };
 
+  // The poll loop runs every 5s, so a transient failure shouldn't toast every
+  // single tick (that would spam the screen during e.g. a 30s DB blip) — only
+  // surface it once per outage, and once more when it recovers.
+  const wasPollFailingRef = useRef(false);
+
   const fetchOrders = async (isInitial = false) => {
     if (isInitial) setIsLoading(true);
     try {
       const fetchedOrders = await api.getOrders(restaurantName);
       setOrders(fetchedOrders);
+      if (wasPollFailingRef.current) {
+        wasPollFailingRef.current = false;
+        showToast("Connection restored", "success");
+      }
     } catch (error) {
       console.error("Failed to fetch orders:", error);
+      if (!wasPollFailingRef.current) {
+        wasPollFailingRef.current = true;
+        showToast("Losing connection to the server — retrying...", "error");
+      }
     } finally {
       if (isInitial) setIsLoading(false);
     }

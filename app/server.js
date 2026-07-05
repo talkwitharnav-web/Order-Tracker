@@ -10,6 +10,18 @@ const port = Number(process.env.PORT) || 3000;
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
+// Safety net: an uncaught error/rejection anywhere (a route handler, a
+// background timer, a WS callback) would otherwise crash this whole process
+// and take down every in-flight request plus the WS hub with it. Logging and
+// continuing is the right call for a single-process dev/hobby server with no
+// process manager restarting it — better a logged error than a dead server.
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception (server continuing):", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection (server continuing):", reason);
+});
+
 // Shared with src/lib/ws-hub.ts via globalThis (same process, see
 // SYSTEM_MEMORY.md §8 on why this only works single-instance). Each entry
 // now also carries the restaurant name the client is subscribed to (see

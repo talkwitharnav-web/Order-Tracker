@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { StatusIcon } from "@/components/ui/StatusBadge";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { getStatusVisual, type CustomerOrderStatus } from "@/lib/order-status";
+import { getStatusVisual, normalizeStatus, type CustomerOrderStatus, type StatusKey } from "@/lib/order-status";
+import { fetchJson } from "@/lib/api-client";
 
 type Order = {
   id: number;
@@ -32,10 +33,29 @@ const timeSince = (date: string) => {
   return Math.floor(seconds) + " seconds ago";
 };
 
-const STATUS_DESCRIPTION: Record<CustomerOrderStatus, string> = {
-  Received: "We've got your order and will start preparing it soon.",
-  Making: "Our chefs are putting their love and care into your meal.",
-  Finished: "Your order is ready. Come and get it!",
+// Keyed by the canonical StatusKey (see order-status.ts), not the raw string
+// on the order — the order's `status` field can arrive in either the
+// Kitchen/API vocabulary (Received/Preparing/Complete) or this page's own
+// CustomerOrderStatus type (Received/Making/Finished) depending on where it
+// came from (see SYSTEM_MEMORY.md's status-vocab-inconsistency quirk).
+// Comparing `order.status` directly against "Making"/"Finished" here used to
+// silently fail for any order carrying the API vocabulary (e.g. a fresh order
+// marked "Preparing" by the kitchen matched none of the three branches and
+// fell through to "Ready for Pickup!" despite still being in progress) even
+// though the color/icon below were already correct, because those go through
+// getStatusVisual -> normalizeStatus. Routing title/description through the
+// same normalizeStatus() keeps every display detail in sync regardless of
+// which vocabulary produced the value.
+const STATUS_TITLE: Record<StatusKey, string> = {
+  received: "Order Placed",
+  preparing: "In the Kitchen",
+  complete: "Ready for Pickup!",
+};
+
+const STATUS_DESCRIPTION: Record<StatusKey, string> = {
+  received: "We've got your order and will start preparing it soon.",
+  preparing: "Our chefs are putting their love and care into your meal.",
+  complete: "Your order is ready. Come and get it!",
 };
 
 const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
@@ -46,13 +66,9 @@ const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
     return () => clearInterval(timer);
   }, [order.updated_at]);
 
+  const statusKey = normalizeStatus(order.status);
   const visual = getStatusVisual(order.status);
-  const title =
-    order.status === "Received"
-      ? "Order Placed"
-      : order.status === "Making"
-        ? "In the Kitchen"
-        : "Ready for Pickup!";
+  const title = STATUS_TITLE[statusKey];
 
   return (
     <div
@@ -61,7 +77,7 @@ const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
       <StatusIcon status={order.status} className="w-16 h-16 mx-auto mb-4 animate-pulse" />
       <h2 className={`text-3xl font-bold ${visual.text}`}>{title}</h2>
       <p className="text-[var(--color-text-secondary)] mt-2 text-base">
-        {STATUS_DESCRIPTION[order.status]}
+        {STATUS_DESCRIPTION[statusKey]}
       </p>
       <p className="text-xs text-[var(--color-text-muted)] mt-6">
         Order &ldquo;{order.order_number}&rdquo; &bull; Last updated {lastUpdated}
@@ -102,9 +118,7 @@ export default function CustomerPage() {
   const fetchOrderStatus = async (restName: string, ordNum: string) => {
     try {
       const query = new URLSearchParams({ restaurant_name: restName, order_number: ordNum });
-      const response = await fetch(`/api/orders/search?${query}`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to track order");
+      const data = await fetchJson<Order>(`/api/orders/search?${query}`);
       setOrder(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
@@ -128,11 +142,25 @@ export default function CustomerPage() {
   };
 
   useEffect(() => {
-    if (!order || order.status === "Finished") return;
+    // Same vocabulary mismatch as the status card above: an order can arrive
+    // with either vocab's "done" spelling ("Finished" or "Complete"), so
+    // check via normalizeStatus rather than a literal "Finished" comparison
+    // — otherwise a completed order using the API vocabulary would keep the
+    // socket open (and keep polling for updates) forever.
+    if (!order || normalizeStatus(order.status) === "complete") return;
 
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closedByEffect = false;
+    let reconnectAttempt = 0;
+
+    // Exponential backoff (2s, 4s, 8s... capped at 30s) instead of a fixed
+    // 2s retry forever — a fixed interval means a real outage (server
+    // restart, network drop) hammers the server with a reconnect attempt
+    // every 2s indefinitely; backing off caps how much load a widespread
+    // outage adds while still recovering quickly from a brief blip.
+    const RECONNECT_BASE_MS = 2000;
+    const RECONNECT_MAX_MS = 30000;
 
     const connect = () => {
       setConnection("connecting");
@@ -143,7 +171,10 @@ export default function CustomerPage() {
       const restaurantParam = encodeURIComponent(order.restaurant_name);
       socket = new WebSocket(`${protocol}//${window.location.host}/ws?restaurant=${restaurantParam}`);
 
-      socket.onopen = () => setConnection("live");
+      socket.onopen = () => {
+        reconnectAttempt = 0;
+        setConnection("live");
+      };
 
       socket.onmessage = (event) => {
         try {
@@ -160,7 +191,9 @@ export default function CustomerPage() {
       socket.onclose = () => {
         if (!closedByEffect) {
           setConnection("reconnecting");
-          reconnectTimer = setTimeout(connect, 2000);
+          const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+          reconnectAttempt += 1;
+          reconnectTimer = setTimeout(connect, delay);
         }
       };
     };

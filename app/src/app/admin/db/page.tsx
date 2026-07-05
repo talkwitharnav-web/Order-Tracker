@@ -11,6 +11,8 @@ import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { HealthPin } from "@/components/ui/HealthPin";
+import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 interface Restaurant {
   id: number;
@@ -55,9 +57,7 @@ function AdminDbContent() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/dev/db");
-      if (!res.ok) throw new Error("Failed to fetch data. The server might be offline.");
-      const data = await res.json();
+      const data = await fetchJson<{ restaurants: Restaurant[]; orders: Order[] }>("/api/dev/db");
       setRestaurants(data.restaurants);
       setOrders(data.orders);
     } catch (err) {
@@ -68,29 +68,36 @@ function AdminDbContent() {
   }, [showToast]);
 
   useEffect(() => {
-    fetch("/api/session")
-      .then((res) => res.json())
+    fetchJson<{ authenticated: boolean; type?: string }>("/api/session")
       .then((session) => {
         if (session.authenticated && session.type === "admin") {
           fetchData();
         } else {
           router.push("/");
         }
-      });
+      })
+      .catch(() => router.push("/"));
   }, [router, fetchData]);
 
   const handleLogout = async () => {
-    await fetch("/api/logout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "admin" }),
-    });
+    try {
+      await fetchWithRetry("/api/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "admin" }),
+      });
+    } catch {
+      // Logout is best-effort client-side navigation-wise: even if the
+      // network call never lands, sending the user back to "/" is still
+      // the right outcome (the cookie will simply still be valid there,
+      // which is safe, not a security gap — see logout route).
+    }
     router.push("/");
   };
 
   const closeConfirm = () => setConfirmState(EMPTY_CONFIRM);
 
-  const performAction = async (action: () => Promise<Response>, successMessage: string) => {
+  const performAction = async (action: () => ReturnType<typeof fetchWithRetry>, successMessage: string) => {
     closeConfirm();
     try {
       const res = await action();
@@ -112,7 +119,7 @@ function AdminDbContent() {
       message: "Are you sure you want to seed the database? This will clear existing data.",
       danger: false,
       onConfirm: () =>
-        performAction(() => fetch("/api/dev/seed", { method: "POST" }), "Database seeded successfully!"),
+        performAction(() => fetchWithRetry("/api/dev/seed", { method: "POST" }), "Database seeded successfully!"),
     });
   };
 
@@ -123,7 +130,7 @@ function AdminDbContent() {
       message: "Are you sure you want to purge the database? THIS ACTION IS IRREVERSIBLE.",
       danger: true,
       onConfirm: () =>
-        performAction(() => fetch("/api/dev/db", { method: "DELETE" }), "Database purged successfully!"),
+        performAction(() => fetchWithRetry("/api/dev/db", { method: "DELETE" }), "Database purged successfully!"),
     });
   };
 
@@ -135,7 +142,7 @@ function AdminDbContent() {
       danger: true,
       onConfirm: () =>
         performAction(
-          () => fetch(`/api/${type}s/${id}`, { method: "DELETE" }),
+          () => fetchWithRetry(`/api/${type}s/${id}`, { method: "DELETE" }),
           `${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`,
         ),
     });
@@ -144,7 +151,7 @@ function AdminDbContent() {
   const handleStatusChange = (orderId: number, newStatus: string) => {
     performAction(
       () =>
-        fetch(`/api/orders/${orderId}`, {
+        fetchWithRetry(`/api/orders/${orderId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: newStatus }),
@@ -156,7 +163,7 @@ function AdminDbContent() {
   const handlePasswordReset = async () => {
     if (!passwordResetTarget) return;
     try {
-      const res = await fetch(`/api/restaurants/${passwordResetTarget}/password`, {
+      const res = await fetchWithRetry(`/api/restaurants/${passwordResetTarget}/password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newPassword }),
@@ -219,6 +226,7 @@ function AdminDbContent() {
 
       <div className="min-h-screen p-4 sm:p-8">
         <ThemeToggle className="fixed top-4 right-4 z-20" />
+        <HealthPin />
         <PageHeader
           title="Admin Dashboard"
           backHref="/"

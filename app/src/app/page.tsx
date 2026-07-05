@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ChefSprite } from "@/components/ui/ChefSprite";
 import { GatewaySidebar, GatewayMobileNav } from "@/components/ui/GatewaySidebar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { HealthPin } from "@/components/ui/HealthPin";
 
 export default function GatewayCommandCenter() {
   const [username, setUsername] = useState("");
@@ -86,6 +87,7 @@ export default function GatewayCommandCenter() {
   return (
     <div className="flex min-h-screen">
       <ThemeToggle className="fixed top-4 right-4 z-20" />
+      {hasAdminSession && <HealthPin />}
       <GatewaySidebar navExtra={navExtra} actions={sidebarActions} />
       <div className="flex-1 flex flex-col">
         <GatewayMobileNav />

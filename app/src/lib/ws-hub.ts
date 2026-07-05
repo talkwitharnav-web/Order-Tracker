@@ -46,7 +46,16 @@ export function broadcast(event: OrderEvent) {
   for (const client of clients) {
     if (client.restaurantName !== targetName) continue;
     if (client.ws.readyState === client.ws.OPEN) {
-      client.ws.send(message);
+      // ws.send() can throw synchronously (e.g. the underlying socket was
+      // torn down between the readyState check and the call). One bad
+      // client shouldn't stop every other subscribed client from receiving
+      // this broadcast, so isolate the failure per-client instead of
+      // letting it escape the loop.
+      try {
+        client.ws.send(message);
+      } catch {
+        clients.delete(client);
+      }
     } else {
       clients.delete(client);
     }

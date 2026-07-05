@@ -34,11 +34,13 @@ A Next.js application for real-time restaurant order management. It uses a singl
 
 ### Running everything for local dev
 
-This project needs two things running: the Postgres database (via Docker) and the Next.js dev server. If you're not sure which command to use, just run `.\startup` (or `npm run start:all`) — it does both for you.
+This project needs two things running: the Postgres database (via Docker) and the Next.js dev server. If you're not sure which command to use, just run `startup` (`.\startup` on Windows, `./startup.sh` on Mac/Linux) — it does both for you.
 
-These commands work from **either** the repo root (`Restaurant/`) or the `app/` folder — the root `package.json` just forwards them into `app/` for convenience, so you don't have to remember to `cd app` first. The `startup`/`export` scripts below have their own copy in both locations (thin wrappers around `scripts/`) for the same reason.
+These commands work from **either** the repo root (`Restaurant/`) or the `app/` folder — the root `package.json` just forwards them into `app/` for convenience, so you don't have to remember to `cd app` first. The `startup`/`export`/`unpack` scripts below have their own copy in both locations (thin wrappers around `scripts/`) for the same reason.
 
-* **`.\startup`** (or `.\startup.cmd`) — verbose dependency check (Node, npm, Docker installed+running, `.env.local`/`SESSION_SECRET`, npm packages actually resolvable — not just present) with auto-repair, then does the same as `start:all` below. Recommended over `start:all` directly since it catches broken/missing dependencies before they cause a confusing failure mid-startup.
+**Windows and Mac/Linux each have their own native implementation of `startup`/`export`/`unpack`** (`.ps1`+`.cmd` vs. `.sh`) — they are independent scripts kept behaviorally in sync by hand, not generated from one shared source. If you change behavior in one, the equivalent change likely belongs in the other too.
+
+* **`startup`** (`.\startup`/`.\startup.cmd` on Windows, `./startup.sh` on Mac/Linux) — verbose dependency check (Node, npm, Docker installed+running, `.env.local`/`SESSION_SECRET`, npm packages actually resolvable — not just present) with auto-repair, then does the same as `start:all` below. Recommended over `start:all` directly since it catches broken/missing dependencies before they cause a confusing failure mid-startup.
 * **`npm run start:all`** — starts the local Postgres container, then starts the Next.js dev server, no extra checks. The app will be at http://localhost:3000.
 * **Ctrl+C** — stops the dev server. This does *not* stop the database container — it keeps running in the background.
 * **`npm run db:down`** — stops *and removes* the database container (your data stays safe in a Docker volume, so nothing is lost, but the container itself goes away). Use this when you're fully done for the day/session and want a clean slate.
@@ -49,8 +51,9 @@ If you're unsure which of `db:down` vs `db:stop` to use: it doesn't matter much 
 
 ### Exporting a portable, self-contained build
 
-* **`.\export`** (or `.\export.cmd`) — builds a Docker image of the app, bundles it with the Postgres image, a compose file, and one-click launcher scripts into `restaurant-app-export.zip` at the repo root.
+* **`export`** (`.\export`/`.\export.cmd` on Windows, `./export.sh` on Mac/Linux) — builds a Docker image of the app, bundles it with the Postgres image, a compose file, and one-click launcher scripts into `restaurant-app-export.zip` at the repo root. (Mac/Linux needs the `zip` command available — usually already installed; the script tells you the exact install command for your OS/distro if it's missing.)
+* **`unpack`** (`.\unpack`/`.\unpack.cmd` on Windows, `./unpack.sh` on Mac/Linux) — extracts `restaurant-app-export.zip` and loads both images into Docker on this same machine (e.g. for testing an export); add `-Start`/`--start` to also launch it immediately.
 
-The result runs on **any machine with Docker installed** — no Node.js, no copy of this repo, no Docker registry account, and (since both images are bundled in the zip) no internet connection required on that machine either. Unzip and run `run.cmd` (Windows) / `run.sh` (Mac/Linux) inside the bundle; it generates a fresh `SESSION_SECRET`, loads both images, and brings up Postgres + the app together. Full instructions are printed every time `.\export` runs, and also included as `README.txt` inside the bundle.
+The result runs on **any machine with Docker installed** — no Node.js, no copy of this repo, no Docker registry account, and (since both images are bundled in the zip) no internet connection required on that machine either. Unzip and run `run.cmd` (Windows) / `run.sh` (Mac/Linux) inside the bundle; it generates a fresh `SESSION_SECRET`, loads both images, and brings up Postgres + the app together. Full instructions are printed every time `export` runs, and also included as `README.txt` inside the bundle.
 
 This always starts the target machine with an empty database — existing data isn't included in the export.

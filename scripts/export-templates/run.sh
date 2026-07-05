@@ -35,6 +35,18 @@ if [ ! -f ".env" ]; then
   # an API incompatibility there once produced an all-zero-byte "secret").
   if [ -z "$SECRET" ] || [ "${#SECRET}" -lt 32 ]; then
     echo "[FAIL] Could not generate a random SESSION_SECRET (need either 'node' or 'openssl' on PATH). Cannot continue safely."
+    echo "       openssl normally ships with macOS/Linux by default -- if it's genuinely missing:"
+    case "$(uname -s)" in
+      Darwin) echo "       brew install openssl" ;;
+      Linux)
+        if command -v apt >/dev/null 2>&1; then echo "       sudo apt install openssl"
+        elif command -v dnf >/dev/null 2>&1; then echo "       sudo dnf install openssl"
+        elif command -v pacman >/dev/null 2>&1; then echo "       sudo pacman -S openssl"
+        else echo "       install openssl using your distro's package manager"
+        fi
+        ;;
+      *) echo "       install openssl using your system's package manager" ;;
+    esac
     exit 1
   fi
   echo "SESSION_SECRET=${SECRET}" > .env

@@ -82,11 +82,18 @@ Once setup is done, this is all you need to know day-to-day.
 
 ### The easy way: `startup`
 
-From either the `Restaurant` folder or the `app` folder, run:
+From either the `Restaurant` folder or the `app` folder:
+
+**Windows:**
 ```
 .\startup
 ```
-(On Windows you can also just double-click `startup.cmd` in File Explorer — no terminal needed.)
+(You can also just double-click `startup.cmd` in File Explorer — no terminal needed.)
+
+**Mac/Linux:**
+```bash
+./startup.sh
+```
 
 This does everything `npm run start:all` does (see below), but first checks that everything it needs is actually installed and working — Node, npm, Docker, your dependencies — and fixes anything it finds broken or missing, printing what it's doing every step of the way. If something's wrong (Docker isn't running, a dependency got corrupted, whatever), it tells you exactly what and how to fix it, instead of failing with a cryptic error partway through. This is the recommended way to start the app, especially if it's been a while since you last ran it or you're not sure everything's still set up correctly.
 
@@ -140,13 +147,17 @@ Useful if you just want the database running without also starting the website (
 
 All of these can be run from either the `Restaurant` folder or the `app` folder.
 
-**`.\startup`** — the recommended command, checks everything is actually working first
+**`startup`** (`.\startup` on Windows, `./startup.sh` on Mac/Linux) — the recommended command, checks everything is actually working first
   What it does: verifies Node/npm/Docker are installed and Docker is running, checks and repairs your `.env.local` and dependencies if anything's missing/broken, then does the same thing `start:all` does
   When to use it: any time you're starting a work session, especially if it's been a while or something seems off
 
-**`.\export`** — packages the whole app into a file for another computer
+**`export`** (`.\export` on Windows, `./export.sh` on Mac/Linux) — packages the whole app into a file for another computer
   What it does: builds a portable version of the app + database that runs on any computer with Docker, no coding tools needed there — see Section 5 above
   When to use it: sharing/deploying this app to a different computer
+
+**`unpack`** (`.\unpack` on Windows, `./unpack.sh` on Mac/Linux) — unpacks an export bundle on a machine that already has this repo
+  What it does: extracts `restaurant-app-export.zip`, loads both Docker images, generates a fresh `.env`; add `-Start` (Windows) / `--start` (Mac/Linux) to also launch it immediately
+  When to use it: testing an export locally, or if you're using this same repo's checkout as the machine you're deploying to
 
 **`npm run start:all`** — starts the database, then the website, no extra checks
   What it does: starts the database, then starts the website
@@ -188,11 +199,12 @@ There are two ways to get this app running on a different computer. Pick whichev
 
 This packages the entire app — the website AND its database — into one file that runs on any computer with **just Docker Desktop installed**. The other computer does not need Node.js, does not need this project's source code, and does not even need an internet connection to run it (everything it needs is bundled inside the file).
 
-**On your computer** (the one with this project), from either the `Restaurant` folder or the `app` folder, run:
-```
-.\export
-```
-This takes a few minutes (it has to build and package everything). When it's done, it prints exactly what to do next, and creates a file called `restaurant-app-export.zip` in the `Restaurant` folder. That file is fairly large (a few hundred MB) — expected, since it contains the whole app and database engine bundled together, that's what makes the other computer not need anything else installed.
+**On your computer** (the one with this project), from either the `Restaurant` folder or the `app` folder:
+
+**Windows:** `.\export`
+**Mac/Linux:** `./export.sh`
+
+This takes a few minutes (it has to build and package everything). When it's done, it prints exactly what to do next, and creates a file called `restaurant-app-export.zip` in the `Restaurant` folder. That file is fairly large (a few hundred MB) — expected, since it contains the whole app and database engine bundled together, that's what makes the other computer not need anything else installed. (On Mac/Linux, this needs the `zip` command installed — it usually already is; if not, the script tells you exactly how to install it for your system.)
 
 **On the other computer:**
 1. Copy `restaurant-app-export.zip` over however you'd normally move a file — USB drive, cloud storage upload, network share, email if it's small enough for your email provider.
@@ -221,16 +233,13 @@ This gets them the actual editable source code (Option A only gives a running ap
    git clone https://github.com/talkwitharnav-web/Order-Tracker.git
    cd Order-Tracker
    ```
-6. **Run `.\startup`** (or `.\startup.cmd` if that doesn't work):
-   ```
-   .\startup
-   ```
+6. **Run `startup`** — Windows: `.\startup` (or `.\startup.cmd` if that doesn't work); Mac/Linux: `./startup.sh`
    This checks Node/npm/Docker are all working, creates the `.env.local` file automatically (with a freshly generated `SESSION_SECRET` — each computer should have its own, never share this file between machines), installs dependencies, and starts everything — database and website both.
 7. **Open a browser** and go to `http://localhost:3000`.
 
 That's the whole process — steps 1–3 are one-time software installs, step 5 takes a minute, step 6 takes a couple more the first time (installing dependencies) and is instant after that.
 
-**If they ever want to update to your latest changes later**, they just run `git pull` inside the `Order-Tracker` folder, then `.\startup` again — no need to redo any of the install steps.
+**If they ever want to update to your latest changes later**, they just run `git pull` inside the `Order-Tracker` folder, then `startup` again (`.\startup` or `./startup.sh`) — no need to redo any of the install steps.
 
 ---
 
@@ -257,7 +266,7 @@ That's the whole process — steps 1–3 are one-time software installs, step 5 
 ## 7. Common Problems
 
 **"Docker Desktop is manually paused" or the database won't start**
-Open the Docker Desktop app on your computer and make sure it's running (not paused, not closed). Then try `npm run start:all` again (or `.\startup`, which will tell you clearly if Docker isn't running instead of just failing).
+Open the Docker Desktop app on your computer and make sure it's running (not paused, not closed). Then try `npm run start:all` again (or `startup`, which will tell you clearly if Docker isn't running instead of just failing).
 
 **"Port 3000 already in use" or "Port 5432 already in use"**
 Something else on your computer is already using that port. Usually this means the app or database is already running from a previous session — check if you have another terminal window open with it running.
@@ -265,8 +274,11 @@ Something else on your computer is already using that port. Usually this means t
 **The app starts but the customer/kitchen pages show no data**
 The database might be empty. Go to the Admin Panel (see Section 6) and use the "Seed Database" button to load some sample test data.
 
-**`.\startup` or `.\export` won't run / says something about execution policies**
+**`.\startup` or `.\export` won't run on Windows / says something about execution policies**
 Use the `.cmd` version instead — `.\startup.cmd` or `.\export.cmd` — which works even if Windows is blocking `.ps1` scripts from running. Both do exactly the same thing.
+
+**`./startup.sh` or `./export.sh` won't run on Mac/Linux / says "permission denied"**
+Run `chmod +x startup.sh export.sh unpack.sh` once in that folder to mark them as runnable, then try again. This can happen if the files lost their "executable" flag when copied/downloaded some other way than `git clone`.
 
 **After running `.\export` on the OTHER computer, `run.cmd`/`run.sh` fails to generate a secret**
 This would mean that computer doesn't have a working way to generate random values (very rare — every supported Windows/Mac/Linux system has one). The script is designed to stop and tell you clearly rather than silently create a weak/predictable secret, so if you see this, something unusual is going on with that computer's setup — it's not something to just retry past.

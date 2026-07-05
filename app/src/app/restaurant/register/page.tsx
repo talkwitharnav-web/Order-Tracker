@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { fetchJson } from "@/lib/api-client";
 
 export default function RegisterPage({
   onRegistered,
@@ -32,17 +33,16 @@ export default function RegisterPage({
     }
 
     try {
-      const response = await fetch("/api/restaurants/register", {
+      // Registration is not idempotent-safe to retry on network failure
+      // (a "timed out" request could have actually succeeded server-side,
+      // and retrying would hit the unique-name 409 rather than silently
+      // double-creating anything) — use plain fetchJson with its default
+      // timeout but no retries.
+      await fetchJson("/api/restaurants/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: trimmedName, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Registration failed");
-      }
+      }, { retries: 0 });
 
       if (onRegistered) {
         onRegistered(trimmedName);

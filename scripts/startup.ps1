@@ -51,6 +51,28 @@ function Write-Info {
     Write-Host "    $Message" -ForegroundColor Gray
 }
 
+# Generates a random 48-byte, base64url-encoded secret. Uses
+# RNGCryptoServiceProvider rather than [RandomNumberGenerator]::Fill() --
+# the latter is a .NET 6+-only API that fails silently as "method not
+# found" on Windows PowerShell 5.1 (which ships by default on many Windows
+# installs), and that failure was confirmed during testing to leave an
+# all-zero-byte (entirely predictable) value that would have been written
+# out as if it were a real random secret. RNGCryptoServiceProvider works on
+# both PS 5.1 and 7+. Also validates the result before returning it, so a
+# bad secret fails loudly instead of silently continuing.
+function New-SessionSecret {
+    $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+    $bytes = New-Object byte[] 48
+    $rng.GetBytes($bytes)
+    $secret = [Convert]::ToBase64String($bytes) -replace '\+', '-' -replace '/', '_' -replace '=', ''
+
+    if ([string]::IsNullOrEmpty($secret) -or $secret -match '^A+$') {
+        Write-Err "Failed to generate a random SESSION_SECRET. Cannot continue safely."
+        exit 1
+    }
+    return $secret
+}
+
 Write-Host "=========================================" -ForegroundColor Magenta
 Write-Host " Restaurant app - startup dependency check" -ForegroundColor Magenta
 Write-Host "=========================================" -ForegroundColor Magenta
@@ -139,9 +161,7 @@ if (Test-Path $envLocalPath) {
     $envContent = Get-Content $envLocalPath -Raw
     if ($envContent -notmatch "SESSION_SECRET=\S") {
         Write-Warn "SESSION_SECRET is missing or empty in .env.local -- generating one now."
-        $bytes = New-Object byte[] 48
-        [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-        $secret = [Convert]::ToBase64String($bytes) -replace '\+','-' -replace '/','_' -replace '=',''
+        $secret = New-SessionSecret
         if ($envContent -match "SESSION_SECRET=") {
             $newContent = $envContent -replace "SESSION_SECRET=.*", "SESSION_SECRET=$secret"
         } else {
@@ -162,9 +182,7 @@ if (Test-Path $envLocalPath) {
     Write-Ok "Copied .env.example -> .env.local"
 
     Write-Info "Generating a random SESSION_SECRET (this signs login sessions -- must be unique per install)..."
-    $bytes = New-Object byte[] 48
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-    $secret = [Convert]::ToBase64String($bytes) -replace '\+','-' -replace '/','_' -replace '=',''
+    $secret = New-SessionSecret
     $envContent = Get-Content $envLocalPath -Raw
     if ($envContent -match "SESSION_SECRET=") {
         $newContent = $envContent -replace "SESSION_SECRET=.*", "SESSION_SECRET=$secret"
