@@ -179,9 +179,12 @@ All of these can be run from either the `Restaurant` folder or the `app` folder.
 
 ## 5. Sharing the App With Another Computer
 
-There are two ways to get this app running on a different computer. Pick whichever sounds easier for your situation.
+There are two ways to get this app running on a different computer. Pick whichever fits the situation:
 
-### Option A (easiest): the `export` command — no coding tools needed on the other computer
+- **Option A (zip handoff)** — best when the other person doesn't want to install any coding tools, or you're setting it up in person with a USB drive. Downside: it's a snapshot — if you change the code later, you have to re-export and re-send the file every time.
+- **Option B (GitHub clone)** — best when the other person is at all comfortable with a terminal, or when more than one person might want to set this up over time (a friend today, someone else next month). They pull the code themselves, so they always get whatever's currently on GitHub — no file to hand off, nothing to re-send after you push changes. This project's repo is already on GitHub, so this option requires no extra setup on your end beyond making sure your latest work is pushed there.
+
+### Option A (easiest for a one-off with no dev tools): the `export` command
 
 This packages the entire app — the website AND its database — into one file that runs on any computer with **just Docker Desktop installed**. The other computer does not need Node.js, does not need this project's source code, and does not even need an internet connection to run it (everything it needs is bundled inside the file).
 
@@ -202,36 +205,32 @@ That's it — no `npm install`, no `.env.local` file to set up, nothing else to 
 
 You can re-run `.\export` anytime (e.g. after making code changes) — it always rebuilds fresh and overwrites the old zip file.
 
-### Option B: copy the project and install everything from scratch
+### Option B: clone the GitHub repo
 
-This is the traditional way — copy the actual project files and install Node.js/dependencies on the other computer too. More setup steps, but gives that computer the actual editable source code, which Option A does not (Option A only gives them a running app, not the code behind it). Use this if the other person needs to actually edit/develop the app, not just run it.
+This gets them the actual editable source code (Option A only gives a running app, not the code behind it), and — unlike Option A — there's no file for you to export/hand off/re-send; they just pull whatever's currently pushed to GitHub. Use this if the other person needs to actually edit/develop the app, is comfortable with a terminal, or if you expect more than one person to set this up over time.
 
-## 5a. Setting It Up on a Friend's Laptop via Option B (Step-by-Step)
+**Prerequisite on your end**: make sure your latest work is actually pushed to GitHub (`git push`) before they clone — they'll get exactly what's there, nothing more. This repo is public, so anyone with the link can clone it without needing a GitHub account or you granting them access — if you ever make the repo private instead, they'd need to be added as a collaborator first.
 
-Here's the exact walkthrough if a friend wants to run this on their own computer using Option B:
-
+**On the other computer:**
 1. **Install Node.js** — go to [nodejs.org](https://nodejs.org), download the "LTS" version, install it like any normal program.
 2. **Install Docker Desktop** — go to [docker.com](https://www.docker.com/products/docker-desktop/), download, install, then **open it once** and leave it running.
-3. **Copy the project folder** onto their laptop (via USB drive, cloud storage, `git clone`, however is easiest).
-4. **Open a terminal** (on Windows: search for "PowerShell" or "Command Prompt" in the Start menu; on Mac: search for "Terminal").
-5. **Navigate into the project folder.** For example, if they put it on their Desktop:
+3. **Install Git** if they don't have it — go to [git-scm.com](https://git-scm.com), install like any normal program.
+4. **Open a terminal** (Windows: search for "PowerShell" in the Start menu; Mac: search for "Terminal").
+5. **Clone the repo** — navigate to wherever they want the project (e.g. their Desktop) and run:
    ```bash
-   cd Desktop\Restaurant\app
+   git clone https://github.com/talkwitharnav-web/Order-Tracker.git
+   cd Order-Tracker
    ```
-   (On Mac/Linux, use forward slashes: `cd Desktop/Restaurant/app`)
-6. **Install dependencies:**
-   ```bash
-   npm install
+6. **Run `.\startup`** (or `.\startup.cmd` if that doesn't work):
    ```
-7. **Check the `.env.local` file exists** inside the `app` folder (see Step 4 in Section 2 above — copy `.env.example` to `.env.local` if it's missing).
-8. **Make sure Docker Desktop is open and running.**
-9. **Start everything:**
-   ```bash
-   npm run start:all
+   .\startup
    ```
-10. **Open a browser** and go to `http://localhost:3000`.
+   This checks Node/npm/Docker are all working, creates the `.env.local` file automatically (with a freshly generated `SESSION_SECRET` — each computer should have its own, never share this file between machines), installs dependencies, and starts everything — database and website both.
+7. **Open a browser** and go to `http://localhost:3000`.
 
-That's the whole process — steps 1–2 are one-time software installs, the rest takes a few minutes.
+That's the whole process — steps 1–3 are one-time software installs, step 5 takes a minute, step 6 takes a couple more the first time (installing dependencies) and is instant after that.
+
+**If they ever want to update to your latest changes later**, they just run `git pull` inside the `Order-Tracker` folder, then `.\startup` again — no need to redo any of the install steps.
 
 ---
 
