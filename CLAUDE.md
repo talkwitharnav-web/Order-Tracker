@@ -148,6 +148,20 @@ Added `GET /api/restaurants` (new route, returns `{ count }` via `SELECT COUNT(*
 
 ---
 
+## 8. Theme overhaul v2, kitchen portal, security audit + attack (2026-07)
+
+Big session. Highlights (full detail in `SYSTEM_MEMORY.md` §4.2, §6, §10):
+- **Warm-bistro theme** (light+dark, terracotta/olive, Fraunces+Nunito Sans) replaced the amber/slate look. Theme toggle fixed top-right on all pages. No-flash script + `suppressHydrationWarning` in `layout.tsx`. `BackgroundArt.tsx` food watermarks mounted globally.
+- **ChefSprite** matured: 35 animations, ~30 lines, in-SVG `foreignObject` speech bubble that tracks the mouth, click-to-track-eyes (body animation must keep running during tracking — a prior bug froze it, don't reintroduce). Hat is a pleated toque per a user reference photo — current SVG paths are the accepted baseline, don't regress to the chibi version.
+- **Kitchen portal landing** (`/restaurant`) before login; **registration auto-logs-in** (register route sets the session cookie). Order "number" → "name" in all user-facing copy.
+- **Session cookies split** into `admin_session`/`restaurant_session` (see §6). **Route auth guards** added in `src/lib/auth.ts`. **Rate limiter** in `src/lib/rate-limit.ts`.
+
+**SECURITY — read this**: an authorized adversarial attack pass found **6 real, confirmed-exploitable vulnerabilities**, logged in `SECURITY_ATTACK_LOG.md` (repo root) and summarized in SYSTEM_MEMORY §10. **None are fixed yet** — the user deferred fixes to a future session and will pick them up then. The #1 issue (F1): `SESSION_SECRET` is unset so the app signs sessions with the hardcoded fallback secret from the source, letting anyone forge an admin token — this defeats every auth guard added this session. Fix order: F1/F2 (set real `SESSION_SECRET`) → F5 (escape ILIKE `%`/`_`) → F3 → F4 → F6. Do NOT assume the auth guards actually protect anything until F1 is fixed. The user explicitly said they don't care about breaking things / no important data in the DB during this phase — functionality-not-breaking is the priority, not data safety.
+
+**User working-style note reinforced this session**: wants me to just execute once direction is set (don't over-confirm steps), is fine with me attacking/breaking the local app, cares about hardware limits (keep under ~50% CPU / 4GB RAM during load tests, monitor `docker stats`), and watches usage closely — be concise, don't burn turns on over-explanation.
+
+---
+
 ## Environment specifics worth remembering
 
 - Windows machine, PowerShell/Git Bash hybrid tool access. Bash tool quoting of Windows paths with backslashes is unreliable — prefer forward slashes for any path passed to Node/scripts, even though the OS itself accepts either.
