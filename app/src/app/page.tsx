@@ -86,8 +86,7 @@ export default function GatewayCommandCenter() {
 
   return (
     <div className="flex min-h-screen">
-      <SettingsToggles />
-      {hasAdminSession && <HealthPin />}
+      <SettingsToggles health={hasAdminSession ? <HealthPin /> : undefined} />
       <GatewaySidebar navExtra={navExtra} actions={sidebarActions} />
       <div className="flex-1 flex flex-col">
         <GatewayMobileNav />

@@ -225,8 +225,7 @@ function AdminDbContent() {
       </Modal>
 
       <div className="min-h-screen p-4 sm:p-8">
-        <SettingsToggles />
-        <HealthPin />
+        <SettingsToggles health={<HealthPin />} />
         <PageHeader
           title="Admin Dashboard"
           backHref="/"

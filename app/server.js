@@ -1,5 +1,4 @@
 const { createServer } = require("http");
-const { parse } = require("url");
 const next = require("next");
 const { WebSocketServer } = require("ws");
 
@@ -49,8 +48,17 @@ app.prepare().then(() => {
     // sees it, so route code can keep reading the header but can no longer
     // be lied to by the client.
     req.headers["x-forwarded-for"] = req.socket.remoteAddress || "unknown";
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
+    // Next's request handler expects the legacy url.parse()-shaped object
+    // (pathname/query/search, etc.), not a WHATWG URL instance — build that
+    // shape using the modern URL API instead of the deprecated url.parse()
+    // (see Node's DEP0169: url.parse() is inconsistent/unsafe on malformed
+    // input in ways new URL() is not).
+    const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+    handle(req, res, {
+      pathname: parsedUrl.pathname,
+      query: Object.fromEntries(parsedUrl.searchParams),
+      search: parsedUrl.search,
+    });
   });
 
   const wss = new WebSocketServer({ noServer: true });
@@ -70,7 +78,9 @@ app.prepare().then(() => {
   const nextUpgradeHandler = app.getUpgradeHandler();
 
   server.on("upgrade", (req, socket, head) => {
-    const { pathname, query } = parse(req.url, true);
+    const upgradeUrl = new URL(req.url, `http://${req.headers.host}`);
+    const pathname = upgradeUrl.pathname;
+    const query = Object.fromEntries(upgradeUrl.searchParams);
 
     if (pathname === "/ws") {
       // Every connection must declare which restaurant it's tracking (see

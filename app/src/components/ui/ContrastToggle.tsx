@@ -37,10 +37,10 @@ export const ContrastToggle: FC<{ className?: string }> = ({ className }) => {
       aria-label={contrast === "high" ? "Switch to normal contrast" : "Switch to high contrast"}
       aria-pressed={contrast === "high"}
       title={contrast === "high" ? "High contrast: on" : "High contrast: off"}
-      className={`p-2 rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] transition-colors ${
+      className={`w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${
         contrast === "high"
           ? "bg-[var(--color-brand)] text-white"
-          : "bg-[var(--color-surface-1)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
+          : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
       } ${className ?? ""}`}
     >
       <ContrastIcon size={16} />

@@ -92,8 +92,7 @@ const Nav: FC<{
 
   return (
     <>
-      <SettingsToggles />
-      <HealthPin />
+      <SettingsToggles health={<HealthPin />} />
 
       {/* Mobile top bar */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">

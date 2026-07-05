@@ -86,14 +86,16 @@ export function HealthPin() {
   const config = TIER_CONFIG[tier];
 
   return (
-    <div className="fixed top-4 right-44 z-20" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-1)] border border-[var(--color-border)] text-xs font-medium cursor-default">
-        <span className={`w-2 h-2 rounded-full ${config.dot}`} />
-        <span className={config.text}>{config.label}</span>
-      </div>
+    <div
+      className="relative flex items-center gap-1.5 px-2.5 h-7 rounded-[var(--radius-sm)] text-xs font-medium cursor-default"
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
+      <span className={`w-2 h-2 rounded-full shrink-0 ${config.dot}`} />
+      <span className={`${config.text} whitespace-nowrap`}>{config.label}</span>
 
       {hovering && (
-        <div className="absolute right-0 mt-2 w-64 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg p-4 text-xs text-[var(--color-text-secondary)]">
+        <div className="absolute right-0 top-full mt-2 w-64 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg p-4 text-xs text-[var(--color-text-secondary)] z-30">
           {failed ? (
             <p className="text-[var(--color-danger)]">Health check request failed — server may be unreachable.</p>
           ) : health ? (

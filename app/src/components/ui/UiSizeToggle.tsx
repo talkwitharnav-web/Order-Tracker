@@ -38,18 +38,14 @@ export const UiSizeToggle: FC<{ className?: string }> = ({ className }) => {
   };
 
   return (
-    <div
-      role="group"
-      aria-label="Interface size"
-      className={`flex items-center rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] overflow-hidden text-xs font-semibold ${className ?? ""}`}
-    >
+    <div role="group" aria-label="Interface size" className={`flex items-center ${className ?? ""}`}>
       {SIZES.map(({ value, label }) => (
         <button
           key={value}
           onClick={() => applySize(value)}
           aria-pressed={size === value}
           title={`${value.charAt(0).toUpperCase() + value.slice(1)} interface size`}
-          className={`px-2.5 py-2 transition-colors ${
+          className={`w-7 h-7 rounded-[var(--radius-sm)] text-xs font-semibold transition-colors ${
             size === value
               ? "bg-[var(--color-brand)] text-white"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
