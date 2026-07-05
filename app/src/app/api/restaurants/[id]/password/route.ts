@@ -13,13 +13,27 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
 
+  if (!/^\d+$/.test(id)) {
+    return NextResponse.json({ error: "Invalid restaurant id" }, { status: 400 });
+  }
+
   try {
     await initDb();
-    const { newPassword } = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+    }
+    const { newPassword: rawNewPassword } = body as { newPassword?: unknown };
+    const newPassword =
+      typeof rawNewPassword === "string" && rawNewPassword.length > 0 && rawNewPassword.length <= 200
+        ? rawNewPassword
+        : null;
 
     if (!newPassword) {
       return NextResponse.json(
-        { error: "New password is required" },
+        { error: "New password is required (non-empty string, max 200 chars)" },
         { status: 400 },
       );
     }

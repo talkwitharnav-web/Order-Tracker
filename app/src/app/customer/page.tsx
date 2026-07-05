@@ -137,7 +137,11 @@ export default function CustomerPage() {
     const connect = () => {
       setConnection("connecting");
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      // The restaurant name is sent so the server only delivers broadcasts
+      // for this one restaurant to this socket, instead of every
+      // restaurant's live order stream (see SECURITY_ATTACK_LOG.md F7).
+      const restaurantParam = encodeURIComponent(order.restaurant_name);
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws?restaurant=${restaurantParam}`);
 
       socket.onopen = () => setConnection("live");
 

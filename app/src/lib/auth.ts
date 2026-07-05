@@ -14,6 +14,13 @@ export async function requireAdmin(): Promise<{ ok: true } | { ok: false; respon
   return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 }
 
+/** True if the current request carries a valid admin session — for routes that only need to branch behavior for admin, not hard-gate on it. */
+export async function isAdminRequest(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const payload = verifySessionToken(cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value);
+  return payload?.type === "admin";
+}
+
 /**
  * Verified session for either an admin, or the restaurant named `restaurantName`
  * (case-insensitive, matching how the rest of the app treats restaurant names).

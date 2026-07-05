@@ -3,20 +3,31 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
+import { requireString, escapeLikePattern } from "@/lib/validate";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
   try {
     await initDb();
-    const { restaurant_name, order_number } = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+    }
+    const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber } =
+      body as { restaurant_name?: unknown; order_number?: unknown };
+
+    const restaurant_name = requireString(rawRestaurantName);
+    const order_number = requireString(rawOrderNumber);
 
     if (!restaurant_name || !order_number) {
       logger.warn("POST /api/orders - validation error", {
-        restaurant_name,
-        order_number,
+        restaurant_name: rawRestaurantName,
+        order_number: rawOrderNumber,
       });
       return NextResponse.json(
-        { error: "restaurant_name and order_number are required" },
+        { error: "restaurant_name and order_number are required (non-empty strings, max 200 chars)" },
         { status: 400 },
       );
     }
@@ -98,7 +109,7 @@ export async function GET(request: Request) {
 
     const result = await query(
       "SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 ORDER BY created_at DESC LIMIT 1",
-      [restaurant_name, order_number],
+      [escapeLikePattern(restaurant_name), escapeLikePattern(order_number)],
     );
     const order = result.rows[0];
 

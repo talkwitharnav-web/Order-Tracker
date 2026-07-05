@@ -80,7 +80,17 @@ Inside the `app` folder, there should be a file called `.env.local`. If it's mis
 
 Once setup is done, this is all you need to know day-to-day.
 
-### To start everything
+### The easy way: `startup`
+
+From either the `Restaurant` folder or the `app` folder, run:
+```
+.\startup
+```
+(On Windows you can also just double-click `startup.cmd` in File Explorer — no terminal needed.)
+
+This does everything `npm run start:all` does (see below), but first checks that everything it needs is actually installed and working — Node, npm, Docker, your dependencies — and fixes anything it finds broken or missing, printing what it's doing every step of the way. If something's wrong (Docker isn't running, a dependency got corrupted, whatever), it tells you exactly what and how to fix it, instead of failing with a cryptic error partway through. This is the recommended way to start the app, especially if it's been a while since you last ran it or you're not sure everything's still set up correctly.
+
+### The direct way: `npm run start:all`
 
 Open a terminal in the `Restaurant` folder (the outer folder, or the `app` folder — both work) and run:
 ```bash
@@ -93,7 +103,7 @@ This single command:
 
 Wait for a message like `Ready on http://localhost:3000`, then open that address in your web browser. You're now running the app locally on your own computer.
 
-> **Make sure Docker Desktop is open first!** If Docker Desktop isn't running, `start:all` will fail at the database step. Just open the Docker Desktop app and try again.
+> **Make sure Docker Desktop is open first!** If Docker Desktop isn't running, `start:all` will fail at the database step. Just open the Docker Desktop app and try again. (`.\startup` above checks this for you and tells you clearly if it's not running, instead of just failing.)
 
 ### To stop working
 
@@ -130,7 +140,15 @@ Useful if you just want the database running without also starting the website (
 
 All of these can be run from either the `Restaurant` folder or the `app` folder.
 
-**`npm run start:all`** — the main command, use this to start working
+**`.\startup`** — the recommended command, checks everything is actually working first
+  What it does: verifies Node/npm/Docker are installed and Docker is running, checks and repairs your `.env.local` and dependencies if anything's missing/broken, then does the same thing `start:all` does
+  When to use it: any time you're starting a work session, especially if it's been a while or something seems off
+
+**`.\export`** — packages the whole app into a file for another computer
+  What it does: builds a portable version of the app + database that runs on any computer with Docker, no coding tools needed there — see Section 5 above
+  When to use it: sharing/deploying this app to a different computer
+
+**`npm run start:all`** — starts the database, then the website, no extra checks
   What it does: starts the database, then starts the website
 
 **`npm run dev`**
@@ -159,9 +177,38 @@ All of these can be run from either the `Restaurant` folder or the `app` folder.
 
 ---
 
-## 5. Setting It Up on a Friend's Laptop (Step-by-Step)
+## 5. Sharing the App With Another Computer
 
-Here's the exact walkthrough if a friend wants to run this on their own computer:
+There are two ways to get this app running on a different computer. Pick whichever sounds easier for your situation.
+
+### Option A (easiest): the `export` command — no coding tools needed on the other computer
+
+This packages the entire app — the website AND its database — into one file that runs on any computer with **just Docker Desktop installed**. The other computer does not need Node.js, does not need this project's source code, and does not even need an internet connection to run it (everything it needs is bundled inside the file).
+
+**On your computer** (the one with this project), from either the `Restaurant` folder or the `app` folder, run:
+```
+.\export
+```
+This takes a few minutes (it has to build and package everything). When it's done, it prints exactly what to do next, and creates a file called `restaurant-app-export.zip` in the `Restaurant` folder. That file is fairly large (a few hundred MB) — expected, since it contains the whole app and database engine bundled together, that's what makes the other computer not need anything else installed.
+
+**On the other computer:**
+1. Copy `restaurant-app-export.zip` over however you'd normally move a file — USB drive, cloud storage upload, network share, email if it's small enough for your email provider.
+2. Unzip it anywhere (Desktop, Downloads, doesn't matter).
+3. Make sure Docker Desktop is installed and running on that computer.
+4. Double-click `run.cmd` (Windows) inside the unzipped folder, or open a terminal there and run `./run.sh` (Mac/Linux).
+5. Wait about 10–20 seconds, then open `http://localhost:3000` in a browser.
+
+That's it — no `npm install`, no `.env.local` file to set up, nothing else to configure. The one thing to know: this always starts the other computer with an **empty database** — none of your existing restaurants/orders come along. If you need to bring existing data along too, that's a different, more involved task — ask for help with that specifically if you need it.
+
+You can re-run `.\export` anytime (e.g. after making code changes) — it always rebuilds fresh and overwrites the old zip file.
+
+### Option B: copy the project and install everything from scratch
+
+This is the traditional way — copy the actual project files and install Node.js/dependencies on the other computer too. More setup steps, but gives that computer the actual editable source code, which Option A does not (Option A only gives them a running app, not the code behind it). Use this if the other person needs to actually edit/develop the app, not just run it.
+
+## 5a. Setting It Up on a Friend's Laptop via Option B (Step-by-Step)
+
+Here's the exact walkthrough if a friend wants to run this on their own computer using Option B:
 
 1. **Install Node.js** — go to [nodejs.org](https://nodejs.org), download the "LTS" version, install it like any normal program.
 2. **Install Docker Desktop** — go to [docker.com](https://www.docker.com/products/docker-desktop/), download, install, then **open it once** and leave it running.
@@ -211,13 +258,19 @@ That's the whole process — steps 1–2 are one-time software installs, the res
 ## 7. Common Problems
 
 **"Docker Desktop is manually paused" or the database won't start**
-Open the Docker Desktop app on your computer and make sure it's running (not paused, not closed). Then try `npm run start:all` again.
+Open the Docker Desktop app on your computer and make sure it's running (not paused, not closed). Then try `npm run start:all` again (or `.\startup`, which will tell you clearly if Docker isn't running instead of just failing).
 
 **"Port 3000 already in use" or "Port 5432 already in use"**
 Something else on your computer is already using that port. Usually this means the app or database is already running from a previous session — check if you have another terminal window open with it running.
 
 **The app starts but the customer/kitchen pages show no data**
 The database might be empty. Go to the Admin Panel (see Section 6) and use the "Seed Database" button to load some sample test data.
+
+**`.\startup` or `.\export` won't run / says something about execution policies**
+Use the `.cmd` version instead — `.\startup.cmd` or `.\export.cmd` — which works even if Windows is blocking `.ps1` scripts from running. Both do exactly the same thing.
+
+**After running `.\export` on the OTHER computer, `run.cmd`/`run.sh` fails to generate a secret**
+This would mean that computer doesn't have a working way to generate random values (very rare — every supported Windows/Mac/Linux system has one). The script is designed to stop and tell you clearly rather than silently create a weak/predictable secret, so if you see this, something unusual is going on with that computer's setup — it's not something to just retry past.
 
 **I changed a `.env.local` value and nothing happened**
 Restart the app (Ctrl+C, then `npm run start:all` again) — environment variable files are only read when the app starts up.

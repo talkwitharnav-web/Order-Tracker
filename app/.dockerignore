@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+*.tsbuildinfo
+npm-debug.log*
+
+# Never bake secrets/local config into the image -- DATABASE_URL and
+# SESSION_SECRET must be supplied at container run-time via -e / --env-file,
+# not baked in at build time.
+.env
+.env.local
+.env*.local

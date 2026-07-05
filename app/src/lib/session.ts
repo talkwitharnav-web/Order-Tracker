@@ -6,6 +6,15 @@ import { createHmac, timingSafeEqual } from "crypto";
  * technical debt documented in SYSTEM_MEMORY.md. Set a real SESSION_SECRET
  * before any non-local deployment.
  */
+if (!process.env.SESSION_SECRET) {
+  console.warn(
+    "\n*** WARNING: SESSION_SECRET is not set. Falling back to a hardcoded, " +
+    "publicly-known dev secret — anyone who has seen this source can forge " +
+    "admin/restaurant sessions. Set SESSION_SECRET in .env.local before any " +
+    "non-local use. ***\n",
+  );
+}
+
 const SECRET = process.env.SESSION_SECRET || "dev-only-insecure-session-secret";
 
 export type SessionPayload =

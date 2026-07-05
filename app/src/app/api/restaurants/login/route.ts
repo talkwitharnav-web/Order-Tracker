@@ -9,6 +9,15 @@ import {
   SESSION_COOKIE_MAX_AGE_DEFAULT,
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { requireString, escapeLikePattern } from "@/lib/validate";
+
+// Fixed dummy hash so a not-found lookup still pays bcrypt's cost (see
+// SECURITY_ATTACK_LOG.md F4 — without this, "restaurant not found" returned
+// in ~10ms vs. ~80ms for "found, wrong password", letting an attacker
+// enumerate real restaurant names purely from response timing). The hash
+// itself is not a secret and never matches any real password.
+const DUMMY_PASSWORD_HASH =
+  "$2b$10$CwTycUXWue0Thq9StjUM0uJ8V8IvJs2jGiFH3rF0KwYNwHUsgnh8G";
 
 export async function POST(req: Request) {
   logger.info("POST /api/restaurants/login - request received");
@@ -18,7 +27,17 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { name, password, rememberMe } = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+    }
+    const { name: rawName, password: rawPassword, rememberMe } =
+      body as { name?: unknown; password?: unknown; rememberMe?: unknown };
+
+    const name = requireString(rawName);
+    const password = typeof rawPassword === "string" ? rawPassword : null;
 
     if (!name || !password) {
       return NextResponse.json(
@@ -29,20 +48,18 @@ export async function POST(req: Request) {
 
     const result = await query(
       "SELECT * FROM restaurants WHERE name ILIKE $1",
-      [name],
+      [escapeLikePattern(name)],
     );
     const restaurant = result.rows[0];
 
-    if (!restaurant) {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 },
-      );
-    }
+    // Always run a bcrypt.compare, even when the restaurant doesn't exist,
+    // so "not found" and "wrong password" take approximately the same time.
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      restaurant?.password ?? DUMMY_PASSWORD_HASH,
+    );
 
-    const isPasswordValid = await bcrypt.compare(password, restaurant.password);
-
-    if (!isPasswordValid) {
+    if (!restaurant || !isPasswordValid) {
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 },

@@ -21,7 +21,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { username, password, rememberMe } = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+    }
+    const { username, password, rememberMe } =
+      body as { username?: unknown; password?: unknown; rememberMe?: unknown };
 
     if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });

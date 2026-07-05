@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { escapeLikePattern } from "@/lib/validate";
 
 export async function GET(req: Request) {
   logger.info("GET /api/orders/search - request received");
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
 
     const result = await query(
       "SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 ORDER BY created_at DESC LIMIT 1",
-      [restaurantName, orderNumber],
+      [escapeLikePattern(restaurantName), escapeLikePattern(orderNumber)],
     );
     const order = result.rows[0];
 

@@ -13,6 +13,10 @@ export async function DELETE(
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
 
+  if (!/^\d+$/.test(id)) {
+    return NextResponse.json({ error: "Invalid restaurant id" }, { status: 400 });
+  }
+
   await initDb();
   const client = await getPool().connect();
 

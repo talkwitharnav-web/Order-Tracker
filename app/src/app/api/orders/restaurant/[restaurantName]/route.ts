@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { requireRestaurantOrAdmin } from "@/lib/auth";
+import { escapeLikePattern } from "@/lib/validate";
 
 export async function GET(request: Request, { params }: { params: Promise<{ restaurantName: string }> }) {
   const { restaurantName } = await params;
@@ -11,6 +13,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
     `GET /api/orders/restaurant/${restaurantName}?status=${status || ""} - request received`,
   );
 
+  const auth = await requireRestaurantOrAdmin(restaurantName);
+  if (!auth.ok) return auth.response;
+
   try {
     await initDb();
 
@@ -19,7 +24,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
     );
 
     let sql = `SELECT * FROM orders WHERE restaurant_name ILIKE $1`;
-    const queryParams: any[] = [restaurantName];
+    const queryParams: any[] = [escapeLikePattern(restaurantName)];
 
     if (status && ["Received", "Making", "Finished"].includes(status)) {
       sql += ` AND status = $2`;

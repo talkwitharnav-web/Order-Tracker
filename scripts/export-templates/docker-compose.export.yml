@@ -1,0 +1,45 @@
+# Full-stack compose file for a Restaurant app EXPORT bundle.
+#
+# This is copied into the exported package by scripts/docker-export.ps1 --
+# it is not used for normal local development (see docker-compose.yml at the
+# repo root for that; this file additionally runs the APP itself, not just
+# Postgres, using the pre-built image loaded from restaurant-app-image.tar).
+#
+# Usage (see the README.txt / printed instructions that come with the
+# export for the full walkthrough): after `docker load -i
+# restaurant-app-image.tar`, just run:
+#   docker compose -f docker-compose.export.yml up -d
+# from the folder this file is in. Everything (Postgres + the app) starts
+# together; the app automatically waits for Postgres to be healthy first.
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: restaurant
+      POSTGRES_PASSWORD: restaurant
+      POSTGRES_DB: restaurant
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restaurant -d restaurant"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: restaurant-app:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://restaurant:restaurant@postgres:5432/restaurant
+      SESSION_SECRET: ${SESSION_SECRET}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
