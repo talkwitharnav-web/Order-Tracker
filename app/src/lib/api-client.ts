@@ -19,6 +19,16 @@ function sleep(ms: number) {
 async function fetchOnce(input: RequestInfo | URL, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // If the caller already passed their own AbortSignal (e.g. to cancel a
+  // superseded autocomplete request), forward its abort into this call's
+  // controller too — otherwise the caller's signal would be silently
+  // dropped by being overwritten below, and callers who intentionally cancel
+  // in-flight requests (see RestaurantAutocomplete) would stop working.
+  const externalSignal = init.signal;
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
   try {
     return await fetch(input, { ...init, signal: controller.signal });
   } finally {

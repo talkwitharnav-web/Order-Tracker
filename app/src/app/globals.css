@@ -102,6 +102,105 @@
   --color-success: #8fb377;
 }
 
+/*
+ * High-contrast accessibility mode (opt-in, independent of light/dark — see
+ * ContrastToggle.tsx). Standard practice per WCAG 2.x is: the *default*
+ * theme should already clear AA (4.5:1 text, 3:1 UI components) everywhere,
+ * and a dedicated high-contrast mode is an additional, separate option for
+ * more severe low-vision needs, not a replacement for AA compliance — it
+ * targets ~7:1+ (AAA-range) text contrast, thicker borders, and a more
+ * restricted palette, mirroring how Windows/macOS/Ubuntu each ship a
+ * separate "high contrast" mode alongside (not instead of) their normal
+ * light/dark themes. Applied via [data-contrast="high"] on <html>, combined
+ * with [data-theme] the same way — both attributes can be set at once.
+ * Status is still communicated via icon+color+text everywhere in this app
+ * (see order-status.ts) — color is never the only signal, so high-contrast
+ * mode only needs to push contrast ratios, not invent new status encodings.
+ */
+[data-contrast="high"] {
+  --color-surface-0: #ffffff;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #ececec;
+  --color-border: #000000;
+  --color-border-strong: #000000;
+
+  --color-text-primary: #000000;
+  --color-text-secondary: #000000;
+  --color-text-muted: #333333;
+
+  --color-brand: #7a3300;
+  --color-brand-hover: #5c2600;
+  --color-brand-text: #5c2600;
+
+  --color-accent-olive: #3c4a26;
+  --color-accent-olive-text: #2c3719;
+
+  --color-status-received-bg: #e6e6e6;
+  --color-status-received-border: #000000;
+  --color-status-received-text: #000000;
+  --color-status-received-icon: #000000;
+
+  --color-status-preparing-bg: #ffe3cc;
+  --color-status-preparing-border: #000000;
+  --color-status-preparing-text: #5c2600;
+  --color-status-preparing-icon: #7a3300;
+
+  --color-status-complete-bg: #dcedd0;
+  --color-status-complete-border: #000000;
+  --color-status-complete-text: #21290f;
+  --color-status-complete-icon: #2c3719;
+
+  --color-danger: #8f1500;
+  --color-danger-hover: #6e1000;
+  --color-success: #1f4d13;
+}
+
+[data-theme="dark"][data-contrast="high"] {
+  --color-surface-0: #000000;
+  --color-surface-1: #000000;
+  --color-surface-2: #1a1a1a;
+  --color-border: #ffffff;
+  --color-border-strong: #ffffff;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #ffffff;
+  --color-text-muted: #d9d9d9;
+
+  --color-brand: #ff9e5e;
+  --color-brand-hover: #ffb98a;
+  --color-brand-text: #ffb98a;
+
+  --color-accent-olive: #c8dba3;
+  --color-accent-olive-text: #d9e8bd;
+
+  --color-status-received-bg: #1a1a1a;
+  --color-status-received-border: #ffffff;
+  --color-status-received-text: #ffffff;
+  --color-status-received-icon: #ffffff;
+
+  --color-status-preparing-bg: #3a2210;
+  --color-status-preparing-border: #ffffff;
+  --color-status-preparing-text: #ffb98a;
+  --color-status-preparing-icon: #ff9e5e;
+
+  --color-status-complete-bg: #1e2a12;
+  --color-status-complete-border: #ffffff;
+  --color-status-complete-text: #d9e8bd;
+  --color-status-complete-icon: #c8dba3;
+
+  --color-danger: #ff8a68;
+  --color-danger-hover: #ffa88d;
+  --color-success: #a3d68a;
+}
+
+/* High-contrast mode also thickens borders app-wide for a stronger, less
+   ambiguous edge between adjacent UI regions (a low-vision-friendly cue
+   independent of color contrast alone). */
+[data-contrast="high"] .border,
+[data-contrast="high"] [class*="border-"] {
+  border-width: 2px;
+}
+
 @theme inline {
   --color-surface-0: var(--color-surface-0);
   --color-surface-1: var(--color-surface-1);
@@ -131,6 +230,25 @@
   --font-sans: var(--font-nunito-sans);
   --font-display: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
+}
+
+/*
+ * UI size (small/medium/big) — see UiSizeToggle.tsx. Tailwind's spacing,
+ * font, and radius scales are all rem-based, so scaling the root font-size
+ * cascades through padding/gaps/text/icons app-wide without touching every
+ * component individually. Medium (the existing default) is intentionally
+ * the unscaled 100% case — only small/big need an override. Useful for
+ * kitchens on a shared tablet who want everything readable at a glance
+ * during a rush, without a screen-reader-level accessibility need driving it
+ * (that's what high-contrast mode above is for — these two are independent
+ * axes, matching how real OSes keep contrast and text/UI scale as separate
+ * settings rather than bundling them into one toggle).
+ */
+html[data-ui-size="small"] {
+  font-size: 87.5%; /* 14px effective base */
+}
+html[data-ui-size="big"] {
+  font-size: 125%; /* 20px effective base */
 }
 
 body {

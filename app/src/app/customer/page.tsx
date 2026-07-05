@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { StatusIcon } from "@/components/ui/StatusBadge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { SettingsToggles } from "@/components/ui/SettingsToggles";
+import { RestaurantAutocomplete } from "@/components/ui/RestaurantAutocomplete";
 import { getStatusVisual, normalizeStatus, type CustomerOrderStatus, type StatusKey } from "@/lib/order-status";
 import { fetchJson } from "@/lib/api-client";
 
@@ -207,11 +208,19 @@ export default function CustomerPage() {
     };
   }, [order?.id]);
 
-  const formatInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9- ]/g, "");
+  // Order names keep the POS-style uppercase-code convention (matches the
+  // Kitchen Dashboard's own formatting), but restaurant names are real
+  // proper nouns ("The Golden Way") — force-uppercasing them read as a bug
+  // (the stored name keeps its real casing; ILIKE lookup is already
+  // case-insensitive server-side, so uppercasing here was never actually
+  // load-bearing for search, just a cosmetic leftover from copying the order
+  // field's formatting).
+  const formatOrderInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9- ]/g, "");
+  const formatRestaurantInput = (value: string) => value.replace(/[^a-zA-Z0-9' -]/g, "");
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <ThemeToggle className="fixed top-4 right-4 z-20" />
+      <SettingsToggles />
       <main className="w-full max-w-2xl mx-auto">
         <Card className="p-6 sm:p-10">
           <div className="text-center mb-8">
@@ -224,24 +233,19 @@ export default function CustomerPage() {
           </div>
           <form onSubmit={handleTrackOrder} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <Label htmlFor="restaurantName">Restaurant</Label>
-                <Input
-                  id="restaurantName"
-                  type="text"
-                  value={restaurantName}
-                  onChange={(e) => setRestaurantName(formatInput(e.target.value))}
-                  placeholder="e.g., 'THE GOLDEN SPOON'"
-                  required
-                />
-              </div>
+              <RestaurantAutocomplete
+                id="restaurantName"
+                value={restaurantName}
+                onChange={(value) => setRestaurantName(formatRestaurantInput(value))}
+                placeholder="e.g., 'The Golden Spoon'"
+              />
               <div>
                 <Label htmlFor="orderNumber">Order Name</Label>
                 <Input
                   id="orderNumber"
                   type="text"
                   value={orderNumber}
-                  onChange={(e) => setOrderNumber(formatInput(e.target.value))}
+                  onChange={(e) => setOrderNumber(formatOrderInput(e.target.value))}
                   placeholder="e.g., 'ORD-12345'"
                   required
                 />

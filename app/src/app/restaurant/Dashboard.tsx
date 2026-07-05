@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/Input";
 import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusStepper } from "@/components/ui/StatusStepper";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
 import { fetchJson } from "@/lib/api-client";
+import { NAMING_STYLES, suggestNextOrderName, type NamingStyle } from "@/lib/order-naming";
 
 export type OrderStatus = ApiOrderStatus;
 export type Order = {
@@ -91,7 +92,7 @@ const Nav: FC<{
 
   return (
     <>
-      <ThemeToggle className="fixed top-4 right-4 z-20" />
+      <SettingsToggles />
       <HealthPin />
 
       {/* Mobile top bar */}
@@ -178,6 +179,35 @@ const HomeTab: FC<{
   onError: (message: string) => void;
 }> = ({ orders, recentlyUpdatedId, restaurantName, onAddOrder, onDeleteOrder, onAdvance, onError }) => {
   const [orderNumber, setOrderNumber] = useState("");
+  // Persisted per-device (localStorage), same pattern as the theme/contrast/
+  // size toggles — a kitchen picks a naming convention once and it sticks
+  // across reloads rather than resetting to Freeform every visit.
+  const [namingStyle, setNamingStyle] = useState<NamingStyle>("freeform");
+
+  useEffect(() => {
+    const stored = localStorage.getItem("orderNamingStyle");
+    if (stored && NAMING_STYLES.some((s) => s.value === stored)) {
+      setNamingStyle(stored as NamingStyle);
+    }
+  }, []);
+
+  // Auto-fill a suggested next value whenever the style changes (or a new
+  // order lands and shifts what "next" should be) for the styles that have
+  // one — sequential/letter-number/table-pager. Customer-name and freeform
+  // are always manual entry, so the field is just cleared for those.
+  useEffect(() => {
+    if (namingStyle === "customer-name" || namingStyle === "freeform") {
+      setOrderNumber("");
+      return;
+    }
+    setOrderNumber(suggestNextOrderName(namingStyle, orders.map((o) => o.order_number)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namingStyle, orders.length]);
+
+  const handleStyleChange = (value: NamingStyle) => {
+    setNamingStyle(value);
+    localStorage.setItem("orderNamingStyle", value);
+  };
 
   const handleCreateOrder = async (e: FormEvent) => {
     e.preventDefault();
@@ -185,18 +215,54 @@ const HomeTab: FC<{
     try {
       const newOrder = await api.createOrder(restaurantName, orderNumber);
       onAddOrder(newOrder);
-      setOrderNumber("");
+      // Sequential/letter-number/table-pager immediately suggest the next
+      // value again so the kitchen can just keep hitting Add Order during a
+      // rush without retyping; name-based/freeform styles clear for a fresh
+      // manual entry, matching their non-generated nature.
+      if (namingStyle === "customer-name" || namingStyle === "freeform") {
+        setOrderNumber("");
+      } else {
+        setOrderNumber(suggestNextOrderName(namingStyle, [...orders.map((o) => o.order_number), newOrder.order_number]));
+      }
     } catch (error) {
       onError(error instanceof Error ? error.message : "Failed to create order");
     }
   };
 
-  const formatOrderNumber = (value: string) => setOrderNumber(value.toUpperCase().replace(/[^A-Z0-9-]/g, ""));
+  const formatOrderNumber = (value: string) => {
+    if (namingStyle === "customer-name") {
+      // Names keep natural casing/spacing (letters, spaces, hyphens,
+      // apostrophes only) rather than the POS-style uppercase-alphanumeric
+      // restriction used for code-based styles.
+      setOrderNumber(value.replace(/[^a-zA-Z\s'-]/g, "").slice(0, 60));
+    } else {
+      setOrderNumber(value.toUpperCase().replace(/[^A-Z0-9-]/g, ""));
+    }
+  };
+
+  const activeStyle = NAMING_STYLES.find((s) => s.value === namingStyle) ?? NAMING_STYLES[NAMING_STYLES.length - 1];
 
   return (
     <div className="space-y-6">
       <Card>
         <h3 className="text-xl font-bold text-[var(--color-text-primary)] mb-4">Add New Order</h3>
+        <div className="mb-4">
+          <label htmlFor="namingStyle" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+            Naming Style
+          </label>
+          <select
+            id="namingStyle"
+            value={namingStyle}
+            onChange={(e) => handleStyleChange(e.target.value as NamingStyle)}
+            className="w-full sm:w-auto px-4 py-2.5 text-sm bg-[var(--color-surface-0)] text-[var(--color-text-primary)] border border-[var(--color-border-strong)] rounded-[var(--radius-sm)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-[var(--color-brand)]"
+          >
+            {NAMING_STYLES.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
         <form onSubmit={handleCreateOrder} className="flex flex-col sm:flex-row sm:items-end gap-4">
           <div className="flex-grow">
             <label htmlFor="orderNumber" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
@@ -207,7 +273,7 @@ const HomeTab: FC<{
               type="text"
               value={orderNumber}
               onChange={(e) => formatOrderNumber(e.target.value)}
-              placeholder="e.g., 'ORD-54321'"
+              placeholder={activeStyle.example}
             />
           </div>
           <Button type="submit" disabled={!orderNumber.trim()} className="sm:w-auto w-full">

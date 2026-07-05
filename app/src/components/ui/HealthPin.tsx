@@ -86,7 +86,7 @@ export function HealthPin() {
   const config = TIER_CONFIG[tier];
 
   return (
-    <div className="fixed top-4 right-20 z-20" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
+    <div className="fixed top-4 right-44 z-20" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-1)] border border-[var(--color-border)] text-xs font-medium cursor-default">
         <span className={`w-2 h-2 rounded-full ${config.dot}`} />
         <span className={config.text}>{config.label}</span>

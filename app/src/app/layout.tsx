@@ -23,14 +23,22 @@ export const metadata: Metadata = {
   description: "A simple, modern solution for kitchens and customers.",
 };
 
-// Applies the persisted theme before paint to avoid a flash of the wrong
-// theme (localStorage isn't available during server render).
+// Applies the persisted theme/contrast/UI-size before paint to avoid a flash
+// of the wrong settings (localStorage isn't available during server render).
 const themeInitScript = `
 (function () {
   try {
     var theme = localStorage.getItem("theme");
     if (theme === "dark" || theme === "light") {
       document.documentElement.setAttribute("data-theme", theme);
+    }
+    var contrast = localStorage.getItem("contrast");
+    if (contrast === "high") {
+      document.documentElement.setAttribute("data-contrast", "high");
+    }
+    var uiSize = localStorage.getItem("uiSize");
+    if (uiSize === "small" || uiSize === "big") {
+      document.documentElement.setAttribute("data-ui-size", uiSize);
     }
   } catch (e) {}
 })();

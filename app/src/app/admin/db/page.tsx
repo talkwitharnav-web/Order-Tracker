@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
@@ -225,7 +225,7 @@ function AdminDbContent() {
       </Modal>
 
       <div className="min-h-screen p-4 sm:p-8">
-        <ThemeToggle className="fixed top-4 right-4 z-20" />
+        <SettingsToggles />
         <HealthPin />
         <PageHeader
           title="Admin Dashboard"
