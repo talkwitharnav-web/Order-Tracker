@@ -1,18 +1,22 @@
 import { FC, ReactNode } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { ContrastToggle } from "@/components/ui/ContrastToggle";
+import { AccessibilityMenu } from "@/components/ui/AccessibilityMenu";
 import { UiSizeToggle } from "@/components/ui/UiSizeToggle";
+import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
 
 /**
  * One unified top-right toolbar for every display-preference control (UI
- * size, high contrast, theme) plus an optional health indicator slot —
+ * size, accessibility, theme) plus an optional health indicator slot —
  * previously these were separate fixed-position elements (HealthPin,
  * ThemeToggle, etc.) each with their own border/background and manually
  * tuned `right-*` offsets to avoid overlapping one another, which read as
  * a cluttered row of disconnected pills rather than one control group. Now
  * a single bordered/backed container with thin dividers between logical
- * sections — same controls, same independent localStorage keys underneath
- * (see ThemeToggle/ContrastToggle/UiSizeToggle), just visually one thing.
+ * sections. High contrast used to be its own standalone icon button here —
+ * it's now one option inside AccessibilityMenu's dropdown, alongside Reduce
+ * Motion and Enhanced Focus Outline (see accessibility-prefs.ts), so this
+ * toolbar doesn't grow a new icon every time another accessibility option
+ * is added.
  */
 export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = ({ className, health }) => (
   <div
@@ -24,9 +28,13 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
         <span className="w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
       </>
     )}
-    <UiSizeToggle />
+    <ThemedTooltip label="Interface size">
+      <UiSizeToggle />
+    </ThemedTooltip>
     <span className="w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
-    <ContrastToggle />
-    <ThemeToggle />
+    <AccessibilityMenu />
+    <ThemedTooltip label="Toggle theme">
+      <ThemeToggle />
+    </ThemedTooltip>
   </div>
 );

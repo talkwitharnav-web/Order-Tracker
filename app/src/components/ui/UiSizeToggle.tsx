@@ -12,7 +12,7 @@ const SIZES: { value: UiSize; label: string }[] = [
 
 /**
  * Small/Medium/Big text-and-spacing scale, independent of theme/contrast.
- * Persisted the same way as ThemeToggle/ContrastToggle (localStorage +
+ * Persisted the same way as ThemeToggle/AccessibilityMenu's prefs (localStorage +
  * data-attribute on <html>, applied pre-hydration by layout.tsx's inline
  * script) so a kitchen's shared tablet keeps its preferred size across
  * restarts rather than resetting every reload — the actual use case is
@@ -44,7 +44,7 @@ export const UiSizeToggle: FC<{ className?: string }> = ({ className }) => {
           key={value}
           onClick={() => applySize(value)}
           aria-pressed={size === value}
-          title={`${value.charAt(0).toUpperCase() + value.slice(1)} interface size`}
+          aria-label={`${value.charAt(0).toUpperCase() + value.slice(1)} interface size`}
           className={`w-7 h-7 rounded-[var(--radius-sm)] text-xs font-semibold transition-colors ${
             size === value
               ? "bg-[var(--color-brand)] text-white"

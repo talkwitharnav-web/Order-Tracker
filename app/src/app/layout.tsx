@@ -40,6 +40,14 @@ const themeInitScript = `
     if (uiSize === "small" || uiSize === "big") {
       document.documentElement.setAttribute("data-ui-size", uiSize);
     }
+    var motion = localStorage.getItem("motion");
+    if (motion === "reduced") {
+      document.documentElement.setAttribute("data-motion", "reduced");
+    }
+    var focus = localStorage.getItem("focus");
+    if (focus === "enhanced") {
+      document.documentElement.setAttribute("data-focus", "enhanced");
+    }
   } catch (e) {}
 })();
 `;
