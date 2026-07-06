@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "cross-env NODE_ENV=production node server.js",
     "lint": "eslint",
-    "db:up": "docker compose -f ../docker-compose.yml up -d",
-    "db:down": "docker compose -f ../docker-compose.yml down",
+    "db:up": "node scripts/docker-desktop.mjs ensure-running && docker compose -f ../docker-compose.yml up -d",
+    "db:down": "docker compose -f ../docker-compose.yml down && node scripts/docker-desktop.mjs quit-if-running",
     "db:stop": "docker compose -f ../docker-compose.yml stop",
     "start:all": "npm run db:up && npm run dev"
   },

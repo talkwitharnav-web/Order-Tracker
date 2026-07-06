@@ -11,7 +11,7 @@ export const GatewaySidebar: FC<{ navExtra?: ReactNode; actions?: ReactNode }> =
 
     <nav className="flex flex-col gap-1">
       <Link
-        href="/restaurant"
+        href="/restaurant/home"
         className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] transition-colors"
       >
         <ChefHat size={18} />
@@ -34,13 +34,13 @@ export const GatewaySidebar: FC<{ navExtra?: ReactNode; actions?: ReactNode }> =
 );
 
 export const GatewayMobileNav: FC = () => (
-  <nav className="md:hidden flex items-center gap-2 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
+  <nav className="md:hidden clear-top-right flex items-center gap-2 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
     <div className="flex items-center gap-2 px-1 mr-auto">
       <UtensilsCrossed className="w-5 h-5 text-[var(--color-brand)]" />
       <span className="font-display text-base font-semibold text-[var(--color-text-primary)]">Bistro Hub</span>
     </div>
     <Link
-      href="/restaurant"
+      href="/restaurant/home"
       aria-label="Kitchen Portal"
       className="p-2 rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] transition-colors"
     >

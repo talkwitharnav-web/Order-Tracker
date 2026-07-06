@@ -27,10 +27,16 @@ export async function GET() {
   const started = Date.now();
   let dbLatencyMs: number | null = null;
   let dbError: string | null = null;
+  let dbSizeBytes: number | null = null;
 
   try {
     await pool.query("SELECT 1");
     dbLatencyMs = Date.now() - started;
+    // pg_database_size() needs the target database's name, not the
+    // connection's own name assumption -- current_database() is always
+    // correct regardless of what DATABASE_URL's path segment says.
+    const sizeResult = await pool.query<{ size: string }>("SELECT pg_database_size(current_database())::text AS size");
+    dbSizeBytes = Number(sizeResult.rows[0]?.size ?? null) || null;
   } catch (err) {
     dbError = err instanceof Error ? err.message : "Unknown DB error";
     logger.error("GET /api/health - DB check failed", err);
@@ -56,6 +62,7 @@ export async function GET() {
       connected: dbError === null,
       latencyMs: dbLatencyMs,
       error: dbError,
+      sizeBytes: dbSizeBytes,
       pool: {
         total: pool.totalCount,
         idle: pool.idleCount,

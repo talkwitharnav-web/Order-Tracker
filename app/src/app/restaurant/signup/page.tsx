@@ -8,18 +8,12 @@ import { Input, Label } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { fetchJson } from "@/lib/api-client";
 
-export default function RegisterPage({
-  onRegistered,
-  onBack,
-}: {
-  onRegistered?: (name: string) => void;
-  onBack?: () => void;
-}) {
+export default function RestaurantSignupPage() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
@@ -38,20 +32,21 @@ export default function RegisterPage({
       // and retrying would hit the unique-name 409 rather than silently
       // double-creating anything) — use plain fetchJson with its default
       // timeout but no retries.
-      await fetchJson("/api/restaurants/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmedName, password }),
-      }, { retries: 0 });
-
-      if (onRegistered) {
-        onRegistered(trimmedName);
-      } else {
-        router.push("/restaurant");
-      }
+      await fetchJson(
+        "/api/restaurants/register",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmedName, password }),
+        },
+        { retries: 0 }
+      );
+      // register/route.ts sets the restaurant session cookie on success
+      // (auto-login on signup), so restauranthome's own session check will
+      // find it and skip straight past Welcome Back to the dashboard.
+      router.push("/restaurant/restauranthome");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
-    } finally {
       setIsLoading(false);
     }
   };
@@ -62,22 +57,12 @@ export default function RegisterPage({
       onSubmit={handleRegister}
       error={error}
       footer={
-        onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
-          >
-            &larr; Back to Kitchen Portal
-          </button>
-        ) : (
-          <Link
-            href="/restaurant"
-            className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
-          >
-            Already have an account? Login
-          </Link>
-        )
+        <Link
+          href="/restaurant/login"
+          className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
+        >
+          Already have an account? Login
+        </Link>
       }
     >
       <div>

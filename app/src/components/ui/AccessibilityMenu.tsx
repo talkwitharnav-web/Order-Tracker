@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, FC } from "react";
 import { Accessibility } from "lucide-react";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
-import { getA11yPref, setA11yPref, type A11yPrefKey } from "@/lib/accessibility-prefs";
+import { getA11yPref, setA11yPref, getCvdMode, setCvdMode, type A11yPrefKey, type CvdMode } from "@/lib/accessibility-prefs";
 
 const OPTIONS: { key: A11yPrefKey; label: string; description: string }[] = [
   {
@@ -21,11 +21,13 @@ const OPTIONS: { key: A11yPrefKey; label: string; description: string }[] = [
     label: "Enhanced Focus Outline",
     description: "A bolder, more visible ring on keyboard focus.",
   },
-  {
-    key: "cvd",
-    label: "Colorblind-Friendly Palette",
-    description: "Swaps status/brand colors for a palette verified distinguishable across common color vision types.",
-  },
+];
+
+const CVD_OPTIONS: { key: CvdMode; label: string }[] = [
+  { key: "off", label: "Off" },
+  { key: "deuteranopia", label: "Deuteranopia (red-green)" },
+  { key: "protanopia", label: "Protanopia (red-green)" },
+  { key: "tritanopia", label: "Tritanopia (blue-yellow)" },
 ];
 
 /**
@@ -42,8 +44,8 @@ export const AccessibilityMenu: FC = () => {
     contrast: false,
     motion: false,
     focus: false,
-    cvd: false,
   });
+  const [cvdMode, setCvdModeState] = useState<CvdMode>("off");
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,8 +53,8 @@ export const AccessibilityMenu: FC = () => {
       contrast: getA11yPref("contrast"),
       motion: getA11yPref("motion"),
       focus: getA11yPref("focus"),
-      cvd: getA11yPref("cvd"),
     });
+    setCvdModeState(getCvdMode());
   }, []);
 
   useEffect(() => {
@@ -71,6 +73,11 @@ export const AccessibilityMenu: FC = () => {
     setPrefs((p) => ({ ...p, [key]: next }));
   };
 
+  const chooseCvdMode = (mode: CvdMode) => {
+    setCvdMode(mode);
+    setCvdModeState(mode);
+  };
+
   return (
     <div ref={containerRef} className="relative">
       <ThemedTooltip label="Accessibility">
@@ -79,7 +86,7 @@ export const AccessibilityMenu: FC = () => {
           aria-label="Accessibility options"
           aria-expanded={open}
           aria-haspopup="true"
-          className={`w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${
+          className={`w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${
             open
               ? "bg-[var(--color-brand)] text-white"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
@@ -93,7 +100,7 @@ export const AccessibilityMenu: FC = () => {
         <div
           role="menu"
           aria-label="Accessibility options"
-          className="absolute right-0 top-full mt-2 w-72 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40"
+          className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40"
         >
           <div className="px-4 py-3 border-b border-[var(--color-border)]">
             <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Accessibility</h3>
@@ -126,6 +133,38 @@ export const AccessibilityMenu: FC = () => {
               </li>
             ))}
           </ul>
+
+          <div className="px-4 py-3 border-t border-[var(--color-border)]">
+            <h4 className="text-sm font-medium text-[var(--color-text-primary)]">Colorblind-Friendly Palette</h4>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5 mb-2">
+              Pick the option that matches your color vision — each swaps status/brand colors for a palette tuned and
+              verified for that type specifically.
+            </p>
+            <div role="radiogroup" aria-label="Colorblind-friendly palette" className="flex flex-col gap-1">
+              {CVD_OPTIONS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  role="radio"
+                  aria-checked={cvdMode === key}
+                  onClick={() => chooseCvdMode(key)}
+                  className={`w-full text-left px-2.5 py-2 rounded-[var(--radius-sm)] text-sm flex items-center gap-2 transition-colors ${
+                    cvdMode === key
+                      ? "bg-[var(--color-brand)] text-white"
+                      : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
+                  }`}
+                >
+                  <span
+                    className={`shrink-0 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
+                      cvdMode === key ? "border-white" : "border-[var(--color-border-strong)]"
+                    }`}
+                  >
+                    {cvdMode === key && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </span>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

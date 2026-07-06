@@ -183,7 +183,13 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
               bottom: 0,
               left: 0,
               width: "max-content",
-              transform: `scale(${100 / 140}) translateX(-50%)`,
+              // The SVG's viewBox (100 units wide) is scaled to `size` real
+              // pixels — this counter-scale must track that same ratio, or
+              // the bubble renders at the wrong real-world size/position
+              // whenever `size` differs from the original hardcoded 140
+              // default (e.g. KitchenPortalLanding's size={168}), which is
+              // exactly what caused the bubble to drift off-screen there.
+              transform: `scale(${100 / size}) translateX(-50%)`,
               transformOrigin: "bottom left",
             }}
           >

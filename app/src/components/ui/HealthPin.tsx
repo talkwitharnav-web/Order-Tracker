@@ -1,14 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/api-client";
 import type { HealthTier } from "@/app/api/health/route";
 
 type HealthResponse = {
   tier: HealthTier;
-  db: { connected: boolean; latencyMs: number | null; pool: { total: number; idle: number; waiting: number } };
+  db: {
+    connected: boolean;
+    latencyMs: number | null;
+    sizeBytes: number | null;
+    pool: { total: number; idle: number; waiting: number };
+  };
   ws: { connectedClients: number };
 };
+
+// K/M/G/T, not KB/MB/GB/TB -- matches the single-letter size chip the user
+// asked for. Binary (1024-based) units, since that's what Postgres's own
+// pg_database_size() and every disk-usage tool actually measures in.
+function formatBytes(bytes: number): string {
+  const units = ["B", "K", "M", "G", "T"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  const precision = unitIndex === 0 ? 0 : value < 10 ? 1 : 0;
+  return `${value.toFixed(precision)}${units[unitIndex]}`;
+}
 
 const TIER_CONFIG: Record<HealthTier, { label: string; dot: string; text: string }> = {
   healthy: { label: "Healthy", dot: "bg-[var(--color-success)]", text: "text-[var(--color-success)]" },
@@ -44,12 +64,35 @@ function clientTierFromLatency(ms: number): HealthTier {
  * backgrounded. The endpoint is server-side auth-gated (see /api/health) —
  * this component only renders what an authenticated response returns, it
  * has no say over whether the data is available.
+ *
+ * `showDbSize` additionally renders the DB's total on-disk size (K/M/G/T,
+ * human-readable) inline in the pill itself — opt-in, and only passed from
+ * admin/db, since disk usage isn't something a kitchen needs to see on
+ * every page, but is directly relevant on the page that manages the DB.
  */
-export function HealthPin() {
+export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {}) {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [clientLatencyMs, setClientLatencyMs] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   const [hovering, setHovering] = useState(false);
+  const [tapped, setTapped] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Hover alone (onMouseEnter/onMouseLeave) doesn't reliably work on touch
+  // devices — there's no mouse, so the detail popover would be unreachable
+  // on a phone/tablet. A tap toggles a separate `tapped` state (independent
+  // of hover, which still works for desktop mouse users), closed by tapping
+  // anywhere outside — same outside-click pattern as AccessibilityMenu.
+  useEffect(() => {
+    if (!tapped) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setTapped(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [tapped]);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,15 +130,29 @@ export function HealthPin() {
 
   return (
     <div
-      className="relative flex items-center gap-1.5 px-2.5 h-7 rounded-[var(--radius-sm)] text-xs font-medium cursor-default"
+      ref={containerRef}
+      className="relative flex items-center gap-1.5 px-2.5 h-8 rounded-[var(--radius-sm)] text-xs font-medium cursor-pointer"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
+      onClick={() => setTapped((t) => !t)}
+      role="button"
+      tabIndex={0}
+      aria-label="Server health details"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setTapped((t) => !t);
+        }
+      }}
     >
       <span className={`w-2 h-2 rounded-full shrink-0 ${config.dot}`} />
       <span className={`${config.text} whitespace-nowrap`}>{config.label}</span>
+      {showDbSize && health?.db.sizeBytes != null && (
+        <span className="text-[var(--color-text-muted)] whitespace-nowrap">· {formatBytes(health.db.sizeBytes)}</span>
+      )}
 
-      {hovering && (
-        <div className="absolute right-0 top-full mt-2 w-64 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg p-4 text-xs text-[var(--color-text-secondary)] z-30">
+      {(hovering || tapped) && (
+        <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg p-4 text-xs text-[var(--color-text-secondary)] z-30">
           {failed ? (
             <p className="text-[var(--color-danger)]">Health check request failed — server may be unreachable.</p>
           ) : health ? (
@@ -112,6 +169,12 @@ export function HealthPin() {
                   {health.db.connected ? `${health.db.latencyMs}ms` : "disconnected"}
                 </dd>
               </div>
+              {showDbSize && health.db.sizeBytes != null && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-[var(--color-text-muted)]">DB size</dt>
+                  <dd className="text-[var(--color-text-primary)] font-medium">{formatBytes(health.db.sizeBytes)}</dd>
+                </div>
+              )}
               <div className="flex justify-between gap-3">
                 <dt className="text-[var(--color-text-muted)]">DB pool</dt>
                 <dd className="text-[var(--color-text-primary)] font-medium">

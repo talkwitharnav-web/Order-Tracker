@@ -49,8 +49,8 @@ const themeInitScript = `
       document.documentElement.setAttribute("data-focus", "enhanced");
     }
     var cvd = localStorage.getItem("cvd");
-    if (cvd === "safe") {
-      document.documentElement.setAttribute("data-cvd", "safe");
+    if (cvd === "deuteranopia" || cvd === "protanopia" || cvd === "tritanopia") {
+      document.documentElement.setAttribute("data-cvd", cvd);
     }
   } catch (e) {}
 })();

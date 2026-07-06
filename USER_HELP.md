@@ -12,9 +12,9 @@ This is a **restaurant order tracker** web app with three separate "views," all 
   Used by: diners
   What it does: type in a restaurant name + order number to see live order status
 
-**Kitchen Dashboard** — `/restaurant`
+**Kitchen Dashboard** — `/restaurant/home`
   Used by: restaurant staff
-  What it does: log in, create orders, update their status (Received → Preparing → Complete), delete orders
+  What it does: log in or register, create orders, update their status (Received → Preparing → Complete), delete orders
 
 **Admin Panel** — `/` then `/admin/db`
   Used by: you (the owner)
@@ -105,12 +105,11 @@ npm run start:all
 ```
 
 This single command:
-1. Starts the database (in Docker) if it isn't already running.
-2. Starts the website itself.
+1. Checks whether Docker Desktop is open, and opens it for you if it isn't (waits for it to finish starting up).
+2. Starts the database (in Docker) if it isn't already running.
+3. Starts the website itself.
 
 Wait for a message like `Ready on http://localhost:3000`, then open that address in your web browser. You're now running the app locally on your own computer.
-
-> **Make sure Docker Desktop is open first!** If Docker Desktop isn't running, `start:all` will fail at the database step. Just open the Docker Desktop app and try again. (`.\startup` above checks this for you and tells you clearly if it's not running, instead of just failing.)
 
 ### To stop working
 
@@ -125,7 +124,7 @@ Run one of these (either is safe, neither deletes your data):
 ```bash
 npm run db:down
 ```
-Fully stops and removes the database container. Slightly "tidier." Your data is untouched — it lives in a separate Docker storage area (a "volume") that persists even when the container is removed.
+Fully stops and removes the database container, and closes Docker Desktop itself if it was running. Slightly "tidier." Your data is untouched — it lives in a separate Docker storage area (a "volume") that persists even when the container is removed.
 
 ```bash
 npm run db:stop
@@ -249,10 +248,10 @@ That's the whole process — steps 1–3 are one-time software installs, step 5 
   `http://localhost:3000/customer`
 
 **Log in as a restaurant / kitchen**
-  `http://localhost:3000/restaurant`
+  `http://localhost:3000/restaurant/home` (choose Log In or Register from there)
 
-**Register a new restaurant account**
-  `http://localhost:3000/restaurant/register`
+**Register a new restaurant account directly**
+  `http://localhost:3000/restaurant/signup`
 
 **Access the admin panel**
   `http://localhost:3000/` (then log in, redirects to `/admin/db`)
@@ -260,6 +259,22 @@ That's the whole process — steps 1–3 are one-time software installs, step 5 
 **Admin login** (hardcoded for local dev — not meant for real production use):
 - Username: `darkglory`
 - Password: `Re$t@ur@nt@dm!n`
+
+---
+
+## 6a. Accessibility & Display Options
+
+Every page has a small toolbar in the top-right corner with a few independent display controls. They're all optional and remembered per-browser (each one is a separate on/off switch, not a bundled "accessibility mode"):
+
+- **S / M / B** — Small / Medium / Big. Scales the whole interface's text and buttons up or down. Useful on a shared kitchen tablet during a rush, or if the default text is too small/large for you.
+- **Accessibility icon (wheelchair symbol)** — opens a dropdown with:
+  - **High Contrast** — much stronger text/border contrast, for low vision.
+  - **Reduce Motion** — turns off animations and transitions.
+  - **Enhanced Focus Outline** — a bold, obvious ring around whatever's focused when navigating by keyboard.
+  - **Colorblind-Friendly Palette** — a picker (not a simple on/off) with options for Deuteranopia, Protanopia, and Tritanopia. Pick whichever matches your actual color vision; each swaps the app's status/brand colors for a palette specifically checked to stay distinguishable for that type. Order status is also always shown with an icon and text label, never color alone, so the app stays usable even without picking any of these.
+- **Sun/moon icon** — switches between light and dark theme.
+
+None of these require an account or affect other users — they're a personal preference stored in your browser.
 
 ---
 

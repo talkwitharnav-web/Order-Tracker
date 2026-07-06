@@ -28,7 +28,7 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
   return (
   <div
     ref={ref}
-    className={`fixed top-4 right-4 z-20 flex items-center gap-1 px-1.5 h-9 rounded-[var(--radius-full)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] ${className ?? ""}`}
+    className={`fixed top-4 right-4 z-20 flex items-center gap-1 px-1.5 h-10 rounded-[var(--radius-full)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] ${className ?? ""}`}
   >
     {health && (
       <>

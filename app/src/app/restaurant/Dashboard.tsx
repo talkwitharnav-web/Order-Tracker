@@ -95,7 +95,7 @@ const Nav: FC<{
       <SettingsToggles health={<HealthPin />} />
 
       {/* Mobile top bar */}
-      <div className="md:hidden flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
+      <div className="md:hidden clear-top-right flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
         <div className="min-w-0">
           <h2 className="text-base font-bold text-[var(--color-text-primary)] truncate" title={restaurantName}>
             {restaurantName}
@@ -105,7 +105,7 @@ const Nav: FC<{
         <button
           onClick={() => setMobileOpen((o) => !o)}
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          className="p-2 text-[var(--color-text-secondary)] mr-10"
+          className="p-2 text-[var(--color-text-secondary)]"
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
@@ -126,7 +126,7 @@ const Nav: FC<{
       )}
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex w-60 shrink-0 bg-[var(--color-surface-1)] border-r border-[var(--color-border)] flex-col p-4">
+      <div className="hidden md:flex w-60 shrink-0 sticky top-0 h-screen overflow-y-auto bg-[var(--color-surface-1)] border-r border-[var(--color-border)] flex-col p-4">
         <div className="flex flex-col items-start gap-1 w-full overflow-hidden px-2 mb-6">
           <h2
             className="text-xl font-bold tracking-tight text-[var(--color-text-primary)] truncate w-full"

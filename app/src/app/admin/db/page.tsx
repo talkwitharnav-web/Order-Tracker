@@ -12,7 +12,6 @@ import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
-import { ChefSprite } from "@/components/ui/ChefSprite";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 interface Restaurant {
@@ -226,33 +225,26 @@ function AdminDbContent() {
       </Modal>
 
       <div className="min-h-screen p-4 sm:p-8">
-        <SettingsToggles health={<HealthPin />} />
-        <div className="flex items-start gap-4 mb-2">
-          <div className="hidden lg:block shrink-0 -mt-2 -mb-4">
-            <ChefSprite size={200} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <PageHeader
-              title="Admin Dashboard"
-              backHref="/"
-              actions={
-                <>
-                  <Button variant="secondary" onClick={handleSeed}>
-                    <Database size={16} />
-                    Seed Database
-                  </Button>
-                  <Button variant="danger" onClick={handlePurge}>
-                    <ShieldAlert size={16} />
-                    Purge Database
-                  </Button>
-                  <Button variant="ghost" onClick={handleLogout}>
-                    Logout
-                  </Button>
-                </>
-              }
-            />
-          </div>
-        </div>
+        <SettingsToggles health={<HealthPin showDbSize />} />
+        <PageHeader
+          title="Admin Dashboard"
+          backHref="/"
+          actions={
+            <>
+              <Button variant="secondary" onClick={handleSeed}>
+                <Database size={16} />
+                Seed Database
+              </Button>
+              <Button variant="danger" onClick={handlePurge}>
+                <ShieldAlert size={16} />
+                Purge Database
+              </Button>
+              <Button variant="ghost" onClick={handleLogout}>
+                Logout
+              </Button>
+            </>
+          }
+        />
 
         <section className="mb-10">
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">Restaurants</h2>
@@ -278,7 +270,7 @@ function AdminDbContent() {
                   >
                     Raw Password
                   </th>
-                  <th scope="col" className="py-3 px-4 text-right text-[var(--color-text-muted)] font-medium">
+                  <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
                     Actions
                   </th>
                 </tr>
@@ -294,7 +286,7 @@ function AdminDbContent() {
                     <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs hidden md:table-cell">
                       {r.raw_password}
                     </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => setPasswordResetTarget(r.id)}
@@ -343,7 +335,7 @@ function AdminDbContent() {
                   >
                     Created At
                   </th>
-                  <th scope="col" className="py-3 px-4 text-right text-[var(--color-text-muted)] font-medium">
+                  <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
                     Actions
                   </th>
                 </tr>
@@ -372,7 +364,7 @@ function AdminDbContent() {
                     <td className="py-3 px-4 text-[var(--color-text-muted)] hidden md:table-cell">
                       {new Date(o.created_at).toLocaleString()}
                     </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
                       <button
                         onClick={() => handleDelete("order", o.id)}
                         aria-label={`Delete order ${o.order_number}`}

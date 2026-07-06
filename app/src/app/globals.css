@@ -217,80 +217,162 @@
 }
 
 /*
- * Colorblind-Friendly Palette — opt-in, independent of theme/contrast/motion
- * (fourth option in AccessibilityMenu.tsx's dropdown). Researched before
- * building: a screen-wide CVD *simulation* filter (deuteranopia/protanopia
- * color-matrix overlay) is a design/QA testing technique, not a real
- * end-user accommodation — it distorts everything including colors that were
- * already fine, and doesn't fix anything, just shifts the confusion around.
- * The actual evidence-backed fix is what this does instead: swap the
- * brand/status/danger/success hues for an Okabe-Ito-derived palette (blue /
- * orange / teal / vermillion / reddish-purple) verified via a deuteranopia+
- * protanopia+tritanopia simulation matrix to stay well-separated under all
- * three common CVD types, instead of the default warm-bistro palette's
- * earth-tones which simulate down to near-identical yellow-browns (received/
- * preparing/complete/success/danger were all within a ~30-50 unit RGB
- * distance of each other post-simulation — verified with a Node script
- * before choosing these replacements). This is additive/opt-in rather than
- * the new default because it's a real aesthetic departure from warm-bistro,
- * same reasoning as high-contrast mode being separate from the normal theme.
- * Status is still never color-only (icon+text everywhere, see order-status.ts)
- * — this mode is about the colors being *more comfortably distinguishable*
- * on top of that, not a fix to a non-redundant signal.
+ * Colorblind-Friendly Palettes — opt-in, independent of theme/contrast/motion
+ * (fourth option in AccessibilityMenu.tsx's dropdown, now a per-type SELECT
+ * rather than one on/off toggle). Researched before building: a screen-wide
+ * CVD *simulation* filter (deuteranopia/protanopia color-matrix overlay) is a
+ * design/QA testing technique, not a real end-user accommodation — it
+ * distorts everything including colors that were already fine, and doesn't
+ * fix anything, just shifts the confusion around. The actual evidence-backed
+ * fix is what this does instead: three separate, independently-tuned
+ * replacement palettes for brand/status/danger/success, one per common CVD
+ * type, each verified via that type's own simulation matrix to keep every
+ * pair of colors well-separated (>55 RGB-distance units post-simulation) —
+ * a single "one CVD-safe palette fits all" set is a weaker compromise than
+ * tuning per type, since deuteranopia/protanopia (red-green weak) and
+ * tritanopia (blue-yellow weak) fail on different hue axes. Selected via
+ * `data-cvd="deuteranopia" | "protanopia" | "tritanopia"` on <html>, same
+ * localStorage + pre-hydration-script mechanism as the other three toggles.
+ * Additive/opt-in rather than a new default because it's a real aesthetic
+ * departure from warm-bistro (same reasoning as high-contrast mode being
+ * separate from the normal theme). Status is still never color-only
+ * (icon+text everywhere, see order-status.ts) — these palettes are about
+ * being more comfortably distinguishable on top of that redundancy, not a
+ * fix to a signal that was otherwise unreadable.
  */
-[data-cvd="safe"] {
+[data-cvd="deuteranopia"] {
   --color-brand: #0072B2;
   --color-brand-hover: #005a8c;
   --color-brand-text: #005a8c;
-
   --color-accent-olive: #CC79A7;
   --color-accent-olive-text: #a85a85;
-
   --color-status-received-bg: rgba(0, 114, 178, 0.1);
   --color-status-received-border: rgba(0, 114, 178, 0.35);
   --color-status-received-text: #005a8c;
   --color-status-received-icon: #0072B2;
-
   --color-status-preparing-bg: rgba(230, 159, 0, 0.12);
   --color-status-preparing-border: rgba(230, 159, 0, 0.4);
   --color-status-preparing-text: #8a6000;
   --color-status-preparing-icon: #E69F00;
-
   --color-status-complete-bg: rgba(0, 158, 115, 0.12);
   --color-status-complete-border: rgba(0, 158, 115, 0.4);
   --color-status-complete-text: #00694a;
   --color-status-complete-icon: #009E73;
-
   --color-danger: #D55E00;
   --color-danger-hover: #a84900;
   --color-success: #CC79A7;
 }
-[data-theme="dark"][data-cvd="safe"] {
+[data-theme="dark"][data-cvd="deuteranopia"] {
   --color-brand: #56B4E9;
   --color-brand-hover: #7cc4ee;
   --color-brand-text: #56B4E9;
-
   --color-accent-olive: #e0a8c8;
   --color-accent-olive-text: #e0a8c8;
-
   --color-status-received-bg: rgba(86, 180, 233, 0.14);
   --color-status-received-border: rgba(86, 180, 233, 0.4);
   --color-status-received-text: #56B4E9;
   --color-status-received-icon: #56B4E9;
-
   --color-status-preparing-bg: rgba(240, 228, 66, 0.14);
   --color-status-preparing-border: rgba(240, 228, 66, 0.4);
   --color-status-preparing-text: #F0E442;
   --color-status-preparing-icon: #F0E442;
-
   --color-status-complete-bg: rgba(0, 158, 115, 0.16);
   --color-status-complete-border: rgba(0, 158, 115, 0.45);
   --color-status-complete-text: #4fd6ae;
   --color-status-complete-icon: #4fd6ae;
-
   --color-danger: #ff9d5c;
   --color-danger-hover: #ffb37f;
   --color-success: #e0a8c8;
+}
+
+[data-cvd="protanopia"] {
+  --color-brand: #0072B2;
+  --color-brand-hover: #005a8c;
+  --color-brand-text: #005a8c;
+  --color-accent-olive: #56B4E9;
+  --color-accent-olive-text: #005a8c;
+  --color-status-received-bg: rgba(0, 114, 178, 0.1);
+  --color-status-received-border: rgba(0, 114, 178, 0.35);
+  --color-status-received-text: #005a8c;
+  --color-status-received-icon: #0072B2;
+  --color-status-preparing-bg: rgba(191, 172, 22, 0.14);
+  --color-status-preparing-border: rgba(191, 172, 22, 0.4);
+  --color-status-preparing-text: #6b6013;
+  --color-status-preparing-icon: #BFAC16;
+  --color-status-complete-bg: rgba(0, 158, 115, 0.12);
+  --color-status-complete-border: rgba(0, 158, 115, 0.4);
+  --color-status-complete-text: #00694a;
+  --color-status-complete-icon: #009E73;
+  --color-danger: #000000;
+  --color-danger-hover: #262626;
+  --color-success: #56B4E9;
+}
+[data-theme="dark"][data-cvd="protanopia"] {
+  --color-brand: #56B4E9;
+  --color-brand-hover: #7cc4ee;
+  --color-brand-text: #56B4E9;
+  --color-accent-olive: #9fd6f5;
+  --color-accent-olive-text: #9fd6f5;
+  --color-status-received-bg: rgba(86, 180, 233, 0.14);
+  --color-status-received-border: rgba(86, 180, 233, 0.4);
+  --color-status-received-text: #56B4E9;
+  --color-status-received-icon: #56B4E9;
+  --color-status-preparing-bg: rgba(240, 228, 66, 0.14);
+  --color-status-preparing-border: rgba(240, 228, 66, 0.4);
+  --color-status-preparing-text: #F0E442;
+  --color-status-preparing-icon: #F0E442;
+  --color-status-complete-bg: rgba(0, 158, 115, 0.16);
+  --color-status-complete-border: rgba(0, 158, 115, 0.45);
+  --color-status-complete-text: #4fd6ae;
+  --color-status-complete-icon: #4fd6ae;
+  --color-danger: #f5f5f5;
+  --color-danger-hover: #ffffff;
+  --color-success: #9fd6f5;
+}
+
+[data-cvd="tritanopia"] {
+  --color-brand: #CC79A7;
+  --color-brand-hover: #a85a85;
+  --color-brand-text: #a85a85;
+  --color-accent-olive: #5A9E3A;
+  --color-accent-olive-text: #3f7027;
+  --color-status-received-bg: rgba(204, 121, 167, 0.1);
+  --color-status-received-border: rgba(204, 121, 167, 0.35);
+  --color-status-received-text: #a85a85;
+  --color-status-received-icon: #CC79A7;
+  --color-status-preparing-bg: rgba(213, 94, 0, 0.12);
+  --color-status-preparing-border: rgba(213, 94, 0, 0.4);
+  --color-status-preparing-text: #8a3f00;
+  --color-status-preparing-icon: #D55E00;
+  --color-status-complete-bg: rgba(0, 158, 115, 0.12);
+  --color-status-complete-border: rgba(0, 158, 115, 0.4);
+  --color-status-complete-text: #00694a;
+  --color-status-complete-icon: #009E73;
+  --color-danger: #920000;
+  --color-danger-hover: #6e0000;
+  --color-success: #5A9E3A;
+}
+[data-theme="dark"][data-cvd="tritanopia"] {
+  --color-brand: #e0a8c8;
+  --color-brand-hover: #eac0d8;
+  --color-brand-text: #e0a8c8;
+  --color-accent-olive: #8fcf6e;
+  --color-accent-olive-text: #8fcf6e;
+  --color-status-received-bg: rgba(224, 168, 200, 0.14);
+  --color-status-received-border: rgba(224, 168, 200, 0.4);
+  --color-status-received-text: #e0a8c8;
+  --color-status-received-icon: #e0a8c8;
+  --color-status-preparing-bg: rgba(255, 148, 84, 0.14);
+  --color-status-preparing-border: rgba(255, 148, 84, 0.4);
+  --color-status-preparing-text: #ff9454;
+  --color-status-preparing-icon: #ff9454;
+  --color-status-complete-bg: rgba(0, 158, 115, 0.16);
+  --color-status-complete-border: rgba(0, 158, 115, 0.45);
+  --color-status-complete-text: #4fd6ae;
+  --color-status-complete-icon: #4fd6ae;
+  --color-danger: #ff5c8a;
+  --color-danger-hover: #ff85a6;
+  --color-success: #8fcf6e;
 }
 
 /*
@@ -414,6 +496,24 @@ html[data-ui-size="big"] {
   }
 }
 
+/*
+ * The toast stack (Toast.tsx) is itself `position: fixed`, unlike PageHeader's
+ * in-flow content — `.clear-top-right`'s padding approach doesn't move a
+ * fixed element, so this uses the same --reserved-top-right-h variable to
+ * push the toast stack's `top` down below SettingsToggles instead, only on
+ * narrow viewports where both would otherwise sit at the same top-4 corner.
+ * At sm:+ SettingsToggles is a compact single-row pill with room below/beside
+ * it, so toasts can stay at the standard top-4 without colliding.
+ */
+.toast-stack {
+  top: calc(var(--reserved-top-right-h) + 24px);
+}
+@media (min-width: 640px) {
+  .toast-stack {
+    top: 1rem;
+  }
+}
+
 body {
   background-color: var(--color-surface-0);
   background-image:
@@ -526,7 +626,13 @@ summary {
   border-radius: 12px;
   font-size: 0.8rem;
   font-weight: 600;
-  white-space: nowrap;
+  /* Random lines vary a lot in length (some are one word, some a full
+     sentence) — capping width and allowing wrap keeps a long line from
+     rendering at its full one-line width and overflowing a narrow phone
+     screen, which `white-space: nowrap` + no max-width used to allow. */
+  white-space: normal;
+  max-width: min(220px, 42vw);
+  text-align: center;
   animation: chef-bubble-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.3s;
 }
 .chef-speech-bubble::after {

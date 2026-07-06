@@ -141,7 +141,7 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
     <ToastContext.Provider value={showToast}>
       {children}
       {activeCount > 0 && (
-        <div className="fixed top-4 right-4 z-50 flex flex-col items-end">
+        <div className="toast-stack fixed right-4 z-50 flex flex-col items-end max-w-[calc(100vw-2rem)]">
           {expanded || activeCount === 1 ? (
             <div className="flex flex-col gap-2">
               {items.map((item) => (
@@ -158,8 +158,8 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
             </div>
           ) : (
             <div
-              className="relative cursor-pointer"
-              style={{ height: 76, width: 320 }}
+              className="relative cursor-pointer w-full"
+              style={{ height: 76, maxWidth: 320 }}
               onClick={() => setExpanded(true)}
               role="button"
               tabIndex={0}

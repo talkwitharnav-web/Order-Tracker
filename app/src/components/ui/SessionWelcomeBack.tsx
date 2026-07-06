@@ -44,7 +44,7 @@ export const SessionWelcomeBack: FC<{
             Continue
           </Button>
           <Button size="lg" variant="secondary" onClick={onLogout} className="w-full">
-            Logout
+            Log Out
           </Button>
         </div>
       </Card>

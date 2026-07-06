@@ -221,7 +221,7 @@ export default function CustomerPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <SettingsToggles />
-      <main className="w-full max-w-2xl mx-auto">
+      <main className="clear-top-right w-full max-w-2xl mx-auto">
         <Card className="p-6 sm:p-10">
           <div className="text-center mb-8">
             <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mb-2">
