@@ -41,16 +41,17 @@ export const KitchenPortalLanding: FC<{
   onChooseLogin: () => void;
   onChooseRegister: () => void;
 }> = ({ onChooseLogin, onChooseRegister }) => (
-  <div className="min-h-screen flex items-center justify-center p-4">
+  <div className="min-h-dvh flex items-center justify-center p-4">
     <main className="w-full max-w-md mx-auto">
-      <Card className="p-6 sm:p-10 text-center">
-        <div className="flex justify-center mb-2">
-          <ChefSprite lines={SPRITE_LINES} size={168} />
+      <Card className="p-4 sm:p-10 text-center">
+        <div className="flex justify-center mb-1 sm:mb-2">
+          <ChefSprite lines={SPRITE_LINES} size={120} className="sm:hidden" />
+          <ChefSprite lines={SPRITE_LINES} size={168} className="hidden sm:block" />
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mt-2 mb-2">
+        <h1 className="font-display text-2xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mt-1 sm:mt-2 mb-1 sm:mb-2">
           Kitchen Portal
         </h1>
-        <p className="text-[var(--color-text-secondary)] mb-8">
+        <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mb-4 sm:mb-8">
           Sign in to manage your kitchen&apos;s orders.
         </p>
 
@@ -63,7 +64,10 @@ export const KitchenPortalLanding: FC<{
           </Button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mt-10 pt-6 border-t border-[var(--color-border)]">
+        {/* Supplementary marketing copy, not needed to actually log in/register
+            — hidden below sm: since it was the single largest contributor to
+            this card overflowing the viewport on short phone screens. */}
+        <div className="hidden sm:grid grid-cols-3 gap-3 mt-10 pt-6 border-t border-[var(--color-border)]">
           {BENEFITS.map(({ Icon, text }) => (
             <div key={text} className="flex flex-col items-center gap-2">
               <Icon className="w-5 h-5 text-[var(--color-brand)]" />

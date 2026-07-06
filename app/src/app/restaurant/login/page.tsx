@@ -40,7 +40,13 @@ export default function RestaurantLoginPage() {
     }
     try {
       await login(trimmedName, password, rememberMe);
-      router.push("/restaurant/restauranthome");
+      // ?fresh=1 tells restauranthome to skip the "still signed in, continue
+      // or log out?" screen -- that screen exists for REVISITING an already-
+      // active session, not for a login/signup that just happened this
+      // instant (showing it there is just an extra, redundant click). The
+      // session check itself still runs either way -- this only controls
+      // whether the confirm screen is shown, never whether access is granted.
+      router.push("/restaurant/restauranthome?fresh=1");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
       setIsLoading(false);

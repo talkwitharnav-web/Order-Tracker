@@ -252,19 +252,19 @@ export default function CustomerPage() {
   const formatRestaurantInput = (value: string) => value.replace(/[^a-zA-Z0-9' -]/g, "");
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-dvh flex items-center justify-center p-4">
       <SettingsToggles />
       <main className="clear-top-right-top-only w-full max-w-2xl mx-auto">
-        <Card className="p-6 sm:p-10">
-          <div className="text-center mb-8">
-            <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mb-2">
+        <Card className="p-4 sm:p-10">
+          <div className="text-center mb-4 sm:mb-8">
+            <h1 className="font-display text-2xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mb-2">
               Track Your Order
             </h1>
-            <p className="text-[var(--color-text-secondary)]">
+            <p className="text-sm sm:text-base text-[var(--color-text-secondary)]">
               Enter your details to see the real-time status of your meal.
             </p>
           </div>
-          <form onSubmit={handleTrackOrder} className="space-y-6">
+          <form onSubmit={handleTrackOrder} className="space-y-4 sm:space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <RestaurantAutocomplete
                 id="restaurantName"

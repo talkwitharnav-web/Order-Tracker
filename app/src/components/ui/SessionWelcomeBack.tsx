@@ -26,16 +26,17 @@ export const SessionWelcomeBack: FC<{
   onContinue: () => void;
   onLogout: () => void;
 }> = ({ restaurantName, onContinue, onLogout }) => (
-  <div className="min-h-screen flex items-center justify-center p-4">
+  <div className="min-h-dvh flex items-center justify-center p-4">
     <main className="w-full max-w-md mx-auto">
-      <Card className="p-6 sm:p-10 text-center">
-        <div className="flex justify-center mb-2">
-          <ChefSprite lines={GUARD_LINES} />
+      <Card className="p-4 sm:p-10 text-center">
+        <div className="flex justify-center mb-1 sm:mb-2">
+          <ChefSprite lines={GUARD_LINES} size={110} className="sm:hidden" />
+          <ChefSprite lines={GUARD_LINES} size={140} className="hidden sm:block" />
         </div>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mt-2 mb-2">
+        <h1 className="font-display text-2xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mt-1 sm:mt-2 mb-1 sm:mb-2">
           Welcome back, {restaurantName}
         </h1>
-        <p className="text-[var(--color-text-secondary)] mb-8">
+        <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mb-4 sm:mb-8">
           You&apos;re still signed in. Pick up where you left off, or log out.
         </p>
 

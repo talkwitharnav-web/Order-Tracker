@@ -85,7 +85,7 @@ export default function GatewayCommandCenter() {
   ) : null;
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-dvh">
       <SettingsToggles health={hasAdminSession ? <HealthPin /> : undefined} />
       <GatewaySidebar navExtra={navExtra} actions={sidebarActions} />
       <div className="flex-1 flex flex-col">
@@ -112,7 +112,7 @@ export default function GatewayCommandCenter() {
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <AuthCard title="Admin Access" onSubmit={handleLogin} error={error || null} fillParent>
-              <div className="flex justify-center mb-2">
+              <div className="hidden sm:flex justify-center mb-2">
                 <Lock className="w-8 h-8 text-[var(--color-brand-text)]" />
               </div>
               <div>

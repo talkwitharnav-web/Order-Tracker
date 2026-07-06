@@ -34,7 +34,7 @@ export const GatewaySidebar: FC<{ navExtra?: ReactNode; actions?: ReactNode }> =
 );
 
 export const GatewayMobileNav: FC = () => (
-  <nav className="md:hidden clear-top-right flex items-center gap-2 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
+  <nav className="md:hidden clear-top-right flex items-center gap-2 p-2 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
     <div className="flex items-center gap-2 px-1 mr-auto">
       <UtensilsCrossed className="w-5 h-5 text-[var(--color-brand)]" />
       <span className="font-display text-base font-semibold text-[var(--color-text-primary)]">Bistro Hub</span>

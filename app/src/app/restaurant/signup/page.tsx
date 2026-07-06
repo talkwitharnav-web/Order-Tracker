@@ -42,9 +42,11 @@ export default function RestaurantSignupPage() {
         { retries: 0 }
       );
       // register/route.ts sets the restaurant session cookie on success
-      // (auto-login on signup), so restauranthome's own session check will
-      // find it and skip straight past Welcome Back to the dashboard.
-      router.push("/restaurant/restauranthome");
+      // (auto-login on signup). ?fresh=1 tells restauranthome to skip the
+      // "still signed in, continue or log out?" screen for this specific
+      // just-happened login/signup -- see the identical comment in
+      // restaurant/login/page.tsx for why.
+      router.push("/restaurant/restauranthome?fresh=1");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
       setIsLoading(false);

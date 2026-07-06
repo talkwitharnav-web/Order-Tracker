@@ -563,7 +563,7 @@ function KitchenDashboardContent({
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-dvh flex flex-col md:flex-row">
       <Nav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={onLogout} restaurantName={restaurantName} />
       <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-auto">
         <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)] mb-6">{activeTab}</h1>

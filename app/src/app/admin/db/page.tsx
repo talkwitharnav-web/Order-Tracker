@@ -328,7 +328,7 @@ function AdminDbContent() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-screen text-[var(--color-text-secondary)]">
+      <div className="flex justify-center items-center min-h-dvh text-[var(--color-text-secondary)]">
         Loading...
       </div>
     );
@@ -400,7 +400,7 @@ function AdminDbContent() {
         />
       </Modal>
 
-      <div className="min-h-screen p-4 sm:p-8">
+      <div className="min-h-dvh p-4 sm:p-8">
         <SettingsToggles health={<HealthPin showDbSize />} />
         <PageHeader
           title="Admin Dashboard"
