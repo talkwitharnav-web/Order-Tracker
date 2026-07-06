@@ -442,6 +442,56 @@ function AdminDbContent() {
           </Card>
         </section>
 
+        {showDeleted && (
+          <section className="mb-10">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
+              Deleted Restaurants
+            </h2>
+            <Card className="p-0 overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-border)]">
+                    <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                      ID
+                    </th>
+                    <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                      Original Name
+                    </th>
+                    <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deletedRestaurants.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
+                        No deleted restaurants.
+                      </td>
+                    </tr>
+                  ) : (
+                    deletedRestaurants.map((r) => (
+                      <tr key={r.id} className="border-b border-[var(--color-border)] last:border-0">
+                        <td className="py-3 px-4 text-[var(--color-text-secondary)]">{r.id}</td>
+                        <td className="py-3 px-4 text-[var(--color-text-primary)] font-medium">{r.name}</td>
+                        <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
+                          <button
+                            onClick={() => handleUndelete("restaurant", r.id)}
+                            aria-label={`Restore ${r.name}`}
+                            className="p-2 bg-[var(--color-success)] hover:opacity-90 text-white rounded-[var(--radius-sm)] transition-colors"
+                          >
+                            <RotateCcw size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </Card>
+          </section>
+        )}
+
         <section>
           <div className="flex flex-wrap items-center justify-between mb-3 gap-3">
             <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Orders</h2>
@@ -571,57 +621,6 @@ function AdminDbContent() {
           </Card>
         </section>
 
-        {showDeleted && (
-          <>
-            <section className="mt-10">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
-                Deleted Restaurants
-              </h2>
-              <Card className="p-0 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--color-border)]">
-                      <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
-                        ID
-                      </th>
-                      <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
-                        Original Name
-                      </th>
-                      <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deletedRestaurants.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
-                          No deleted restaurants.
-                        </td>
-                      </tr>
-                    ) : (
-                      deletedRestaurants.map((r) => (
-                        <tr key={r.id} className="border-b border-[var(--color-border)] last:border-0">
-                          <td className="py-3 px-4 text-[var(--color-text-secondary)]">{r.id}</td>
-                          <td className="py-3 px-4 text-[var(--color-text-primary)] font-medium">{r.name}</td>
-                          <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
-                            <button
-                              onClick={() => handleUndelete("restaurant", r.id)}
-                              aria-label={`Restore ${r.name}`}
-                              className="p-2 bg-[var(--color-success)] hover:opacity-90 text-white rounded-[var(--radius-sm)] transition-colors"
-                            >
-                              <RotateCcw size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </Card>
-            </section>
-          </>
-        )}
       </div>
     </>
   );
