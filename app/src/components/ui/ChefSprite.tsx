@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, FC } from "react";
+import { useState, useEffect, useRef, useId, FC } from "react";
 
 // 35 distinct idle animations, applied to the whole sprite or its parts via CSS classes.
 // Each one is a bored/silly little chef-hat sprite action. Picked at random on mount.
@@ -79,6 +79,14 @@ const DEFAULT_LINES = [
 const PUPIL_RANGE = 1.8;
 
 export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: number }> = ({ className, lines, size = 140 }) => {
+  // SVG element IDs (the hat's gradient, below) must be unique per document
+  // -- fine when only one ChefSprite ever mounted on a page at once, but
+  // some callers now mount two simultaneously (one hidden via CSS per
+  // breakpoint, both still present in the DOM), and a hardcoded id="..."
+  // shared by both instances made `url(#...)` resolve unpredictably,
+  // breaking the hat's gradient fill on one instance (confirmed live: it
+  // rendered as bare stroke outlines with no fill, no gradient at all).
+  const gradientId = useId();
   const [action] = useState(() => ACTIONS[Math.floor(Math.random() * ACTIONS.length)]);
   const [line] = useState(() => {
     const pool = lines && lines.length > 0 ? lines : DEFAULT_LINES;
@@ -200,7 +208,7 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
         {/* chef's toque: pleated cylindrical poof + rope-braid cuff band, per reference photo */}
         <g className="chef-hat">
           <defs>
-            <linearGradient id="chef-hat-shade" x1="0" y1="0" x2="1" y2="0">
+            <linearGradient id={`chef-hat-shade-${gradientId}`} x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#d8d8d8" />
               <stop offset="12%" stopColor="#fbfbfb" />
               <stop offset="50%" stopColor="#ffffff" />
@@ -213,14 +221,14 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
                C 33 12, 40 0, 50 0
                C 60 0, 67 12, 65 30
                Z"
-            fill="url(#chef-hat-shade)"
+            fill={`url(#chef-hat-shade-${gradientId})`}
             stroke="#bfbfbf"
             strokeWidth="1.25"
           />
           <path d="M40 28 C 39 14, 42 4, 45 1" stroke="#c9c9c9" strokeWidth="1.4" fill="none" strokeLinecap="round" />
           <path d="M50 29 C 49 13, 50 2, 50 0" stroke="#c9c9c9" strokeWidth="1.4" fill="none" strokeLinecap="round" />
           <path d="M60 28 C 61 14, 58 4, 55 1" stroke="#c9c9c9" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-          <rect x="33" y="28" width="34" height="9" rx="2" fill="url(#chef-hat-shade)" stroke="#bfbfbf" strokeWidth="1.25" />
+          <rect x="33" y="28" width="34" height="9" rx="2" fill={`url(#chef-hat-shade-${gradientId})`} stroke="#bfbfbf" strokeWidth="1.25" />
           <path
             d="M34 32 q2 -2 4 0 q2 2 4 0 q2 -2 4 0 q2 2 4 0 q2 -2 4 0 q2 2 4 0 q2 -2 4 0 q2 2 4 0"
             stroke="#cfcfcf"

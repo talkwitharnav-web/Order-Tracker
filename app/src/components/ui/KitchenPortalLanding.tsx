@@ -44,9 +44,26 @@ export const KitchenPortalLanding: FC<{
   <div className="min-h-dvh flex items-center justify-center p-4">
     <main className="w-full max-w-md mx-auto">
       <Card className="p-4 sm:p-10 text-center">
+        {/* Two ChefSprite instances swapped by breakpoint (its `size` prop
+            drives real SVG width/height attributes, not a CSS property, so
+            a single instance can't be responsively resized with a Tailwind
+            class alone). Wrapping divs carry the hidden/sm:block toggle
+            instead of passing it as ChefSprite's own className -- its
+            internal .chef-sprite-wrap class sets `display: flex` in
+            globals.css, which collides in specificity with Tailwind's
+            `.hidden`/`.sm\:block` (same single-class specificity, so
+            whichever rule is later in the compiled stylesheet wins
+            regardless of className order) -- confirmed live, this exact
+            collision showed BOTH sprites at once instead of toggling. An
+            extra plain wrapper div has no competing display rule of its
+            own, so its hidden/block toggle can't lose that fight. */}
         <div className="flex justify-center mb-1 sm:mb-2">
-          <ChefSprite lines={SPRITE_LINES} size={120} className="sm:hidden" />
-          <ChefSprite lines={SPRITE_LINES} size={168} className="hidden sm:block" />
+          <div className="sm:hidden">
+            <ChefSprite lines={SPRITE_LINES} size={120} />
+          </div>
+          <div className="hidden sm:block">
+            <ChefSprite lines={SPRITE_LINES} size={168} />
+          </div>
         </div>
         <h1 className="font-display text-2xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mt-1 sm:mt-2 mb-1 sm:mb-2">
           Kitchen Portal
