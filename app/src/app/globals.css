@@ -541,6 +541,28 @@ html[data-ui-size="big"] {
   }
 }
 
+/*
+ * Deliberate app-wide default: nothing is text-selectable (nav labels,
+ * headings, buttons, table cells, etc. all highlight on click-drag by
+ * default, which reads as a bug in a UI that isn't meant to be edited/
+ * copied like a document). Places where copying a value is genuinely the
+ * point (admin/db's hashed/raw password and kitchen-name columns) get
+ * explicit copy buttons instead of relying on select+copy -- see
+ * CopyableValue.tsx -- so this is a real "nothing is selectable" rule, not
+ * a partial one with silent exceptions.
+ */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+}
+input,
+textarea {
+  /* Form fields must stay selectable/editable -- this is what a user is
+     actually typing into, not UI chrome. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 body {
   background-color: var(--color-surface-0);
   background-image:

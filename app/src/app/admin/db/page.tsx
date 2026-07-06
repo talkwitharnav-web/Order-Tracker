@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,6 +14,8 @@ import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { RestaurantFilterDropdown } from "@/components/ui/RestaurantFilterDropdown";
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { StatusDurationCell, StatusDurationCompleteCell } from "@/components/ui/StatusDurationCell";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 interface Restaurant {
@@ -21,6 +23,7 @@ interface Restaurant {
   name: string;
   password?: string;
   raw_password?: string;
+  complete_cap_hours?: number;
 }
 
 interface Order {
@@ -29,6 +32,11 @@ interface Order {
   order_number: string;
   status: string;
   created_at: string;
+  received_at: string | null;
+  preparing_at: string | null;
+  complete_at: string | null;
+  acknowledged_at: string | null;
+  deleted_at: string | null;
 }
 
 type OrderRow = Order & { isDeleted: boolean };
@@ -101,6 +109,8 @@ function AdminDbContent() {
   const [confirmState, setConfirmState] = useState<ConfirmState>(EMPTY_CONFIRM);
   const [passwordResetTarget, setPasswordResetTarget] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [renameTarget, setRenameTarget] = useState<{ id: number; currentName: string } | null>(null);
+  const [newName, setNewName] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
@@ -250,6 +260,32 @@ function AdminDbContent() {
     }
   };
 
+  const handleRename = async () => {
+    if (!renameTarget) return;
+    try {
+      const res = await fetchWithRetry(`/api/restaurants/${renameTarget.id}/rename`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newName }),
+      });
+      const resJson = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(resJson.error || `Action failed with status: ${res.status}`);
+      // Any currently logged-in kitchen session for this restaurant will
+      // stop matching after a rename (its session cookie still has the old
+      // name -- see the rename route's own comment) -- surface that here
+      // rather than let it look like a silent, unexplained logout later.
+      showToast(
+        resJson.note ? `Kitchen renamed successfully. ${resJson.note}` : "Kitchen renamed successfully!",
+        "success",
+      );
+      setNewName("");
+      setRenameTarget(null);
+      fetchData();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
+    }
+  };
+
   const handleSort = (key: OrderSortKey) => {
     setOrderSort((prev) => {
       if (!prev || prev.key !== key) return { key, direction: "asc" };
@@ -335,6 +371,35 @@ function AdminDbContent() {
         />
       </Modal>
 
+      <Modal
+        isOpen={renameTarget !== null}
+        title="Rename Kitchen"
+        onClose={() => {
+          setRenameTarget(null);
+          setNewName("");
+        }}
+      >
+        <p className="text-[var(--color-text-secondary)] text-sm mb-4">
+          This also changes the name the kitchen logs in with, and updates every one of its existing orders to match.
+          Any device currently logged in as this kitchen will need to log back in under the new name.
+        </p>
+        <Input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Enter new kitchen name"
+          className="mb-2"
+        />
+        <ModalActions
+          onCancel={() => {
+            setRenameTarget(null);
+            setNewName("");
+          }}
+          onConfirm={handleRename}
+          confirmLabel="Rename"
+        />
+      </Modal>
+
       <div className="min-h-screen p-4 sm:p-8">
         <SettingsToggles health={<HealthPin showDbSize />} />
         <PageHeader
@@ -409,15 +474,27 @@ function AdminDbContent() {
                   .map((r) => (
                   <tr key={r.id} className="border-b border-[var(--color-border)] last:border-0">
                     <td className="py-3 px-4 text-[var(--color-text-secondary)]">{r.id}</td>
-                    <td className="py-3 px-4 text-[var(--color-text-primary)] font-medium">{r.name}</td>
+                    <td className="py-3 px-4 text-[var(--color-text-primary)] font-medium">
+                      <CopyableValue value={r.name} label="kitchen name" />
+                    </td>
                     <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs break-all hidden lg:table-cell">
-                      {r.password}
+                      {r.password && <CopyableValue value={r.password} label="hashed password" />}
                     </td>
                     <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs hidden md:table-cell">
-                      {r.raw_password}
+                      {r.raw_password && <CopyableValue value={r.raw_password} label="raw password" />}
                     </td>
                     <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
                       <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setRenameTarget({ id: r.id, currentName: r.name });
+                            setNewName(r.name);
+                          }}
+                          aria-label={`Rename ${r.name}`}
+                          className="p-2 bg-[var(--color-surface-2)] hover:opacity-80 text-[var(--color-text-primary)] border border-[var(--color-border-strong)] rounded-[var(--radius-sm)] transition-colors"
+                        >
+                          <Pencil size={16} />
+                        </button>
                         <button
                           onClick={() => setPasswordResetTarget(r.id)}
                           aria-label={`Reset password for ${r.name}`}
@@ -537,6 +614,19 @@ function AdminDbContent() {
                       />
                     </div>
                   </th>
+                  <th
+                    scope="col"
+                    className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium hidden lg:table-cell"
+                    title="How long the order sat in each status (capped display at 5:00)"
+                  >
+                    Received
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium hidden lg:table-cell">
+                    Preparing
+                  </th>
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium hidden lg:table-cell">
+                    Complete
+                  </th>
                   <SortableHeader
                     label="Created At"
                     sortKey="created_at"
@@ -589,6 +679,29 @@ function AdminDbContent() {
                             </>
                           )}
                         </div>
+                      </td>
+                      <td className="py-3 px-4 hidden lg:table-cell">
+                        <StatusDurationCell
+                          startAt={o.received_at}
+                          endAt={o.preparing_at ?? (o.isDeleted ? o.deleted_at : null)}
+                        />
+                      </td>
+                      <td className="py-3 px-4 hidden lg:table-cell">
+                        <StatusDurationCell
+                          startAt={o.preparing_at}
+                          endAt={o.complete_at ?? (o.isDeleted ? o.deleted_at : null)}
+                        />
+                      </td>
+                      <td className="py-3 px-4 hidden lg:table-cell">
+                        <StatusDurationCompleteCell
+                          completeAt={o.complete_at}
+                          acknowledgedAt={o.acknowledged_at}
+                          completeCapHours={
+                            restaurants.find((r) => r.name.toLowerCase() === o.restaurant_name.toLowerCase())
+                              ?.complete_cap_hours ?? 12
+                          }
+                          endAt={o.isDeleted ? o.deleted_at : null}
+                        />
                       </td>
                       <td className="py-3 px-4 text-[var(--color-text-muted)] hidden md:table-cell">
                         {new Date(o.created_at).toLocaleString()}

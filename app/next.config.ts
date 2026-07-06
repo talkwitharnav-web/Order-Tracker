@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   // and check its "Also reachable on your network at ..." log line for the
   // current address.
   allowedDevOrigins: ["192.168.12.140"],
+  // Turns off the floating dev-mode corner badge (route/build indicator) --
+  // purely a dev-UI preference, no effect on production builds either way.
+  devIndicators: false,
 };
 
 export default nextConfig;

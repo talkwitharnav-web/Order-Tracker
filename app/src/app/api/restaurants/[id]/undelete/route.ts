@@ -31,7 +31,14 @@ export async function POST(
       return NextResponse.json({ error: "Deleted restaurant not found" }, { status: 404 });
     }
 
-    const originalName = isEncryptedForStorage(row.name) ? decryptFromStorage(row.name) : row.name;
+    const decryptedName = isEncryptedForStorage(row.name) ? decryptFromStorage(row.name) : row.name;
+    // If this restaurant was already restored once before (then deleted
+    // again), its stored name already carries a "-restored"/"-restoredN"
+    // suffix from the previous undelete -- strip that back off first so the
+    // suffix logic below works from the true base name every time, instead
+    // of stacking a second suffix onto the first (the bug that produced
+    // "X-restored-restored" instead of "X-restored2").
+    const originalName = decryptedName.replace(/-restored\d*$/, "");
 
     await client.query("BEGIN");
 
@@ -57,11 +64,28 @@ export async function POST(
       [candidateName, id],
     );
 
-    await client.query("COMMIT");
-
     if (updateResult.rowCount === 0) {
+      await client.query("ROLLBACK");
       return NextResponse.json({ error: "Deleted restaurant not found" }, { status: 404 });
     }
+
+    // The restaurant DELETE route soft-deletes its orders alongside it
+    // (keeping their plaintext restaurant_name exactly as it was at the
+    // moment of deletion, per the restaurant-delete design), but undelete
+    // never restored them back -- they stayed deleted_at-set forever,
+    // orphaned under that name, even after the restaurant itself came back.
+    // Restore them here too. Match on `decryptedName` (the name as stored
+    // right before this undelete, i.e. exactly what the orders were
+    // cascade-deleted under), NOT the suffix-stripped `originalName` --
+    // if this restaurant had been renamed (via the Rename feature) at any
+    // point before this particular delete, its orders carry THAT name, not
+    // the very first name it ever had.
+    await client.query(
+      "UPDATE orders SET restaurant_name = $1, deleted_at = NULL WHERE LOWER(restaurant_name) = LOWER($2) AND deleted_at IS NOT NULL",
+      [candidateName, decryptedName],
+    );
+
+    await client.query("COMMIT");
 
     logger.info(`POST /api/restaurants/${id}/undelete - restored as "${candidateName}"`);
     return NextResponse.json({ message: "Restaurant restored successfully", name: candidateName });

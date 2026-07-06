@@ -14,6 +14,19 @@ import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
 // route already treats status case-insensitively.
 const STATUS_ORDER = ["received", "preparing", "complete"];
 
+// Maps a status to the column that records the FIRST time an order ever
+// entered it -- unlike updated_at (overwritten on every change), these are
+// set once via COALESCE(column, NOW()) and never touched again, so admin/db
+// can compute how long an order actually spent in each individual status
+// after the fact (see lib/order-duration.ts). An admin forcing a backward
+// transition (God Mode override) does NOT erase a later status's already-
+// recorded timestamp -- COALESCE only fills in a column that's still null.
+const STATUS_TIMESTAMP_COLUMN: Record<string, string> = {
+  received: "received_at",
+  preparing: "preparing_at",
+  complete: "complete_at",
+};
+
 function isForwardTransition(current: string, next: string): boolean {
   const from = STATUS_ORDER.indexOf(current.toLowerCase());
   const to = STATUS_ORDER.indexOf(next.toLowerCase());
@@ -85,8 +98,13 @@ export async function PUT(
       );
     }
 
+    // Column name comes from a fixed lookup keyed by the already-validated
+    // lowercase status, never from raw user input -- safe to splice into
+    // the SQL text (there's no parameterized way to make a column name
+    // itself a bind variable).
+    const timestampColumn = STATUS_TIMESTAMP_COLUMN[status.toLowerCase()];
     const result = await query(
-      "UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2",
+      `UPDATE orders SET status = $1, updated_at = NOW(), ${timestampColumn} = COALESCE(${timestampColumn}, NOW()) WHERE id = $2`,
       [status, orderId],
     );
 

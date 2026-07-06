@@ -106,7 +106,10 @@ async function runInitDb() {
       status TEXT NOT NULL DEFAULT 'Received',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      deleted_at TIMESTAMPTZ
+      deleted_at TIMESTAMPTZ,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      preparing_at TIMESTAMPTZ,
+      complete_at TIMESTAMPTZ
     );
   `);
   await db.query(`
@@ -115,7 +118,8 @@ async function runInitDb() {
       name TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
       raw_password TEXT,
-      deleted_at TIMESTAMPTZ
+      deleted_at TIMESTAMPTZ,
+      complete_cap_hours REAL NOT NULL DEFAULT 12
     );
   `);
   // deleted_at didn't exist in earlier versions of this schema -- ADD COLUMN
@@ -123,6 +127,41 @@ async function runInitDb() {
   // unchanged against a database that already has these tables without it.
   await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
   await db.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
+  // Per-status entry timestamps, each set ONCE the first time an order
+  // enters that status (see the PUT /api/orders/[id] route) -- unlike
+  // updated_at (overwritten on every change), these let admin/db compute
+  // how long an order actually spent in each individual status after the
+  // fact, not just its most recent transition.
+  //
+  // received_at is added WITHOUT a NOT NULL/DEFAULT constraint here on
+  // purpose: `ALTER TABLE ... ADD COLUMN ... DEFAULT NOW()` backfills every
+  // *existing* row with the migration's own run-time, not each row's real
+  // creation time, which would be wrong history for any order that already
+  // existed before this column was added. Nullable-first + one explicit
+  // backfill from created_at (correct for every pre-existing row, since
+  // every order starts life as Received) + a separate follow-up ALTER to
+  // add the NOT NULL/DEFAULT constraint afterward gets both a correct
+  // backfill AND "free" received_at on every future INSERT.
+  await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ;`);
+  await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS preparing_at TIMESTAMPTZ;`);
+  await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS complete_at TIMESTAMPTZ;`);
+  await db.query(`UPDATE orders SET received_at = created_at WHERE received_at IS NULL;`);
+  await db.query(`ALTER TABLE orders ALTER COLUMN received_at SET NOT NULL;`);
+  await db.query(`ALTER TABLE orders ALTER COLUMN received_at SET DEFAULT NOW();`);
+  // Set by the customer tracker's "Order Picked Up" button once an order
+  // reaches Complete -- stops the Complete-duration counter early instead
+  // of always running to the kitchen's complete_cap_hours fallback. No
+  // auth beyond already knowing the restaurant+order name (same anonymous
+  // trust level as every other customer-tracker read/action -- this only
+  // lets someone stop a timer early, not see or change anything sensitive).
+  await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ;`);
+  // Per-kitchen fallback cap on the live-ticking Complete duration, in case
+  // a customer never clicks "Order Picked Up" -- REAL (not INTEGER) so a
+  // kitchen can set a fractional value (e.g. 0.5 for 30 minutes) if they
+  // want a tighter cap than a whole hour. Defaults to 12h, matching "who's
+  // picking up an order 12 hours later" as the deliberately generous
+  // fallback ceiling.
+  await db.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS complete_cap_hours REAL NOT NULL DEFAULT 12;`);
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_updated_at ON orders (updated_at);
   `);

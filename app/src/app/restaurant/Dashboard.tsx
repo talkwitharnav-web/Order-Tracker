@@ -328,7 +328,84 @@ const HomeTab: FC<{
               .length === 0 && <p className="text-[var(--color-text-muted)]">No orders match your search.</p>}
         </div>
       </Card>
+
+      <CompleteCapSettingCard restaurantName={restaurantName} onError={onError} />
     </div>
+  );
+};
+
+const COMPLETE_CAP_PRESETS = [
+  { label: "1 hour", hours: 1 },
+  { label: "6 hours", hours: 6 },
+  { label: "12 hours", hours: 12 },
+  { label: "24 hours", hours: 24 },
+];
+
+/**
+ * Self-service setting for how long the customer tracker's "time in
+ * Complete" counter runs before it caps, absent the customer explicitly
+ * clicking "Order Picked Up". Lives here (not admin/db) because this is
+ * meant to be each kitchen's own call, not something only an admin sets --
+ * see api/restaurants/by-name/[restaurantName]/settings, which is
+ * kitchen-authenticated for exactly this reason.
+ */
+const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: string) => void }> = ({
+  restaurantName,
+  onError,
+}) => {
+  const [hours, setHours] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchJson<{ completeCapHours: number }>(
+      `/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/settings`,
+    )
+      .then((data) => setHours(data.completeCapHours))
+      .catch(() => setHours(12));
+  }, [restaurantName]);
+
+  const handleChange = async (newHours: number) => {
+    setHours(newHours);
+    setSaving(true);
+    try {
+      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completeCapHours: newHours }),
+      });
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update setting");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (hours === null) return null;
+
+  return (
+    <Card>
+      <h3 className="text-xl font-bold text-[var(--color-text-primary)] mb-1">Order Pickup Window</h3>
+      <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+        How long the customer tracker counts time since an order was marked Complete, if the customer never taps
+        &ldquo;Order Picked Up&rdquo; themselves.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {COMPLETE_CAP_PRESETS.map((preset) => (
+          <button
+            key={preset.hours}
+            onClick={() => handleChange(preset.hours)}
+            disabled={saving}
+            className={`px-4 py-2 rounded-[var(--radius-sm)] text-sm font-medium border transition-colors disabled:opacity-60 ${
+              hours === preset.hours
+                ? "bg-[var(--color-brand)] border-[var(--color-brand)] text-white"
+                : "bg-[var(--color-surface-2)] border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+            }`}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+    </Card>
   );
 };
 

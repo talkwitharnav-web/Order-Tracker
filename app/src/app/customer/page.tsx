@@ -16,6 +16,7 @@ type Order = {
   order_number: string;
   status: CustomerOrderStatus;
   updated_at: string;
+  acknowledged_at: string | null;
 };
 
 const timeSince = (date: string) => {
@@ -59,7 +60,11 @@ const STATUS_DESCRIPTION: Record<StatusKey, string> = {
   complete: "Your order is ready. Come and get it!",
 };
 
-const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
+const OrderStatusCard: FC<{ order: Order; onAcknowledge: () => void; acknowledging: boolean }> = ({
+  order,
+  onAcknowledge,
+  acknowledging,
+}) => {
   const [lastUpdated, setLastUpdated] = useState(timeSince(order.updated_at));
 
   useEffect(() => {
@@ -70,6 +75,12 @@ const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
   const statusKey = normalizeStatus(order.status);
   const visual = getStatusVisual(order.status);
   const title = STATUS_TITLE[statusKey];
+  // "Order Picked Up" only makes sense once the order has actually reached
+  // Complete, and only until the customer has already clicked it once --
+  // acknowledged_at flows through the same GET response this page already
+  // polls/refetches on every WS update, so it disappears the moment the
+  // click lands, same as any other status change on this page.
+  const showAcknowledge = statusKey === "complete" && !order.acknowledged_at;
 
   return (
     <div
@@ -83,6 +94,14 @@ const OrderStatusCard: FC<{ order: Order }> = ({ order }) => {
       <p className="text-xs text-[var(--color-text-muted)] mt-6">
         Order &ldquo;{order.order_number}&rdquo; &bull; Last updated {lastUpdated}
       </p>
+      {showAcknowledge && (
+        <Button onClick={onAcknowledge} disabled={acknowledging} className="mt-6">
+          {acknowledging ? "Marking as picked up..." : "Order Picked Up"}
+        </Button>
+      )}
+      {order.acknowledged_at && (
+        <p className="text-xs text-[var(--color-success)] mt-4 font-medium">Marked as picked up. Enjoy your meal!</p>
+      )}
     </div>
   );
 };
@@ -111,6 +130,7 @@ export default function CustomerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
+  const [acknowledging, setAcknowledging] = useState(false);
   const orderRef = useRef<Order | null>(null);
   useEffect(() => {
     orderRef.current = order;
@@ -124,6 +144,19 @@ export default function CustomerPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
       setOrder(null);
+    }
+  };
+
+  const handleAcknowledge = async () => {
+    if (!order) return;
+    setAcknowledging(true);
+    try {
+      await fetchJson(`/api/orders/${order.id}/acknowledge`, { method: "POST" });
+      await fetchOrderStatus(order.restaurant_name, order.order_number);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark order as picked up");
+    } finally {
+      setAcknowledging(false);
     }
   };
 
@@ -264,7 +297,7 @@ export default function CustomerPage() {
 
           {order && (
             <>
-              <OrderStatusCard order={order} />
+              <OrderStatusCard order={order} onAcknowledge={handleAcknowledge} acknowledging={acknowledging} />
               <ConnectionIndicator state={connection} />
             </>
           )}
