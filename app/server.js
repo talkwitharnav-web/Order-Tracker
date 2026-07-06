@@ -62,6 +62,44 @@ function getLanAddress() {
   });
 }
 
+// Rehearsal for the eventual real public split (see MOBILE_MIGRATION_PLAN.md /
+// CLAUDE.md): visiting the server via localhost gets the full app (gateway,
+// admin/db, everything); visiting via any OTHER Host (the LAN IP today, a
+// real public subdomain later via Cloudflare Tunnel) only exposes the
+// customer tracker and kitchen portal -- bare "/" and admin/db 404 on that
+// host, "for public" is simulated locally before it's actually public. This
+// is genuinely the same mechanism a real deployment would use (checking the
+// Host/domain on each request), just keyed on a raw IP for now instead of a
+// real subdomain.
+const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+// Path prefixes a non-localhost Host is allowed to reach. Must include not
+// just the public-facing pages themselves but every API route those pages'
+// client-side code calls, and Next's own internal asset/runtime paths --
+// blocking those wouldn't hide anything extra, it would just break the
+// allowed pages (no CSS/JS, no session check, etc).
+const PUBLIC_ALLOWED_PREFIXES = [
+  "/customer",
+  "/restaurant",
+  "/api/orders",
+  "/api/restaurants",
+  "/api/session",
+  "/api/logout",
+  "/api/health",
+  "/_next",
+  "/favicon.ico",
+];
+
+function isRestrictedHost(hostHeader) {
+  if (!hostHeader) return false;
+  const hostname = hostHeader.split(":")[0].toLowerCase();
+  return !LOCALHOST_HOSTNAMES.has(hostname);
+}
+
+function isPubliclyAllowedPath(pathname) {
+  return PUBLIC_ALLOWED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`) || pathname.startsWith(`${prefix}?`));
+}
+
 const dev = process.env.NODE_ENV !== "production";
 // "0.0.0.0" (all network interfaces) instead of "localhost" so the server
 // accepts connections from other devices on the LAN (a phone running the
@@ -120,6 +158,14 @@ app.prepare().then(() => {
     // (see Node's DEP0169: url.parse() is inconsistent/unsafe on malformed
     // input in ways new URL() is not).
     const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+
+    if (isRestrictedHost(req.headers.host) && !isPubliclyAllowedPath(parsedUrl.pathname)) {
+      res.statusCode = 404;
+      res.setHeader("Content-Type", "text/plain");
+      res.end("404 Not Found");
+      return;
+    }
+
     handle(req, res, {
       pathname: parsedUrl.pathname,
       query: Object.fromEntries(parsedUrl.searchParams),

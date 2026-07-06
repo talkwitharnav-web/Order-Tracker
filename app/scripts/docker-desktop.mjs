@@ -67,9 +67,19 @@ async function ensureRunning() {
     return;
   }
 
-  console.log("[docker-desktop] Waiting for the Docker engine to become ready (this can take up to a minute on first launch)...");
-  const maxWaitMs = 90000;
+  console.log("[docker-desktop] Waiting for the Docker engine to become ready (this can take a while on first launch, or if the WSL2 VM is under memory pressure)...");
+  // 90s was too tight -- a genuinely slow-but-fine startup (low free RAM, a
+  // stale/orphaned WSL VM still cleaning up, first launch after a Windows
+  // update) can easily take longer than that, and hitting the old timeout
+  // hard-killed this whole script (exit 1), which then aborted db:up's
+  // "&& docker compose up" and start:all's "&& npm run dev" -- Docker was
+  // often fine 30-60s later, but the dev server never got a chance to start.
+  // 4 minutes gives real slow-start cases room to finish; the periodic
+  // progress line (instead of silence) makes it clear this is still trying,
+  // not hung.
+  const maxWaitMs = 240000;
   const pollMs = 2000;
+  const progressEveryMs = 20000;
   let waited = 0;
   while (waited < maxWaitMs) {
     await new Promise((r) => setTimeout(r, pollMs));
@@ -78,8 +88,18 @@ async function ensureRunning() {
       console.log("[docker-desktop] Docker engine is ready.");
       return;
     }
+    if (waited % progressEveryMs === 0) {
+      console.log(`[docker-desktop] Still waiting... (${Math.round(waited / 1000)}s elapsed)`);
+    }
   }
-  console.error("[docker-desktop] Docker engine did not become ready within 90s. Check Docker Desktop manually.");
+  console.error(
+    "[docker-desktop] Docker engine did not become ready within 4 minutes.\n" +
+    "  This usually means the WSL2 VM is stuck (often from an orphaned VM left over from a previous session\n" +
+    "  eating memory it needs to boot into). Try:\n" +
+    "    1. Open Task Manager and check free memory -- Docker's WSL2 VM needs a few GB free to start.\n" +
+    "    2. Run 'wsl --shutdown' in a terminal to cleanly reset WSL, then reopen Docker Desktop.\n" +
+    "    3. If it's still stuck, check Docker Desktop's own window for an error message.",
+  );
   process.exit(1);
 }
 
