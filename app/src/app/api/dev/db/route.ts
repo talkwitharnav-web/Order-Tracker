@@ -29,10 +29,18 @@ export async function GET() {
     // Deleted restaurants' names are encrypted at rest (see lib/crypto.ts) so
     // the live UNIQUE index frees up their name immediately -- decrypt here
     // purely for admin display in the Deleted view, never written back.
-    const deletedRestaurants = deletedRestaurantRows.map((r) => ({
-      ...r,
-      name: decryptFromStorage(r.name),
-    }));
+    // Guarded per-row: a single undecryptable name (e.g. the encryption key
+    // was rotated by an unpersisted-key fallback since that row was
+    // deleted -- see crypto.ts's loadOrCreateKey) must not throw and take
+    // down this entire endpoint's live data along with it.
+    const deletedRestaurants = deletedRestaurantRows.map((r) => {
+      try {
+        return { ...r, name: decryptFromStorage(r.name) };
+      } catch (err) {
+        logger.error(`GET /api/dev/db - failed to decrypt name for deleted restaurant id=${r.id}`, err);
+        return { ...r, name: "[undecryptable]" };
+      }
+    });
 
     logger.info("GET /api/dev/db - data fetched");
 

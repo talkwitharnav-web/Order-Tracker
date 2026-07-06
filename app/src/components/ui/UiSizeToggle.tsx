@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FC } from "react";
+import { useState, useEffect, FC } from "react";
 
 type UiSize = "small" | "medium" | "big";
 
@@ -19,13 +19,23 @@ const SIZES: { value: UiSize; label: string }[] = [
  * rush-hour readability on a device that's rarely, if ever, turned off.
  */
 function getAppliedSize(): UiSize {
-  if (typeof document === "undefined") return "medium";
   const attr = document.documentElement.getAttribute("data-ui-size");
   return attr === "small" || attr === "big" ? attr : "medium";
 }
 
 export const UiSizeToggle: FC<{ className?: string }> = ({ className }) => {
-  const [size, setSize] = useState<UiSize>(getAppliedSize);
+  // Starts null (server and first client render always agree on "unknown"),
+  // then syncs to whatever size the no-flash script already applied to
+  // <html> from localStorage — same pattern as ThemeToggle. Reading
+  // document.* during the initial render (even via a useState lazy
+  // initializer) diverges from SSR's "no document" state whenever the
+  // persisted size isn't "medium", which trips a real, deterministic
+  // hydration mismatch on aria-pressed/className for every button here.
+  const [size, setSize] = useState<UiSize | null>(null);
+
+  useEffect(() => {
+    setSize(getAppliedSize());
+  }, []);
 
   const applySize = (next: UiSize) => {
     setSize(next);
@@ -36,6 +46,10 @@ export const UiSizeToggle: FC<{ className?: string }> = ({ className }) => {
     }
     localStorage.setItem("uiSize", next);
   };
+
+  if (size === null) {
+    return <div aria-hidden className={`w-[84px] h-8 ${className ?? ""}`} />;
+  }
 
   return (
     <div role="group" aria-label="Interface size" className={`flex items-center ${className ?? ""}`}>

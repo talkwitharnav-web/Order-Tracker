@@ -56,7 +56,7 @@ export default function RestaurantLoginPage() {
         <button
           type="button"
           onClick={() => router.push("/restaurant/home")}
-          className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
+          className="inline-block py-3 text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
         >
           &larr; Back to Kitchen Portal
         </button>

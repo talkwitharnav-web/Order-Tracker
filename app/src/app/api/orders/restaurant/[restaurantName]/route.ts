@@ -26,12 +26,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
     let sql = `SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND deleted_at IS NULL`;
     const queryParams: any[] = [escapeLikePattern(restaurantName)];
 
-    if (status && ["Received", "Making", "Finished"].includes(status)) {
-      sql += ` AND status = $2`;
+    // Stored status values are always the Kitchen/API vocabulary
+    // (Received|Preparing|Complete, case-insensitive on write per
+    // orders/[id]/route.ts) -- see SYSTEM_MEMORY.md's status-vocab-mismatch
+    // quirk. This previously checked against the Customer vocabulary
+    // (Received|Making|Finished), which never matches a real stored value,
+    // so an explicit ?status= filter always fell through to the "ignore
+    // filter" branch, and that branch's own 'Finished' cutoff check was
+    // always true (no row is ever literally 'Finished'), so completed
+    // orders never actually aged out of the default view.
+    if (status && ["Received", "Preparing", "Complete"].includes(status)) {
+      sql += ` AND status ILIKE $2`;
       queryParams.push(status);
     } else {
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      sql += ` AND (status != 'Finished' OR (status = 'Finished' AND updated_at > $2))`;
+      sql += ` AND (status NOT ILIKE 'Complete' OR updated_at > $2)`;
       queryParams.push(fiveMinutesAgo);
     }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { requireAnyAuthenticated } from "@/lib/auth";
+import { requireAnyAuthenticated, isAdminRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export type HealthTier = "healthy" | "ok" | "bad" | "terrible";
@@ -56,8 +56,13 @@ export async function GET(request: Request) {
     const sizeResult = await pool.query<{ size: string }>("SELECT pg_database_size(current_database())::text AS size");
     dbSizeBytes = Number(sizeResult.rows[0]?.size ?? null) || null;
   } catch (err) {
-    dbError = err instanceof Error ? err.message : "Unknown DB error";
+    // Full error text (which can include internal connection details) is
+    // always logged server-side, but only echoed to the caller when they're
+    // an admin -- a self-registered kitchen account can see the DB is down
+    // (tier: "terrible") without also being handed raw driver error strings.
     logger.error("GET /api/health - DB check failed", err);
+    const rawMessage = err instanceof Error ? err.message : "Unknown DB error";
+    dbError = (await isAdminRequest()) ? rawMessage : "Database check failed";
   }
 
   const globalForWs = globalThis as unknown as { __orderTrackerWsClients?: Set<unknown> };

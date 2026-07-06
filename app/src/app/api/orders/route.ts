@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, escapeLikePattern } from "@/lib/validate";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
@@ -34,6 +35,19 @@ export async function POST(request: Request) {
 
     const auth = await requireRestaurantOrAdmin(restaurant_name);
     if (!auth.ok) return auth.response;
+
+    // Keyed per-restaurant (not per-IP) -- a legitimately busy kitchen
+    // behind one NAT'd connection shouldn't get throttled like an
+    // attacker, but no real kitchen creates orders faster than this
+    // sustained (30/min = one every 2s). Admin isn't exempt: if an admin
+    // is scripting order creation that fast, it's not a real order either.
+    if (!checkRateLimit(`orders-create:${restaurant_name.toLowerCase()}`, { windowMs: 60_000, maxAttempts: 30 })) {
+      logger.warn("POST /api/orders - rate limited", { restaurant_name });
+      return NextResponse.json(
+        { error: "Too many orders created too quickly. Slow down a moment." },
+        { status: 429 },
+      );
+    }
 
     let id: number;
     try {
@@ -85,11 +99,19 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   logger.info("GET /api/orders - request received");
+
+  // Anonymous, public lookup (duplicate of /api/orders/search) -- same
+  // rate limit as that route and /api/restaurants/suggest, since this is
+  // an equally valid way to enumerate order/restaurant names otherwise.
+  if (!checkRateLimit(`orders-search:${getClientIp(request)}`, { windowMs: 60_000, maxAttempts: 120 })) {
+    return NextResponse.json({ error: "Too many requests. Slow down a moment." }, { status: 429 });
+  }
+
   try {
     await initDb();
     const { searchParams } = new URL(request.url);
-    const restaurant_name = searchParams.get("restaurant_name");
-    const order_number = searchParams.get("order_number");
+    const restaurant_name = requireString(searchParams.get("restaurant_name"));
+    const order_number = requireString(searchParams.get("order_number"));
 
     logger.info("GET /api/orders - tracking order", {
       restaurant_name,

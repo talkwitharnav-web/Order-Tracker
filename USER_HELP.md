@@ -278,14 +278,16 @@ None of these require an account or affect other users — they're a personal pr
 
 ---
 
-## 6b. Deleting Things Isn't Really Deleting Anymore
+## 6b. Deleting Things: Kitchen Delete Is Recoverable, Admin Delete Is Permanent
 
-As of 2026-07, deleting an order or a restaurant in the app (from the Kitchen Dashboard or Admin panel) no longer actually erases it from the database — it just hides it from normal view. The record is kept, encrypted where it makes sense (a deleted restaurant's name is scrambled so a new restaurant can immediately reuse that name), and can be brought back.
+**From the Kitchen Dashboard**, deleting an order doesn't actually erase it — it just hides it from normal view. The record is kept and can be brought back by an admin.
 
-- **In Admin → Access DB**, click the **"Deleted"** button near the top to reveal a "Deleted Restaurants" section and see deleted orders mixed into the main Orders table (shown greyed-out with a "Deleted" tag). Each has a restore (circular arrow) button.
-- **Restoring a restaurant** brings its orders back too. If its original name has since been taken by someone else, it comes back as `OriginalName-restored` (or `-restored2`, etc. if that's also taken).
-- **The only thing that permanently erases data is the "Purge Database" button** in Admin → Access DB — that one really is irreversible, same as before.
-- Renaming a kitchen (new pencil-icon button next to Reset Password in Access DB) also updates all of that kitchen's existing orders to match. If that kitchen was logged in somewhere at the time, that device will need to log back in with the new name — the old login session won't carry over automatically.
+**From Admin → Access DB**, deleting a restaurant or an order is immediate and permanent — it's really gone, same as Purge, just scoped to one row instead of everything.
+
+- **In Admin → Access DB**, click the **"Deleted"** button near the top to reveal a "Deleted Restaurants" section and see kitchen-deleted orders mixed into the main Orders table (shown greyed-out with a "Deleted" tag). Each has a restore (circular arrow) button — this only ever shows things a kitchen deleted, never something an admin deleted, since those are already gone for good.
+- **Restoring a restaurant** (only ever a kitchen-side soft-delete from before this behavior existed) brings its orders back too. If its original name has since been taken by someone else, it comes back as `OriginalName-restored` (or `-restored2`, etc. if that's also taken).
+- **"Purge Database"** in Admin → Access DB still wipes everything at once, irreversibly, same as before.
+- Renaming a kitchen (pencil-icon button next to Reset Password in Access DB) also updates all of that kitchen's existing orders to match. If that kitchen was logged in somewhere at the time, that device will need to log back in with the new name — the old login session won't carry over automatically.
 
 ## 6c. Order Timing & Pickup Window
 

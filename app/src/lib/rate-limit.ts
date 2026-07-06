@@ -10,6 +10,24 @@ const attempts = new Map<string, { count: number; windowStart: number }>();
 const DEFAULT_WINDOW_MS = 60_000;
 const DEFAULT_MAX_ATTEMPTS = 10;
 
+// Entries are only ever overwritten when the SAME key is seen again after
+// its window expires -- a key from a client that never comes back (a
+// one-off visitor's IP, a scripted attacker who moves on) stays in the Map
+// forever otherwise, an unbounded memory leak on a long-lived process. A
+// generous stale threshold (10x the longest window any call site uses)
+// keeps this sweep cheap and rare without needing per-call-site tuning.
+const STALE_ENTRY_MS = 10 * 60_000;
+const SWEEP_INTERVAL_MS = 5 * 60_000;
+
+let lastSweep = Date.now();
+function sweepStaleEntries(now: number): void {
+  if (now - lastSweep < SWEEP_INTERVAL_MS) return;
+  lastSweep = now;
+  for (const [key, entry] of attempts) {
+    if (now - entry.windowStart > STALE_ENTRY_MS) attempts.delete(key);
+  }
+}
+
 /**
  * Returns true if the request should be allowed, false if rate-limited.
  * Login/register routes rely on the default (10/min) — a tight cap makes
@@ -26,6 +44,7 @@ export function checkRateLimit(
   const windowMs = options?.windowMs ?? DEFAULT_WINDOW_MS;
   const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const now = Date.now();
+  sweepStaleEntries(now);
   const entry = attempts.get(key);
 
   if (!entry || now - entry.windowStart > windowMs) {

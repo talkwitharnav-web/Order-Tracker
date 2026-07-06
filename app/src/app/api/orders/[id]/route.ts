@@ -156,20 +156,22 @@ export async function DELETE(
     const auth = await requireRestaurantOrAdmin(existing.rows[0].restaurant_name);
     if (!auth.ok) return auth.response;
 
-    // Soft-delete: the row is kept (visible only in admin/db's Deleted view),
-    // never actually removed by this route -- only the admin Purge action
-    // performs a real DELETE. From the caller's point of view this is
-    // indistinguishable from a real delete (same response, same broadcast,
-    // disappears from every normal view), preserved deliberately so a
-    // deleted order remains available for later review.
-    const result = await query("UPDATE orders SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL", [orderId]);
+    // Admin deletes are real/permanent (matches the Purge button's
+    // semantics — an admin choosing to delete a specific row means it's
+    // actually gone, not just hidden). A kitchen deleting its own order
+    // still soft-deletes (deleted_at), recoverable via admin/db's Deleted
+    // view, same as before — this asymmetry is intentional, not a bug.
+    const isAdmin = await isAdminRequest();
+    const result = isAdmin
+      ? await query("DELETE FROM orders WHERE id = $1", [orderId])
+      : await query("UPDATE orders SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL", [orderId]);
 
     if (result.rowCount === 0) {
       logger.warn(`DELETE /api/orders/${orderId} - order not found`);
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    logger.info(`DELETE /api/orders/${orderId} - order soft-deleted successfully`);
+    logger.info(`DELETE /api/orders/${orderId} - order ${isAdmin ? "permanently deleted" : "soft-deleted"} successfully`);
 
     broadcast({
       type: "order_deleted",

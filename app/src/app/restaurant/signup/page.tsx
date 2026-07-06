@@ -59,7 +59,7 @@ export default function RestaurantSignupPage() {
       footer={
         <Link
           href="/restaurant/login"
-          className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
+          className="inline-block py-3 text-[var(--color-text-secondary)] hover:text-[var(--color-brand-text)] transition-colors"
         >
           Already have an account? Login
         </Link>
