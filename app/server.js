@@ -1,6 +1,66 @@
 const { createServer } = require("http");
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- this file is a plain CJS Node entrypoint, same as the requires above/below
+const dgram = require("dgram");
 const next = require("next");
 const { WebSocketServer } = require("ws");
+
+// True for an IPv4 address in one of the private/LAN ranges (10.0.0.0/8,
+// 172.16.0.0/12, 192.168.0.0/16) or a Node-reported IPv4-mapped-IPv6 form of
+// one of those ("::ffff:192.168.1.5", which is how req.socket.remoteAddress
+// often reports an IPv4 peer on a dual-stack socket). Used to allow the
+// Origin-less WebSocket handshake a non-browser client (the Expo/React
+// Native app) sends -- browsers always send Origin, so a request with none
+// at all is either a same-network trusted dev client or a random internet
+// script; restricting the exception to private-range source IPs keeps the
+// public-internet protection intact (see the Origin check below) while
+// unblocking the one legitimate non-browser case this app now has.
+function isPrivateLanIp(address) {
+  if (!address) return false;
+  const ip = address.startsWith("::ffff:") ? address.slice(7) : address;
+  const parts = ip.split(".");
+  if (parts.length !== 4) return false;
+  const octets = parts.map(Number);
+  if (octets.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return false;
+  const [a, b] = octets;
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
+// Determines the real WiFi/Ethernet LAN IP to print at startup -- printing
+// "0.0.0.0" (what the server actually binds to) would be useless as an
+// address to visit from another device, since 0.0.0.0 isn't a real reachable
+// address, just "listen on every interface". A dev machine commonly has
+// several *other* non-internal IPv4 adapters too (VirtualBox host-only,
+// Hyper-V/WSL virtual switches, VPN clients) that are NOT reachable from a
+// phone on the same WiFi -- os.networkInterfaces() exposes no reliable way
+// to tell those apart from the real LAN adapter (adapter *names* are not a
+// reliable signal: a VirtualBox host-only adapter on this machine is
+// literally named "Ethernet 4", indistinguishable by name from a real
+// Ethernet/WiFi adapter). Instead, this opens a UDP "connection" to a public
+// address (no packets are actually sent -- UDP connect() is just a local
+// routing-table lookup) and reads back which local address the OS would
+// route through to reach the internet, which is always the real LAN-facing
+// adapter, not a virtual one.
+function getLanAddress() {
+  return new Promise((resolve) => {
+    const socket = dgram.createSocket("udp4");
+    socket.once("error", () => {
+      socket.close();
+      resolve(null);
+    });
+    try {
+      socket.connect(80, "8.8.8.8", () => {
+        const address = socket.address().address;
+        socket.close();
+        resolve(address);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
 
 const dev = process.env.NODE_ENV !== "production";
 // "0.0.0.0" (all network interfaces) instead of "localhost" so the server
@@ -105,11 +165,14 @@ app.prepare().then(() => {
       // data for every restaurant, so this stops arbitrary sites (and,
       // crucially, non-browser clients that omit Origin entirely) from
       // connecting and passively listening in. Browsers always send Origin
-      // on a WS handshake; a missing Origin means a non-browser caller, not
-      // a legitimate same-origin page, so it's rejected too now (previously
-      // the check only ran when Origin was present, which let any script
-      // that simply didn't set the header straight through — see
-      // SECURITY_ATTACK_LOG.md F7).
+      // on a WS handshake; a missing Origin means a non-browser caller, so
+      // it's rejected too UNLESS the connection is coming from a private LAN
+      // IP (see isPrivateLanIp above) -- that's the Expo/React Native mobile
+      // app on the same home network, the one legitimate non-browser client
+      // this app now has, and a random internet attacker can never appear to
+      // originate from a private IP address (see SECURITY_ATTACK_LOG.md F7
+      // for the original vulnerability this check closes).
+      const ip = req.socket.remoteAddress || "unknown";
       const origin = req.headers.origin;
       const allowedHost = req.headers.host;
       let originHost = null;
@@ -120,12 +183,13 @@ app.prepare().then(() => {
           originHost = null;
         }
       }
-      if (!origin || !allowedHost || originHost !== allowedHost) {
+      const originOk = !!origin && !!allowedHost && originHost === allowedHost;
+      const lanClientNoOrigin = !origin && isPrivateLanIp(ip);
+      if (!originOk && !lanClientNoOrigin) {
         socket.destroy();
         return;
       }
 
-      const ip = req.socket.remoteAddress || "unknown";
       if ((wsConnectionsByIp.get(ip) || 0) >= MAX_WS_CONNECTIONS_PER_IP) {
         socket.destroy();
         return;
@@ -140,7 +204,13 @@ app.prepare().then(() => {
     }
   });
 
-  server.listen(port, () => {
-    console.log(`> Ready on http://${hostname}:${port} (ws endpoint: /ws)`);
+  server.listen(port, hostname, async () => {
+    console.log(`> Ready on http://localhost:${port} (ws endpoint: /ws)`);
+    if (hostname === "0.0.0.0") {
+      const lanAddress = await getLanAddress();
+      if (lanAddress) {
+        console.log(`> Also reachable on your network at http://${lanAddress}:${port}`);
+      }
+    }
   });
 });
