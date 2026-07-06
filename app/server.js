@@ -3,7 +3,13 @@ const next = require("next");
 const { WebSocketServer } = require("ws");
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = "localhost";
+// "0.0.0.0" (all network interfaces) instead of "localhost" so the server
+// accepts connections from other devices on the LAN (a phone running the
+// Expo/React Native app, another laptop/tablet for testing) -- "localhost"
+// only accepts connections originating from this machine itself. Windows
+// Firewall must also allow inbound traffic on `port` for this to actually
+// be reachable from another device -- see USER_HELP.md.
+const hostname = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT) || 3000;
 
 const app = next({ dev, hostname, port });
