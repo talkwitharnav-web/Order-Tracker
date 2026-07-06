@@ -55,7 +55,7 @@ export async function GET(req: Request) {
     const result = await query<{ name: string }>(
       `
       SELECT name FROM restaurants
-      WHERE name ILIKE $1
+      WHERE name ILIKE $1 AND deleted_at IS NULL
       ORDER BY
         CASE
           WHEN name ILIKE $2 THEN 0

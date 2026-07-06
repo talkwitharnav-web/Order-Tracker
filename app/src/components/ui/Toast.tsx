@@ -158,8 +158,8 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
             </div>
           ) : (
             <div
-              className="relative cursor-pointer w-full"
-              style={{ height: 76, maxWidth: 320 }}
+              className="relative cursor-pointer w-80 max-w-full"
+              style={{ height: 76 }}
               onClick={() => setExpanded(true)}
               role="button"
               tabIndex={0}

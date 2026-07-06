@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     }
 
     const result = await query(
-      "SELECT * FROM restaurants WHERE name ILIKE $1",
+      "SELECT * FROM restaurants WHERE name ILIKE $1 AND deleted_at IS NULL",
       [escapeLikePattern(name)],
     );
     const restaurant = result.rows[0];

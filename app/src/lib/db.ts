@@ -105,7 +105,8 @@ async function runInitDb() {
       restaurant_name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'Received',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
     );
   `);
   await db.query(`
@@ -113,24 +114,38 @@ async function runInitDb() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      raw_password TEXT
+      raw_password TEXT,
+      deleted_at TIMESTAMPTZ
     );
   `);
+  // deleted_at didn't exist in earlier versions of this schema -- ADD COLUMN
+  // IF NOT EXISTS makes both of the CREATE TABLEs above safe to run again
+  // unchanged against a database that already has these tables without it.
+  await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
+  await db.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`);
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_updated_at ON orders (updated_at);
   `);
   // Case-insensitive uniqueness: prevents the same order (e.g. "ASDF"/"asdf")
   // being created twice for a restaurant regardless of which client (Kitchen
-  // vs Customer) normalized casing differently.
+  // vs Customer) normalized casing differently. Scoped to live (non-deleted)
+  // orders only -- a soft-deleted "ORD1" must not block a brand new "ORD1"
+  // from being created for the same restaurant.
+  await db.query(`DROP INDEX IF EXISTS idx_orders_unique_restaurant_order;`);
   await db.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_unique_restaurant_order
-    ON orders (LOWER(restaurant_name), LOWER(order_number));
+    ON orders (LOWER(restaurant_name), LOWER(order_number)) WHERE deleted_at IS NULL;
   `);
   // Same reasoning as above, applied to restaurant registration: the plain
   // UNIQUE on name is case-sensitive, so "Golden Spoon" and "GOLDEN SPOON"
-  // could otherwise both register and desync login/lookup behavior.
+  // could otherwise both register and desync login/lookup behavior. Scoped
+  // to live restaurants only -- a soft-deleted restaurant's name is stored
+  // encrypted (see lib/crypto.ts), not as plaintext, specifically so it
+  // never collides with this index and a new registration can reuse the
+  // name immediately.
+  await db.query(`DROP INDEX IF EXISTS idx_restaurants_unique_name_ci;`);
   await db.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurants_unique_name_ci
-    ON restaurants (LOWER(name));
+    ON restaurants (LOWER(name)) WHERE deleted_at IS NULL;
   `);
 }

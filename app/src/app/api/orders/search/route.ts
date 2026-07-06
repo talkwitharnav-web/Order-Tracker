@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     }
 
     const result = await query(
-      "SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 ORDER BY created_at DESC LIMIT 1",
+      "SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
       [escapeLikePattern(restaurantName), escapeLikePattern(orderNumber)],
     );
     const order = result.rows[0];

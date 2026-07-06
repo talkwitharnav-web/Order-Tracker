@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     // Check if restaurant already exists (case-insensitive, matches how
     // order lookups treat restaurant_name — see SYSTEM_MEMORY.md)
     const existing = await query(
-      "SELECT * FROM restaurants WHERE name ILIKE $1",
+      "SELECT * FROM restaurants WHERE name ILIKE $1 AND deleted_at IS NULL",
       [escapeLikePattern(name)],
     );
     if (existing.rows[0]) {

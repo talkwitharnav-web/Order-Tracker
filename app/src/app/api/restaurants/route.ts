@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 
 export async function GET() {
   try {
-    const result = await query<{ count: string }>("SELECT COUNT(*) FROM restaurants");
+    const result = await query<{ count: string }>("SELECT COUNT(*) FROM restaurants WHERE deleted_at IS NULL");
     const count = Number(result.rows[0].count);
     return NextResponse.json({ count });
   } catch (err) {

@@ -7,8 +7,14 @@ export const AuthCard: FC<{
   children: ReactNode;
   error?: string | null;
   footer?: ReactNode;
-}> = ({ title, onSubmit, children, error, footer }) => (
-  <div className="min-h-screen flex items-center justify-center p-4">
+  // Standalone auth pages need AuthCard to claim the full viewport height
+  // itself (min-h-screen). The gateway page nests it inside its own
+  // flex-1 column alongside GatewayMobileNav, where min-h-screen here
+  // would stack with the nav bar's height and overflow the viewport —
+  // that page passes fillParent so AuthCard just fills its flex parent.
+  fillParent?: boolean;
+}> = ({ title, onSubmit, children, error, footer, fillParent }) => (
+  <div className={`${fillParent ? "flex-1" : "min-h-screen"} flex items-center justify-center p-4`}>
     <main className="w-full max-w-md mx-auto">
       <Card className="p-6 sm:p-10">
         <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mb-8 text-center">

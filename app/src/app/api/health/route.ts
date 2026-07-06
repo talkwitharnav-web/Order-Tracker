@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAnyAuthenticated } from "@/lib/auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export type HealthTier = "healthy" | "ok" | "bad" | "terrible";
 
@@ -13,7 +14,19 @@ export type HealthTier = "healthy" | "ok" | "bad" | "terrible";
 const LATENCY_OK_MS = 50;
 const LATENCY_BAD_MS = 300;
 
-export async function GET() {
+// HealthPin's own polling is only ever every 1.5s at its fastest (while the
+// popover is actively hovered/tapped) — but that's a client-side courtesy,
+// not an enforcement mechanism. Any authenticated caller (any registered
+// kitchen account, free to create) could script requests to this route far
+// faster than that, and each call does 2 real Postgres round-trips
+// (SELECT 1 + pg_database_size), so an unthrottled loop here is a real way
+// to load the DB pool under the guise of "just checking health". Capped
+// generously above the legitimate 1.5s client cadence so real usage is
+// never affected, only a scripted hammer is.
+const RATE_LIMIT_WINDOW_MS = 10_000;
+const RATE_LIMIT_MAX_REQUESTS = 20;
+
+export async function GET(request: Request) {
   // Any logged-in caller (admin or a kitchen) can read this — it exposes no
   // restaurant-specific data, just aggregate server/DB signals, so there's
   // nothing to scope per-restaurant the way order routes are. Still fully
@@ -22,6 +35,11 @@ export async function GET() {
   // devtools — only a real, valid session cookie gets a response.
   const auth = await requireAnyAuthenticated();
   if (!auth.ok) return auth.response;
+
+  const ip = getClientIp(request);
+  if (!checkRateLimit(`health:${ip}`, { windowMs: RATE_LIMIT_WINDOW_MS, maxAttempts: RATE_LIMIT_MAX_REQUESTS })) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
 
   const pool = getPool();
   const started = Date.now();

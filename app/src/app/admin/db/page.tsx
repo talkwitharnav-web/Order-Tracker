@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Database, Trash2, Key, ShieldAlert } from "lucide-react";
+import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -12,6 +12,8 @@ import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
+import { RestaurantFilterDropdown } from "@/components/ui/RestaurantFilterDropdown";
+import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 interface Restaurant {
@@ -27,6 +29,43 @@ interface Order {
   order_number: string;
   status: string;
   created_at: string;
+}
+
+type OrderRow = Order & { isDeleted: boolean };
+
+type SortDirection = "asc" | "desc";
+type OrderSortKey = "id" | "created_at";
+
+/** Reusable sortable <th> -- click cycles asc -> desc -> off (no sort). */
+function SortableHeader({
+  label,
+  sortKey,
+  activeSort,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  sortKey: OrderSortKey;
+  activeSort: { key: OrderSortKey; direction: SortDirection } | null;
+  onSort: (key: OrderSortKey) => void;
+  className?: string;
+}) {
+  const isActive = activeSort?.key === sortKey;
+  const Icon = isActive ? (activeSort!.direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th scope="col" className={`py-3 px-4 text-left text-[var(--color-text-muted)] font-medium ${className}`}>
+      <button
+        onClick={() => onSort(sortKey)}
+        className={`flex items-center gap-1.5 hover:text-[var(--color-text-primary)] transition-colors ${
+          isActive ? "text-[var(--color-text-primary)]" : ""
+        }`}
+        aria-label={`Sort by ${label}${isActive ? ` (currently ${activeSort!.direction}ending)` : ""}`}
+      >
+        {label}
+        <Icon size={14} className="shrink-0" />
+      </button>
+    </th>
+  );
 }
 
 interface ConfirmState {
@@ -50,6 +89,14 @@ function AdminDbContent() {
   const showToast = useToast();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [deletedRestaurants, setDeletedRestaurants] = useState<Restaurant[]>([]);
+  const [deletedOrders, setDeletedOrders] = useState<Order[]>([]);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [restaurantSearch, setRestaurantSearch] = useState("");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderRestaurantFilter, setOrderRestaurantFilter] = useState<string[]>([]);
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string[]>([]);
+  const [orderSort, setOrderSort] = useState<{ key: OrderSortKey; direction: SortDirection } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmState, setConfirmState] = useState<ConfirmState>(EMPTY_CONFIRM);
   const [passwordResetTarget, setPasswordResetTarget] = useState<number | null>(null);
@@ -57,9 +104,16 @@ function AdminDbContent() {
 
   const fetchData = useCallback(async () => {
     try {
-      const data = await fetchJson<{ restaurants: Restaurant[]; orders: Order[] }>("/api/dev/db");
+      const data = await fetchJson<{
+        restaurants: Restaurant[];
+        orders: Order[];
+        deletedRestaurants: Restaurant[];
+        deletedOrders: Order[];
+      }>("/api/dev/db");
       setRestaurants(data.restaurants);
       setOrders(data.orders);
+      setDeletedRestaurants(data.deletedRestaurants);
+      setDeletedOrders(data.deletedOrders);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     } finally {
@@ -134,18 +188,35 @@ function AdminDbContent() {
     });
   };
 
-  const handleDelete = (type: "restaurant" | "order", id: number) => {
+  const deleteNow = (type: "restaurant" | "order", id: number) =>
+    performAction(
+      () => fetchWithRetry(`/api/${type}s/${id}`, { method: "DELETE" }),
+      `${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`,
+    );
+
+  // Holding Shift while clicking Delete skips the confirmation modal --
+  // deliberately holding an extra key already signals intent, so the modal
+  // would just be friction at that point. Same pattern as the Kitchen
+  // Dashboard's delete buttons.
+  const handleDelete = (type: "restaurant" | "order", id: number, skipConfirm: boolean) => {
+    if (skipConfirm) {
+      deleteNow(type, id);
+      return;
+    }
     setConfirmState({
       isOpen: true,
       title: `Delete ${type}`,
       message: `Are you sure you want to delete this ${type}? This cannot be undone.`,
       danger: true,
-      onConfirm: () =>
-        performAction(
-          () => fetchWithRetry(`/api/${type}s/${id}`, { method: "DELETE" }),
-          `${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`,
-        ),
+      onConfirm: () => deleteNow(type, id),
     });
+  };
+
+  const handleUndelete = (type: "restaurant" | "order", id: number) => {
+    performAction(
+      () => fetchWithRetry(`/api/${type}s/${id}/undelete`, { method: "POST" }),
+      `${type.charAt(0).toUpperCase() + type.slice(1)} restored successfully!`,
+    );
   };
 
   const handleStatusChange = (orderId: number, newStatus: string) => {
@@ -178,6 +249,46 @@ function AdminDbContent() {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
   };
+
+  const handleSort = (key: OrderSortKey) => {
+    setOrderSort((prev) => {
+      if (!prev || prev.key !== key) return { key, direction: "asc" };
+      if (prev.direction === "asc") return { key, direction: "desc" };
+      return null; // third click clears the sort
+    });
+  };
+
+  // Merged view of live + (optionally) deleted orders, tagged with
+  // isDeleted so the table can render them inline (deleted rows visually
+  // muted, undelete instead of delete/status-change) rather than needing a
+  // separate section -- lets one search/filter/sort apply across both.
+  const allOrderRows: OrderRow[] = [
+    ...orders.map((o) => ({ ...o, isDeleted: false })),
+    ...(showDeleted ? deletedOrders.map((o) => ({ ...o, isDeleted: true })) : []),
+  ];
+
+  const visibleOrderRows = allOrderRows
+    .filter((o) => {
+      const q = orderSearch.trim().toLowerCase();
+      const matchesSearch = o.order_number.toLowerCase().includes(q);
+      const matchesRestaurant =
+        orderRestaurantFilter.length === 0 || orderRestaurantFilter.includes(o.restaurant_name);
+      const matchesStatus =
+        orderStatusFilter.length === 0 ||
+        (o.isDeleted && orderStatusFilter.includes("Deleted")) ||
+        (!o.isDeleted && orderStatusFilter.includes(o.status));
+      return matchesSearch && matchesRestaurant && matchesStatus;
+    })
+    .sort((a, b) => {
+      if (!orderSort) return 0;
+      const dir = orderSort.direction === "asc" ? 1 : -1;
+      if (orderSort.key === "id") return (a.id - b.id) * dir;
+      return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
+    });
+
+  const allRestaurantNames = Array.from(
+    new Set([...orders, ...deletedOrders].map((o) => o.restaurant_name)),
+  );
 
   if (isLoading) {
     return (
@@ -235,6 +346,10 @@ function AdminDbContent() {
                 <Database size={16} />
                 Seed Database
               </Button>
+              <Button variant={showDeleted ? "primary" : "secondary"} onClick={() => setShowDeleted((v) => !v)}>
+                <RotateCcw size={16} />
+                Deleted ({deletedRestaurants.length + deletedOrders.length})
+              </Button>
               <Button variant="danger" onClick={handlePurge}>
                 <ShieldAlert size={16} />
                 Purge Database
@@ -247,7 +362,20 @@ function AdminDbContent() {
         />
 
         <section className="mb-10">
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">Restaurants</h2>
+          <div className="flex items-center justify-between mb-3 gap-4">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Restaurants</h2>
+            <div className="relative w-full max-w-xs">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
+              <Input
+                type="text"
+                value={restaurantSearch}
+                onChange={(e) => setRestaurantSearch(e.target.value)}
+                placeholder="Search restaurants..."
+                aria-label="Search restaurants"
+                className="pl-9"
+              />
+            </div>
+          </div>
           <Card className="p-0 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
@@ -276,7 +404,9 @@ function AdminDbContent() {
                 </tr>
               </thead>
               <tbody>
-                {restaurants.map((r) => (
+                {restaurants
+                  .filter((r) => r.name.toLowerCase().includes(restaurantSearch.trim().toLowerCase()))
+                  .map((r) => (
                   <tr key={r.id} className="border-b border-[var(--color-border)] last:border-0">
                     <td className="py-3 px-4 text-[var(--color-text-secondary)]">{r.id}</td>
                     <td className="py-3 px-4 text-[var(--color-text-primary)] font-medium">{r.name}</td>
@@ -296,7 +426,8 @@ function AdminDbContent() {
                           <Key size={16} />
                         </button>
                         <button
-                          onClick={() => handleDelete("restaurant", r.id)}
+                          onClick={(e) => handleDelete("restaurant", r.id, e.shiftKey)}
+                          title="Hold Shift to skip the confirmation"
                           aria-label={`Delete ${r.name}`}
                           className="p-2 bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white rounded-[var(--radius-sm)] transition-colors"
                         >
@@ -312,73 +443,185 @@ function AdminDbContent() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">Orders</h2>
+          <div className="flex flex-wrap items-center justify-between mb-3 gap-3">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Orders</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative w-full max-w-xs">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
+                <Input
+                  type="text"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder="Search order name..."
+                  aria-label="Search orders by name"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+          </div>
           <Card className="p-0 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--color-border)]">
+                  <SortableHeader label="ID" sortKey="id" activeSort={orderSort} onSort={handleSort} />
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
-                    ID
-                  </th>
-                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
-                    Restaurant
+                    <div className="flex items-center gap-2">
+                      Restaurant
+                      <RestaurantFilterDropdown
+                        restaurantNames={allRestaurantNames}
+                        selected={orderRestaurantFilter}
+                        onChange={setOrderRestaurantFilter}
+                      />
+                    </div>
                   </th>
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
                     Order Name
                   </th>
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
-                    Status
+                    <div className="flex items-center gap-2">
+                      Status
+                      <StatusFilterDropdown
+                        selected={orderStatusFilter}
+                        onChange={setOrderStatusFilter}
+                        includeDeletedOption={showDeleted}
+                      />
+                    </div>
                   </th>
-                  <th
-                    scope="col"
-                    className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium hidden md:table-cell"
-                  >
-                    Created At
-                  </th>
+                  <SortableHeader
+                    label="Created At"
+                    sortKey="created_at"
+                    activeSort={orderSort}
+                    onSort={handleSort}
+                    className="hidden md:table-cell"
+                  />
                   <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id} className="border-b border-[var(--color-border)] last:border-0">
-                    <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.id}</td>
-                    <td className="py-3 px-4 text-[var(--color-text-primary)]">{o.restaurant_name}</td>
-                    <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.order_number}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={o.status} />
-                        <select
-                          value={o.status}
-                          onChange={(e) => handleStatusChange(o.id, e.target.value)}
-                          aria-label={`Change status for order ${o.order_number}`}
-                          className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] rounded-[var(--radius-sm)] p-1 text-xs border border-[var(--color-border-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
-                        >
-                          <option value="Received">Received</option>
-                          <option value="Preparing">Preparing</option>
-                          <option value="Complete">Complete</option>
-                        </select>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-[var(--color-text-muted)] hidden md:table-cell">
-                      {new Date(o.created_at).toLocaleString()}
-                    </td>
-                    <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
-                      <button
-                        onClick={() => handleDelete("order", o.id)}
-                        aria-label={`Delete order ${o.order_number}`}
-                        className="p-2 bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white rounded-[var(--radius-sm)] transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                {visibleOrderRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
+                      No orders match your filters.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  visibleOrderRows.map((o) => (
+                    <tr
+                      key={o.id}
+                      className={`border-b border-[var(--color-border)] last:border-0 ${
+                        o.isDeleted ? "opacity-60" : ""
+                      }`}
+                    >
+                      <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.id}</td>
+                      <td className="py-3 px-4 text-[var(--color-text-primary)]">{o.restaurant_name}</td>
+                      <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.order_number}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          {o.isDeleted ? (
+                            <span className="text-xs font-medium px-2 py-1 rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-[var(--color-danger)]">
+                              Deleted
+                            </span>
+                          ) : (
+                            <>
+                              <StatusBadge status={o.status} />
+                              <select
+                                value={o.status}
+                                onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                                aria-label={`Change status for order ${o.order_number}`}
+                                className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] rounded-[var(--radius-sm)] p-1 text-xs border border-[var(--color-border-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                              >
+                                <option value="Received">Received</option>
+                                <option value="Preparing">Preparing</option>
+                                <option value="Complete">Complete</option>
+                              </select>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-[var(--color-text-muted)] hidden md:table-cell">
+                        {new Date(o.created_at).toLocaleString()}
+                      </td>
+                      <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
+                        {o.isDeleted ? (
+                          <button
+                            onClick={() => handleUndelete("order", o.id)}
+                            aria-label={`Restore order ${o.order_number}`}
+                            className="p-2 bg-[var(--color-success)] hover:opacity-90 text-white rounded-[var(--radius-sm)] transition-colors"
+                          >
+                            <RotateCcw size={16} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => handleDelete("order", o.id, e.shiftKey)}
+                            title="Hold Shift to skip the confirmation"
+                            aria-label={`Delete order ${o.order_number}`}
+                            className="p-2 bg-[var(--color-danger)] hover:bg-[var(--color-danger-hover)] text-white rounded-[var(--radius-sm)] transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </Card>
         </section>
+
+        {showDeleted && (
+          <>
+            <section className="mt-10">
+              <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-3">
+                Deleted Restaurants
+              </h2>
+              <Card className="p-0 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--color-border)]">
+                      <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                        ID
+                      </th>
+                      <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
+                        Original Name
+                      </th>
+                      <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deletedRestaurants.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
+                          No deleted restaurants.
+                        </td>
+                      </tr>
+                    ) : (
+                      deletedRestaurants.map((r) => (
+                        <tr key={r.id} className="border-b border-[var(--color-border)] last:border-0">
+                          <td className="py-3 px-4 text-[var(--color-text-secondary)]">{r.id}</td>
+                          <td className="py-3 px-4 text-[var(--color-text-primary)] font-medium">{r.name}</td>
+                          <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
+                            <button
+                              onClick={() => handleUndelete("restaurant", r.id)}
+                              aria-label={`Restore ${r.name}`}
+                              className="p-2 bg-[var(--color-success)] hover:opacity-90 text-white rounded-[var(--radius-sm)] transition-colors"
+                            >
+                              <RotateCcw size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </Card>
+            </section>
+          </>
+        )}
       </div>
     </>
   );

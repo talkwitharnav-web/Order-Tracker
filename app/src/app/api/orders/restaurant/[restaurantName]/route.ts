@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
       `GET /api/orders/restaurant/${restaurantName} - fetching orders`,
     );
 
-    let sql = `SELECT * FROM orders WHERE restaurant_name ILIKE $1`;
+    let sql = `SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND deleted_at IS NULL`;
     const queryParams: any[] = [escapeLikePattern(restaurantName)];
 
     if (status && ["Received", "Making", "Finished"].includes(status)) {

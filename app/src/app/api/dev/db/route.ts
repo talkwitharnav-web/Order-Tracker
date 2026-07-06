@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
+import { decryptFromStorage } from "@/lib/crypto";
+
+type RestaurantRow = { id: number; name: string; password: string; raw_password: string | null; deleted_at: string | null };
 
 export async function GET() {
   logger.info("GET /api/dev/db - request received");
@@ -13,11 +16,32 @@ export async function GET() {
     await initDb();
 
     logger.info("GET /api/dev/db - fetching all data...");
-    const restaurants = (await query("SELECT * FROM restaurants")).rows;
-    const orders = (await query("SELECT * FROM orders ORDER BY id DESC")).rows;
+    const restaurantRows = (await query<RestaurantRow>("SELECT * FROM restaurants WHERE deleted_at IS NULL")).rows;
+    const orders = (await query("SELECT * FROM orders WHERE deleted_at IS NULL ORDER BY id DESC")).rows;
+
+    const deletedRestaurantRows = (
+      await query<RestaurantRow>("SELECT * FROM restaurants WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+    ).rows;
+    const deletedOrders = (
+      await query("SELECT * FROM orders WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+    ).rows;
+
+    // Deleted restaurants' names are encrypted at rest (see lib/crypto.ts) so
+    // the live UNIQUE index frees up their name immediately -- decrypt here
+    // purely for admin display in the Deleted view, never written back.
+    const deletedRestaurants = deletedRestaurantRows.map((r) => ({
+      ...r,
+      name: decryptFromStorage(r.name),
+    }));
+
     logger.info("GET /api/dev/db - data fetched");
 
-    return NextResponse.json({ restaurants, orders });
+    return NextResponse.json({
+      restaurants: restaurantRows,
+      orders,
+      deletedRestaurants,
+      deletedOrders,
+    });
   } catch (err) {
     logger.error("GET /api/dev/db - error processing request", err);
     return NextResponse.json(

@@ -1,23 +1,24 @@
 "use client";
 
-import { useState, FC } from "react";
+import { useState, useEffect, FC } from "react";
 import { Sun, Moon } from "lucide-react";
 
 type Theme = "light" | "dark";
 
-/**
- * Reads the theme already stamped onto <html> by the inline no-flash script
- * in layout.tsx (which runs before hydration), so this component's initial
- * render matches what's already on screen instead of guessing "light" and
- * correcting itself after mount.
- */
 function getAppliedTheme(): Theme {
-  if (typeof document === "undefined") return "light";
   return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
 }
 
 export const ThemeToggle: FC<{ className?: string }> = ({ className }) => {
-  const [theme, setTheme] = useState<Theme>(getAppliedTheme);
+  // Starts null (server and first client render always agree on "unknown"),
+  // then syncs to the theme the no-flash script already applied to <html>.
+  // Reading document.* during the initial render (even lazily) diverges from
+  // SSR's "no document" state and trips a hydration mismatch.
+  const [theme, setTheme] = useState<Theme | null>(null);
+
+  useEffect(() => {
+    setTheme(getAppliedTheme());
+  }, []);
 
   const toggle = () => {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -25,6 +26,10 @@ export const ThemeToggle: FC<{ className?: string }> = ({ className }) => {
     document.documentElement.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
   };
+
+  if (theme === null) {
+    return <button aria-hidden className={`w-8 h-8 ${className ?? ""}`} />;
+  }
 
   return (
     <button

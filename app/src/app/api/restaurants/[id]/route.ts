@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
+import { encryptForStorage } from "@/lib/crypto";
 
 export async function DELETE(
   request: Request,
@@ -22,7 +23,7 @@ export async function DELETE(
 
   try {
     const restaurantResult = await client.query(
-      "SELECT name FROM restaurants WHERE id = $1",
+      "SELECT name FROM restaurants WHERE id = $1 AND deleted_at IS NULL",
       [id],
     );
     const restaurant = restaurantResult.rows[0];
@@ -39,11 +40,26 @@ export async function DELETE(
 
     await client.query("BEGIN");
 
-    logger.info(`DELETE /api/restaurants/${id} - deleting orders for restaurant: ${restaurantName}`);
-    await client.query("DELETE FROM orders WHERE restaurant_name = $1", [restaurantName]);
+    // Soft-delete only -- nothing here is a real DELETE. Orders keep their
+    // plaintext restaurant_name (they're already hidden from every normal
+    // view via deleted_at) and are just marked deleted, same as the
+    // single-order DELETE route. The restaurant's own name is encrypted
+    // in-place (see lib/crypto.ts) specifically so the UNIQUE index on
+    // LOWER(name) no longer sees this row's name as "taken" -- a new
+    // restaurant can register under the exact same name immediately. Only
+    // the admin Purge action ever issues a real DELETE.
+    logger.info(`DELETE /api/restaurants/${id} - soft-deleting orders for restaurant: ${restaurantName}`);
+    await client.query(
+      "UPDATE orders SET deleted_at = NOW() WHERE restaurant_name = $1 AND deleted_at IS NULL",
+      [restaurantName],
+    );
 
-    logger.info(`DELETE /api/restaurants/${id} - deleting restaurant`);
-    const result = await client.query("DELETE FROM restaurants WHERE id = $1", [id]);
+    logger.info(`DELETE /api/restaurants/${id} - soft-deleting restaurant`);
+    const encryptedName = encryptForStorage(restaurantName);
+    const result = await client.query(
+      "UPDATE restaurants SET name = $1, deleted_at = NOW() WHERE id = $2 AND deleted_at IS NULL",
+      [encryptedName, id],
+    );
 
     await client.query("COMMIT");
 
@@ -55,7 +71,7 @@ export async function DELETE(
       );
     }
 
-    logger.info(`DELETE /api/restaurants/${id} - restaurant and associated orders deleted successfully`);
+    logger.info(`DELETE /api/restaurants/${id} - restaurant and associated orders soft-deleted successfully`);
     return NextResponse.json({ message: "Restaurant deleted successfully" });
   } catch (err) {
     await client.query("ROLLBACK");

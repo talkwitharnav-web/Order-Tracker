@@ -1,0 +1,69 @@
+import { NextResponse } from "next/server";
+import { query, initDb } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { requireAdmin } from "@/lib/auth";
+
+function parseOrderId(id: string): number | null {
+  if (!/^\d+$/.test(id)) return null;
+  const n = Number(id);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  logger.info(`POST /api/orders/${id}/undelete - request received`);
+
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+
+  const orderId = parseOrderId(id);
+  if (orderId === null) {
+    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+  }
+
+  try {
+    await initDb();
+
+    // The order's (restaurant_name, order_number) pair might already be
+    // live again (e.g. the kitchen re-created "ORD1" after deleting the
+    // original) -- the partial unique index only guards live rows, so
+    // un-deleting this one would collide. Reject with a clear error rather
+    // than let the UPDATE fail with a raw constraint-violation message.
+    const existing = await query<{ restaurant_name: string; order_number: string }>(
+      "SELECT restaurant_name, order_number FROM orders WHERE id = $1 AND deleted_at IS NOT NULL",
+      [orderId],
+    );
+    const row = existing.rows[0];
+    if (!row) {
+      return NextResponse.json({ error: "Deleted order not found" }, { status: 404 });
+    }
+
+    const clash = await query(
+      "SELECT 1 FROM orders WHERE LOWER(restaurant_name) = LOWER($1) AND LOWER(order_number) = LOWER($2) AND deleted_at IS NULL",
+      [row.restaurant_name, row.order_number],
+    );
+    if (clash.rows.length > 0) {
+      return NextResponse.json(
+        { error: `Cannot restore -- an order named "${row.order_number}" already exists for this restaurant` },
+        { status: 409 },
+      );
+    }
+
+    const result = await query(
+      "UPDATE orders SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL",
+      [orderId],
+    );
+    if (result.rowCount === 0) {
+      return NextResponse.json({ error: "Deleted order not found" }, { status: 404 });
+    }
+
+    logger.info(`POST /api/orders/${orderId}/undelete - order restored successfully`);
+    return NextResponse.json({ message: "Order restored successfully" });
+  } catch (err) {
+    logger.error(`POST /api/orders/${id}/undelete - error processing request`, err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}

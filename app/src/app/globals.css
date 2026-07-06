@@ -497,13 +497,39 @@ html[data-ui-size="big"] {
 }
 
 /*
+ * Like .clear-top-right but only ever adds padding-top (the mobile case,
+ * where SettingsToggles stacks above in-flow content) and never
+ * padding-right at sm:+ — for content that's centered with
+ * justify-center/mx-auto, adding one-sided padding-right on only the
+ * content (or its centering parent) skews the centering math and visibly
+ * shifts it left even when the toolbar was never wide enough to actually
+ * overlap. Use this instead of .clear-top-right when the element it's
+ * applied to must stay truly centered on wide viewports.
+ */
+.clear-top-right-top-only {
+  padding-top: calc(var(--reserved-top-right-h) + 12px);
+}
+@media (min-width: 640px) {
+  .clear-top-right-top-only {
+    padding-top: 0;
+  }
+}
+
+/*
  * The toast stack (Toast.tsx) is itself `position: fixed`, unlike PageHeader's
  * in-flow content — `.clear-top-right`'s padding approach doesn't move a
- * fixed element, so this uses the same --reserved-top-right-h variable to
- * push the toast stack's `top` down below SettingsToggles instead, only on
- * narrow viewports where both would otherwise sit at the same top-4 corner.
- * At sm:+ SettingsToggles is a compact single-row pill with room below/beside
- * it, so toasts can stay at the standard top-4 without colliding.
+ * fixed element, so this adjusts `top`/`right` directly instead.
+ *
+ * Below sm:, SettingsToggles stacks above other top-right content, so only
+ * vertical clearance is needed. At sm:+ SettingsToggles is a single-row pill
+ * sitting at the SAME right-4/top-4 corner the toast stack used to sit at
+ * unconditionally — both being `position: fixed` at that identical corner
+ * meant a second+ toast's collapsed-stack badge rendered directly behind/
+ * under SettingsToggles instead of below it (the previous rule only ever
+ * reserved height, never width, so this was never actually fixed for the
+ * side-by-side sm:+ layout). Reserving BOTH dimensions everywhere the
+ * toolbar could plausibly be -- pushed down on narrow, pulled left on
+ * sm:+ -- keeps the stack clear of it regardless of viewport width.
  */
 .toast-stack {
   top: calc(var(--reserved-top-right-h) + 24px);
@@ -511,6 +537,7 @@ html[data-ui-size="big"] {
 @media (min-width: 640px) {
   .toast-stack {
     top: 1rem;
+    right: calc(var(--reserved-top-right-w) + 32px);
   }
 }
 

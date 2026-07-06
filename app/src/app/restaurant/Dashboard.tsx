@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, FormEvent, FC } from "react";
-import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X } from "lucide-react";
+import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -152,7 +152,7 @@ const OrderCard: FC<{
   order: Order;
   justUpdated: boolean;
   onAdvance: (id: number, status: OrderStatus) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: number, skipConfirm: boolean) => void;
 }> = ({ order, justUpdated, onAdvance, onDelete }) => (
   <Card
     className={`flex flex-col p-5 transition-shadow duration-500 ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
@@ -160,7 +160,8 @@ const OrderCard: FC<{
     <p className="font-bold text-xl text-[var(--color-text-primary)] mb-4">#{order.order_number}</p>
     <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
     <button
-      onClick={() => onDelete(order.id)}
+      onClick={(e) => onDelete(order.id, e.shiftKey)}
+      title="Hold Shift to skip the confirmation"
       className="w-full mt-4 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/20 transition-colors"
     >
       Delete
@@ -173,11 +174,12 @@ const HomeTab: FC<{
   recentlyUpdatedId: number | null;
   restaurantName: string;
   onAddOrder: (order: Order) => void;
-  onDeleteOrder: (id: number) => void;
+  onDeleteOrder: (id: number, skipConfirm: boolean) => void;
   onAdvance: (id: number, status: OrderStatus) => void;
   onError: (message: string) => void;
 }> = ({ orders, recentlyUpdatedId, restaurantName, onAddOrder, onDeleteOrder, onAdvance, onError }) => {
   const [orderNumber, setOrderNumber] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   // Persisted per-device (localStorage), same pattern as the theme/contrast/
   // size toggles — a kitchen picks a naming convention once and it sticks
   // across reloads rather than resetting to Freeform every visit.
@@ -282,29 +284,48 @@ const HomeTab: FC<{
       </Card>
 
       <Card>
-        <h3 className="text-xl font-bold text-[var(--color-text-primary)] mb-4">All Active Orders</h3>
+        <div className="flex items-center justify-between mb-4 gap-4">
+          <h3 className="text-xl font-bold text-[var(--color-text-primary)]">All Active Orders</h3>
+          <div className="relative w-full max-w-xs">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search orders..."
+              aria-label="Search orders"
+              className="pl-9"
+            />
+          </div>
+        </div>
         <div className="space-y-3">
-          {orders.map((order) => (
-            <div
-              key={order.id}
-              className={`bg-[var(--color-surface-2)] p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between transition-shadow duration-500 ${
-                recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""
-              }`}
-            >
-              <span className="font-bold text-lg text-[var(--color-text-primary)]">#{order.order_number}</span>
-              <div className="flex items-center gap-3">
-                <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
-                <button
-                  onClick={() => onDeleteOrder(order.id)}
-                  aria-label={`Delete order ${order.order_number}`}
-                  className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                </button>
+          {orders
+            .filter((order) => order.order_number.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+            .map((order) => (
+              <div
+                key={order.id}
+                className={`bg-[var(--color-surface-2)] p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between transition-shadow duration-500 ${
+                  recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""
+                }`}
+              >
+                <span className="font-bold text-lg text-[var(--color-text-primary)]">#{order.order_number}</span>
+                <div className="flex items-center gap-3">
+                  <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+                  <button
+                    onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
+                    title="Hold Shift to skip the confirmation"
+                    aria-label={`Delete order ${order.order_number}`}
+                    className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
           {orders.length === 0 && <p className="text-[var(--color-text-muted)]">No active orders.</p>}
+          {orders.length > 0 &&
+            orders.filter((order) => order.order_number.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+              .length === 0 && <p className="text-[var(--color-text-muted)]">No orders match your search.</p>}
         </div>
       </Card>
     </div>
@@ -315,7 +336,7 @@ const OrderGrid: FC<{
   orders: Order[];
   recentlyUpdatedId: number | null;
   onAdvance: (id: number, status: OrderStatus) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: number, skipConfirm: boolean) => void;
 }> = ({ orders, recentlyUpdatedId, onAdvance, onDelete }) => {
   if (orders.length === 0) {
     return <p className="text-[var(--color-text-muted)]">No orders in this category.</p>;
@@ -399,19 +420,34 @@ function KitchenDashboardContent({
     }
   };
 
-  const confirmDeleteOrder = async () => {
-    if (orderToDelete === null) return;
+  const deleteOrder = async (id: number) => {
     try {
-      setOrders((prev) => prev.filter((o) => o.id !== orderToDelete));
-      await api.deleteOrder(orderToDelete);
+      setOrders((prev) => prev.filter((o) => o.id !== id));
+      await api.deleteOrder(id);
       showToast("Order deleted successfully", "success");
     } catch (error) {
       console.error("Failed to delete order", error);
       showToast("Failed to delete order", "error");
       fetchOrders();
-    } finally {
-      setOrderToDelete(null);
     }
+  };
+
+  // Holding Shift while clicking Delete skips the "are you sure" modal --
+  // if someone deliberately holds an extra key, they've already signaled
+  // they mean it, so the confirmation would just be friction at that point.
+  const requestDeleteOrder = (id: number, skipConfirm: boolean) => {
+    if (skipConfirm) {
+      deleteOrder(id);
+      return;
+    }
+    setOrderToDelete(id);
+  };
+
+  const confirmDeleteOrder = async () => {
+    if (orderToDelete === null) return;
+    const id = orderToDelete;
+    setOrderToDelete(null);
+    await deleteOrder(id);
   };
 
   const handleAddOrder = (newOrder: Order) => {
@@ -432,7 +468,7 @@ function KitchenDashboardContent({
           recentlyUpdatedId={recentlyUpdatedId}
           restaurantName={restaurantName}
           onAddOrder={handleAddOrder}
-          onDeleteOrder={setOrderToDelete}
+          onDeleteOrder={requestDeleteOrder}
           onAdvance={handleAdvanceStatus}
           onError={(message) => showToast(message, "error")}
         />
@@ -444,7 +480,7 @@ function KitchenDashboardContent({
         orders={displayedOrders}
         recentlyUpdatedId={recentlyUpdatedId}
         onAdvance={handleAdvanceStatus}
-        onDelete={setOrderToDelete}
+        onDelete={requestDeleteOrder}
       />
     );
   };

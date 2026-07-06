@@ -111,7 +111,7 @@ export default function GatewayCommandCenter() {
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <AuthCard title="Admin Access" onSubmit={handleLogin} error={error || null}>
+            <AuthCard title="Admin Access" onSubmit={handleLogin} error={error || null} fillParent>
               <div className="flex justify-center mb-2">
                 <Lock className="w-8 h-8 text-[var(--color-brand-text)]" />
               </div>

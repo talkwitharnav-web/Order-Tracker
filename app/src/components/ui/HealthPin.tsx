@@ -42,8 +42,24 @@ const TIER_CONFIG: Record<HealthTier, { label: string; dot: string; text: string
 // this is what lets the pin reflect "the kitchen's internet is bad" even
 // when the server and DB are both perfectly healthy, per the requested
 // "not just server performance" ask.
-const CLIENT_LATENCY_OK_MS = 150;
-const CLIENT_LATENCY_BAD_MS = 800;
+//
+// These were originally 150/800, which turned out to be too tight: ordinary
+// browser/OS jitter (a GC pause, Docker Desktop overhead, the tab having
+// been backgrounded) routinely pushes even a healthy same-LAN round-trip
+// past 150ms, which made the pill flicker between healthy/ok on a
+// perfectly fine connection -- most visible while NOT hovering, since
+// hovering forces an immediate fresh poll that tends to land on a warm,
+// fast sample. Loosened to thresholds that only trip on latency a real
+// user would actually notice.
+const CLIENT_LATENCY_OK_MS = 400;
+const CLIENT_LATENCY_BAD_MS = 1500;
+
+const POLL_INTERVAL_MS = 10000;
+// While the popover is actually open (hovered on desktop, tapped on
+// touch), the user is looking right at these numbers -- poll much faster
+// so they read as close to live. Reverts to the standard cadence the
+// instant it closes, rather than staying fast in the background.
+const POLL_INTERVAL_ACTIVE_MS = 1500;
 
 function worseTier(a: HealthTier, b: HealthTier): HealthTier {
   const order: HealthTier[] = ["healthy", "ok", "bad", "terrible"];
@@ -94,6 +110,8 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [tapped]);
 
+  const isActive = hovering || tapped;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -113,13 +131,16 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
       }
     };
 
+    // Fetch immediately whenever the active state flips on, so opening the
+    // popover shows a fresh reading rather than waiting for the next tick
+    // of whichever interval was already running.
     poll();
-    const interval = setInterval(poll, 10000);
+    const interval = setInterval(poll, isActive ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [isActive]);
 
   const tier: HealthTier = failed
     ? "terrible"
