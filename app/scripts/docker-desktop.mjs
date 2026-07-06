@@ -103,6 +103,34 @@ async function ensureRunning() {
   process.exit(1);
 }
 
+function shutdownWsl() {
+  // Quitting Docker Desktop's own processes (above) does NOT tear down its
+  // WSL2 VM -- that VM (vmmemWSL) can linger holding onto RAM/CPU well
+  // after the app itself is gone, which is exactly what caused the slow
+  // Docker Desktop startup investigated and fixed live in an earlier
+  // session (see CLAUDE.md's Docker Desktop startup hardening entry) --
+  // `wsl --shutdown` was the manual fix used there, now wired into db:down
+  // itself so it happens automatically instead of needing a future session
+  // to rediscover and run it by hand each time.
+  //
+  // `wsl --shutdown` stops EVERY WSL distro on the machine, not just
+  // Docker's -- only called from quitIfRunning() when Docker Desktop was
+  // actually the thing just closed (never unconditionally), so a WSL
+  // distro used for something unrelated to this project is only affected
+  // in the case where Docker Desktop was open anyway.
+  console.log("[docker-desktop] Shutting down WSL (clears Docker Desktop's WSL2 VM, frees its memory)...");
+  try {
+    execSync("wsl --shutdown", { stdio: "ignore" });
+    console.log("[docker-desktop] WSL shut down.");
+  } catch (err) {
+    // Non-fatal -- db:down's actual job (stopping the Postgres container)
+    // already succeeded by this point; a WSL-shutdown failure (e.g. WSL
+    // itself isn't installed/enabled) shouldn't be reported as if db:down
+    // failed overall.
+    console.error("[docker-desktop] Could not shut down WSL (non-fatal):", err.message);
+  }
+}
+
 function quitIfRunning() {
   if (!isDockerDesktopRunning()) {
     console.log("[docker-desktop] Docker Desktop is not open -- nothing to quit.");
@@ -119,7 +147,9 @@ function quitIfRunning() {
     console.log("[docker-desktop] Docker Desktop closed.");
   } catch (err) {
     console.error("[docker-desktop] Failed to close Docker Desktop:", err.message);
+    return;
   }
+  shutdownWsl();
 }
 
 (async () => {
