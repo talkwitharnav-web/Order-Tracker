@@ -203,6 +203,38 @@
   --color-success: #a8d68f;
 }
 
+/*
+ * Light/dark theme transition (ThemeToggle.tsx) -- animates the swap as a
+ * directional or circular reveal via the View Transitions API instead of an
+ * instant flip. ThemeToggle.tsx picks one of several shapes at random per
+ * toggle (wipes, diagonals, expanding circles from the click point/viewport
+ * center/a random point) and writes the resulting clip-path pair into
+ * --theme-transition-clip-from/-to on <html> just before calling
+ * document.startViewTransition() -- these two rules read those values back
+ * to animate the browser's own before/after snapshots of the page.
+ * ::view-transition-old(root) is the OLD (pre-toggle) snapshot, which stays
+ * clipped to the full page throughout (root default, not overridden here)
+ * so the old theme visibly stays put underneath; ::view-transition-new(root)
+ * is the NEW theme's snapshot, revealed by animating its clip-path from
+ * -from to -to. Falls back to a plain instant swap in ThemeToggle.tsx itself
+ * when the API isn't supported (Firefox, older Safari) or Reduce Motion is
+ * active -- this CSS is simply inert in that case, nothing to disable here.
+ */
+::view-transition-new(root) {
+  animation: theme-reveal 0.5s ease;
+}
+::view-transition-old(root) {
+  animation: none;
+}
+@keyframes theme-reveal {
+  from {
+    clip-path: var(--theme-transition-clip-from);
+  }
+  to {
+    clip-path: var(--theme-transition-clip-to);
+  }
+}
+
 /* High-contrast mode thickens real borders for a stronger, less ambiguous
    edge between adjacent regions — targets Tailwind's actual border-width
    utility classes (border, border-2, border-t, etc.) rather than a blunt
@@ -464,6 +496,17 @@
  * axes, matching how real OSes keep contrast and text/UI scale as separate
  * settings rather than bundling them into one toggle).
  */
+html {
+  /* Smoothly animates every S/M/B change (in either direction) into a
+     zoom-like transition, rather than an instant jump -- since everything
+     else on the page is sized in rem/em off this one value, transitioning
+     it here is enough to make the whole layout scale smoothly at once,
+     with no per-component change needed. Automatically collapses to
+     instant under Reduce Motion via the existing blanket
+     prefers-reduced-motion/[data-motion="reduced"] transition-duration
+     override above -- no separate opt-out needed here. */
+  transition: font-size 0.35s ease;
+}
 html[data-ui-size="small"] {
   font-size: 87.5%; /* 14px effective base */
 }
@@ -978,40 +1021,49 @@ summary {
   }
 }
 
-/* --- Order Card Enter Animation (Phase 2, item 1) --- */
+/* --- Order Card Enter/Exit — slide from/to the right, matching the
+   notification toast's slide feel (see notification-pop-in/-out above) --- */
 @keyframes order-card-enter {
   0% {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateX(40px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
 }
 .animate-order-enter {
-  animation: order-card-enter 0.2s ease-out both;
+  animation: order-card-enter 0.25s ease-out both;
 }
 
-/* --- Order Card Exit / Delete Animation (Phase 2, item 3) --- */
 @keyframes order-card-exit {
   0% {
     opacity: 1;
-    transform: scaleY(1);
+    transform: translateX(0);
+    max-height: 200px;
+  }
+  60% {
+    opacity: 0;
+    transform: translateX(60px);
     max-height: 200px;
   }
   100% {
     opacity: 0;
-    transform: scaleY(0);
+    transform: translateX(60px);
     max-height: 0;
     margin: 0;
     padding: 0;
+    border-width: 0;
   }
 }
 .animate-order-exit {
-  animation: order-card-exit 0.2s ease-in forwards;
-  transform-origin: top center;
+  /* Card slides out first (0-60%), then collapses its own space (60-100%)
+     so the cards below it don't jump until the sliding one has actually
+     left, not the instant delete starts. */
+  animation: order-card-exit 0.3s ease-in forwards;
   overflow: hidden;
+  pointer-events: none;
 }
 
 /* --- Status Stepper Advance Pulse (Phase 2, item 2) — already have step-advance-bounce, enhancing --- */

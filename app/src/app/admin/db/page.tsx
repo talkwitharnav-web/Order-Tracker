@@ -107,6 +107,10 @@ function AdminDbContent() {
   const [orderSort, setOrderSort] = useState<{ key: OrderSortKey; direction: SortDirection } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmState, setConfirmState] = useState<ConfirmState>(EMPTY_CONFIRM);
+  // Order rows mid-slide-out-to-delete -- see deleteNow below. Restaurants
+  // aren't included here: this table's rows aren't individually
+  // slide-animated today and the request was specifically about orders.
+  const [exitingOrderIds, setExitingOrderIds] = useState<Set<number>>(new Set());
   const [passwordResetTarget, setPasswordResetTarget] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [renameTarget, setRenameTarget] = useState<{ id: number; currentName: string } | null>(null);
@@ -196,11 +200,39 @@ function AdminDbContent() {
     });
   };
 
-  const deleteNow = (type: "restaurant" | "order", id: number) =>
+  // Matches .animate-order-exit's own animation duration in globals.css.
+  // A plain timer, not an `animationend` listener -- Reduce Motion disables
+  // that animation outright (`animation: none !important`), which would
+  // mean the listener never fires and the row would stay stuck mid-delete.
+  const ORDER_EXIT_ANIMATION_MS = 300;
+
+  const deleteNow = (type: "restaurant" | "order", id: number) => {
+    if (type === "order") {
+      // Play the slide-out first, then run the real delete (and the
+      // fetchData() refetch performAction triggers) once the animation has
+      // had time to finish -- doing this immediately, as the generic path
+      // still does for restaurants, left no time for any exit animation to
+      // render before the row vanished on the next refetch.
+      setExitingOrderIds((prev) => new Set(prev).add(id));
+      setTimeout(() => {
+        performAction(
+          () => fetchWithRetry(`/api/orders/${id}`, { method: "DELETE" }),
+          "Order deleted successfully!",
+        ).finally(() => {
+          setExitingOrderIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        });
+      }, ORDER_EXIT_ANIMATION_MS);
+      return;
+    }
     performAction(
       () => fetchWithRetry(`/api/${type}s/${id}`, { method: "DELETE" }),
       `${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`,
     );
+  };
 
   // Holding Shift while clicking Delete skips the confirmation modal --
   // deliberately holding an extra key already signals intent, so the modal
@@ -605,7 +637,7 @@ function AdminDbContent() {
                       key={o.id}
                       className={`border-b border-[var(--color-border)] last:border-0 ${
                         o.isDeleted ? "opacity-60" : ""
-                      }`}
+                      } ${exitingOrderIds.has(o.id) ? "animate-order-exit" : ""}`}
                     >
                       <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.id}</td>
                       <td className="py-3 px-4 text-[var(--color-text-primary)]">{o.restaurant_name}</td>

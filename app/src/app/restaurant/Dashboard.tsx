@@ -152,11 +152,12 @@ const Nav: FC<{
 const OrderCard: FC<{
   order: Order;
   justUpdated: boolean;
+  isExiting: boolean;
   onAdvance: (id: number, status: OrderStatus) => void;
   onDelete: (id: number, skipConfirm: boolean) => void;
-}> = ({ order, justUpdated, onAdvance, onDelete }) => (
+}> = ({ order, justUpdated, isExiting, onAdvance, onDelete }) => (
   <Card
-    className={`flex flex-col p-4 sm:p-5 transition-all duration-200 animate-order-enter ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
+    className={`flex flex-col p-4 sm:p-5 transition-all duration-200 ${isExiting ? "animate-order-exit" : "animate-order-enter"} ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
   >
     <p className="font-bold text-lg sm:text-xl text-[var(--color-text-primary)] mb-3 sm:mb-4 break-all" title={order.order_number}>
       #{order.order_number}
@@ -175,12 +176,13 @@ const OrderCard: FC<{
 const HomeTab: FC<{
   orders: Order[];
   recentlyUpdatedId: number | null;
+  exitingIds: Set<number>;
   restaurantName: string;
   onAddOrder: (order: Order) => void;
   onDeleteOrder: (id: number, skipConfirm: boolean) => void;
   onAdvance: (id: number, status: OrderStatus) => void;
   onError: (message: string) => void;
-}> = ({ orders, recentlyUpdatedId, restaurantName, onAddOrder, onDeleteOrder, onAdvance, onError }) => {
+}> = ({ orders, recentlyUpdatedId, exitingIds, restaurantName, onAddOrder, onDeleteOrder, onAdvance, onError }) => {
   const [orderNumber, setOrderNumber] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   // Persisted per-device (localStorage), same pattern as the theme/contrast/
@@ -316,9 +318,9 @@ const HomeTab: FC<{
           {filteredOrders.map((order) => (
             <div
               key={order.id}
-              className={`bg-[var(--color-surface-2)] p-3 sm:p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:justify-between transition-all duration-200 animate-order-enter card-elevated ${
-                recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""
-              }`}
+              className={`bg-[var(--color-surface-2)] p-3 sm:p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:justify-between transition-all duration-200 card-elevated ${
+                exitingIds.has(order.id) ? "animate-order-exit" : "animate-order-enter"
+              } ${recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""}`}
             >
               <span
                 className="font-bold text-base sm:text-lg text-[var(--color-text-primary)] truncate min-w-0"
@@ -435,9 +437,10 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
 const OrderGrid: FC<{
   orders: Order[];
   recentlyUpdatedId: number | null;
+  exitingIds: Set<number>;
   onAdvance: (id: number, status: OrderStatus) => void;
   onDelete: (id: number, skipConfirm: boolean) => void;
-}> = ({ orders, recentlyUpdatedId, onAdvance, onDelete }) => {
+}> = ({ orders, recentlyUpdatedId, exitingIds, onAdvance, onDelete }) => {
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center py-8 gap-2">
@@ -452,6 +455,7 @@ const OrderGrid: FC<{
           key={order.id}
           order={order}
           justUpdated={recentlyUpdatedId === order.id}
+          isExiting={exitingIds.has(order.id)}
           onAdvance={onAdvance}
           onDelete={onDelete}
         />
@@ -473,6 +477,10 @@ function KitchenDashboardContent({
   const [isLoading, setIsLoading] = useState(true);
   const [orderToDelete, setOrderToDelete] = useState<number | null>(null);
   const [recentlyUpdatedId, setRecentlyUpdatedId] = useState<number | null>(null);
+  // Orders mid-slide-out-to-delete -- still rendered (with the exit
+  // animation class) until deleteOrder's timer actually removes them from
+  // `orders`, see deleteOrder below.
+  const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = (id: number) => {
@@ -524,14 +532,38 @@ function KitchenDashboardContent({
     }
   };
 
+  // 300ms matches .animate-order-exit's own animation duration in
+  // globals.css -- kept as a plain timer rather than an `animationend`
+  // listener because Reduce Motion disables that animation outright
+  // (`animation: none !important`), which would mean the listener never
+  // fires and the card would sit deleted-but-still-visible forever.
+  const ORDER_EXIT_ANIMATION_MS = 300;
+
   const deleteOrder = async (id: number) => {
+    // Play the slide-out first, then actually remove the order from state
+    // once the animation has had time to finish -- deleting from `orders`
+    // immediately (the old behavior) left no time for any exit animation
+    // to render at all.
+    setExitingIds((prev) => new Set(prev).add(id));
     try {
-      setOrders((prev) => prev.filter((o) => o.id !== id));
       await api.deleteOrder(id);
       showToast("Order deleted successfully", "success");
+      setTimeout(() => {
+        setOrders((prev) => prev.filter((o) => o.id !== id));
+        setExitingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, ORDER_EXIT_ANIMATION_MS);
     } catch (error) {
       console.error("Failed to delete order", error);
       showToast("Failed to delete order", "error");
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       fetchOrders();
     }
   };
@@ -570,6 +602,7 @@ function KitchenDashboardContent({
         <HomeTab
           orders={displayedOrders}
           recentlyUpdatedId={recentlyUpdatedId}
+          exitingIds={exitingIds}
           restaurantName={restaurantName}
           onAddOrder={handleAddOrder}
           onDeleteOrder={requestDeleteOrder}
@@ -583,6 +616,7 @@ function KitchenDashboardContent({
       <OrderGrid
         orders={displayedOrders}
         recentlyUpdatedId={recentlyUpdatedId}
+        exitingIds={exitingIds}
         onAdvance={handleAdvanceStatus}
         onDelete={requestDeleteOrder}
       />

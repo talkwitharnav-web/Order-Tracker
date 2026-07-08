@@ -2,41 +2,40 @@
 
 import { useState, useEffect, useRef, useId, FC } from "react";
 
-// 35 distinct idle animations, applied to the whole sprite or its parts via CSS classes.
+// Idle animations, applied to the whole sprite or its parts via CSS classes.
 // Each one is a bored/silly little chef-hat sprite action. Picked at random on mount.
+// NOTE: every arm/hand-only animation (wave, stir, shrug, yawn, salute,
+// facepalm, fistpump, doublearms, armswing, armscross) has been removed
+// outright. Their CSS rotation directions kept coming out wrong (arm
+// swinging behind the body, arms crossing the wrong way, etc.) across
+// repeated attempts to fix the angles/signs -- rather than keep
+// re-guessing the geometry, they've been dropped from the pool entirely.
+// Don't re-add any of these class names here without actually confirming
+// the resulting motion live (screenshot or direct visual check), since
+// that's exactly what went wrong before.
 const ACTIONS = [
   "chef-anim-bounce",
   "chef-anim-spin-hat",
-  "chef-anim-wave",
   "chef-anim-wiggle",
-  "chef-anim-stir",
   "chef-anim-tiptoe",
-  "chef-anim-shrug",
   "chef-anim-nod",
   "chef-anim-sway",
   "chef-anim-jump",
   "chef-anim-lookaround",
-  "chef-anim-yawn",
   "chef-anim-tapfoot",
   "chef-anim-spin-full",
   "chef-anim-shake",
   "chef-anim-peek",
-  "chef-anim-salute",
   "chef-anim-hop-twice",
   "chef-anim-wobble",
-  "chef-anim-facepalm",
-  "chef-anim-fistpump",
-  "chef-anim-doublearms",
   "chef-anim-heartbeat",
   "chef-anim-sidestep",
   "chef-anim-blink",
   "chef-anim-tilt",
   "chef-anim-hatpoke",
-  "chef-anim-armswing",
   "chef-anim-squish",
   "chef-anim-gasp",
   "chef-anim-drift",
-  "chef-anim-armscross",
   "chef-anim-bobblehead",
   "chef-anim-shimmy",
   "chef-anim-suspicious",
