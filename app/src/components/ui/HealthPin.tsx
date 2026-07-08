@@ -10,9 +10,13 @@ type HealthResponse = {
     connected: boolean;
     latencyMs: number | null;
     sizeBytes: number | null;
-    pool: { total: number; idle: number; waiting: number };
+    // Admin-only detail -- null for a kitchen-account caller (see
+    // SECURITY_ATTACK_LOG.md's "Health Endpoint Leaks Infrastructure
+    // Details" finding). tier/latencyMs (the signal a kitchen actually
+    // needs) are unaffected.
+    pool: { total: number; idle: number; waiting: number } | null;
   };
-  ws: { connectedClients: number };
+  ws: { connectedClients: number | null };
 };
 
 // K/M/G/T, not KB/MB/GB/TB -- matches the single-letter size chip the user
@@ -196,17 +200,21 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
                   <dd className="text-[var(--color-text-primary)] font-medium">{formatBytes(health.db.sizeBytes)}</dd>
                 </div>
               )}
-              <div className="flex justify-between gap-3">
-                <dt className="text-[var(--color-text-muted)]">DB pool</dt>
-                <dd className="text-[var(--color-text-primary)] font-medium">
-                  {health.db.pool.idle}/{health.db.pool.total} idle
-                  {health.db.pool.waiting > 0 ? `, ${health.db.pool.waiting} waiting` : ""}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-[var(--color-text-muted)]">Live listeners</dt>
-                <dd className="text-[var(--color-text-primary)] font-medium">{health.ws.connectedClients}</dd>
-              </div>
+              {health.db.pool && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-[var(--color-text-muted)]">DB pool</dt>
+                  <dd className="text-[var(--color-text-primary)] font-medium">
+                    {health.db.pool.idle}/{health.db.pool.total} idle
+                    {health.db.pool.waiting > 0 ? `, ${health.db.pool.waiting} waiting` : ""}
+                  </dd>
+                </div>
+              )}
+              {health.ws.connectedClients != null && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-[var(--color-text-muted)]">Live listeners</dt>
+                  <dd className="text-[var(--color-text-primary)] font-medium">{health.ws.connectedClients}</dd>
+                </div>
+              )}
             </dl>
           ) : (
             <p>Checking server health…</p>

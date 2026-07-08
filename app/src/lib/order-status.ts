@@ -64,7 +64,16 @@ const STATUS_KEY_BY_RAW: Record<string, StatusKey> = {
 };
 
 export function normalizeStatus(raw: AnyOrderStatus | string): StatusKey {
-  return STATUS_KEY_BY_RAW[raw.toLowerCase()] ?? "received";
+  const key = STATUS_KEY_BY_RAW[raw.toLowerCase()];
+  if (key) return key;
+  // Falls back to "received" rather than throwing, since every call site
+  // here is a UI display path that must always render something -- but the
+  // fallback is logged rather than silent, since an unrecognized status
+  // string (a manually-edited DB row, or a future bug introducing a third
+  // vocabulary) would otherwise regress a genuinely Complete/Preparing order
+  // back to looking freshly placed with no visible sign anything is wrong.
+  console.warn(`normalizeStatus: unrecognized status "${raw}", defaulting to "received"`);
+  return "received";
 }
 
 export function getStatusVisual(raw: AnyOrderStatus | string): StatusVisual {

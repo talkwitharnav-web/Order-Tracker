@@ -239,7 +239,17 @@ export default function CustomerPage() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, [order?.id]);
+    // Depends on the normalized completion state, not just order?.id -- a
+    // live WS update can flip the SAME order (same id) from
+    // Received/Preparing to Complete via setOrder in fetchOrderStatus above.
+    // With only order?.id in the deps, this effect never re-ran on that
+    // transition, so the guard at the top (skip connecting once complete)
+    // only ever prevented opening a NEW socket for an already-complete
+    // order — it never closed a socket that was already open when the order
+    // became complete while connected, leaving it running (and reconnecting
+    // on any drop) indefinitely on a long-lived tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id, order && normalizeStatus(order.status) === "complete"]);
 
   // Order names keep the POS-style uppercase-code convention (matches the
   // Kitchen Dashboard's own formatting), but restaurant names are real
@@ -248,8 +258,13 @@ export default function CustomerPage() {
   // case-insensitive server-side, so uppercasing here was never actually
   // load-bearing for search, just a cosmetic leftover from copying the order
   // field's formatting).
-  const formatOrderInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9- ]/g, "");
-  const formatRestaurantInput = (value: string) => value.replace(/[^a-zA-Z0-9' -]/g, "");
+  // Both allow underscore now: the server's storage whitelist
+  // (requireSafeName in lib/validate.ts) permits `_` in stored names, so a
+  // kitchen registered with one (or an order name containing one) needs to
+  // remain reachable from this lookup form — stripping it here silently made
+  // such a restaurant/order invisible to its own customers.
+  const formatOrderInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9_- ]/g, "");
+  const formatRestaurantInput = (value: string) => value.replace(/[^a-zA-Z0-9_' -]/g, "");
 
   return (
     <div className="min-h-dvh flex items-center justify-center p-4">

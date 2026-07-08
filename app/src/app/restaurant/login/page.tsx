@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
@@ -20,6 +20,15 @@ async function login(name: string, pass: string, rememberMe: boolean) {
   }
 }
 
+async function hasActiveSession() {
+  try {
+    const session = await fetchJson<{ restaurant: { name: string } | null }>("/api/session");
+    return !!session.restaurant;
+  } catch {
+    return false;
+  }
+}
+
 export default function RestaurantLoginPage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -27,6 +36,25 @@ export default function RestaurantLoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // Starts true so the bare form never flashes before the session check
+  // resolves -- this page is reachable directly via browser back/forward
+  // navigation (you were on it before submitting), not just via a fresh
+  // click from /restaurant/home, so a still-valid session can land here
+  // with no chance for restauranthome's own check to run first. Redirecting
+  // straight to the dashboard (via restauranthome, which owns the "still
+  // signed in?" confirm screen) means back-navigating out of a logged-in
+  // session never forces re-entering credentials that are still valid.
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    hasActiveSession().then((active) => {
+      if (active) {
+        router.replace("/restaurant/restauranthome");
+        return;
+      }
+      setCheckingSession(false);
+    });
+  }, [router]);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -53,6 +81,8 @@ export default function RestaurantLoginPage() {
     }
   };
 
+  if (checkingSession) return null;
+
   return (
     <AuthCard
       title="Kitchen Login"
@@ -74,7 +104,10 @@ export default function RestaurantLoginPage() {
           id="kitchenName"
           type="text"
           value={name}
-          onChange={(e) => setName(e.target.value.replace(/\s{2,}/g, " "))}
+          onChange={(e) => {
+            setError(null);
+            setName(e.target.value.replace(/\s{2,}/g, " "));
+          }}
           placeholder="e.g., 'The Golden Spoon'"
           required
         />
@@ -84,8 +117,12 @@ export default function RestaurantLoginPage() {
         <Input
           id="password"
           type="password"
+          autoComplete="current-password"
           value={password}
-          onChange={(e) => setPassword(e.target.value.replace(/\s/g, ""))}
+          onChange={(e) => {
+            setError(null);
+            setPassword(e.target.value.replace(/\s/g, ""));
+          }}
           placeholder="••••••••"
           required
         />
@@ -94,6 +131,16 @@ export default function RestaurantLoginPage() {
       <Button type="submit" size="lg" disabled={isLoading} className="w-full">
         {isLoading ? "Signing in..." : "Sign In"}
       </Button>
+      <p className="text-center text-sm text-[var(--color-text-secondary)]">
+        New kitchen?{" "}
+        <button
+          type="button"
+          onClick={() => router.push("/restaurant/signup")}
+          className="font-semibold text-[var(--color-brand-text)] hover:underline"
+        >
+          Register here
+        </button>
+      </p>
     </AuthCard>
   );
 }

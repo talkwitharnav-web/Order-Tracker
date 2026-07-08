@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 function parseOrderId(id: string): number | null {
   if (!/^\d+$/.test(id)) return null;
@@ -10,11 +11,14 @@ function parseOrderId(id: string): number | null {
 
 /**
  * Customer-facing "Order Picked Up" button on the tracker page. Deliberately
- * NO auth beyond the order id itself -- same anonymous trust level as
- * GET /api/orders/search (anyone who already knows a restaurant+order name
- * can look it up with zero login), and this only lets that same caller stop
- * a display-only Complete-duration counter early. It can't change the
- * order's real status, reveal anything, or affect any other order.
+ * NO auth beyond the order id itself, since it only lets a caller stop a
+ * display-only Complete-duration counter early -- it can't change the
+ * order's real status, reveal anything, or affect any other order. Unlike
+ * GET /api/orders/search (which requires knowing BOTH a restaurant name and
+ * order number), this route only requires a raw numeric id, which is
+ * sequential and guessable -- so it's rate-limited the same as every other
+ * anonymous endpoint to stop fast enumeration, even though a successful
+ * guess here still can't do anything worse than silence one countdown early.
  */
 export async function POST(
   request: Request,
@@ -22,6 +26,10 @@ export async function POST(
 ) {
   const { id } = await params;
   logger.info(`POST /api/orders/${id}/acknowledge - request received`);
+
+  if (!checkRateLimit(`orders-acknowledge:${getClientIp(request)}`, { windowMs: 60_000, maxAttempts: 120 })) {
+    return NextResponse.json({ error: "Too many requests. Slow down a moment." }, { status: 429 });
+  }
 
   const orderId = parseOrderId(id);
   if (orderId === null) {

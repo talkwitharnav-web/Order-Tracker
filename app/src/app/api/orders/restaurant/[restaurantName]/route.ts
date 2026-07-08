@@ -49,9 +49,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
     const result = await query(sql, queryParams);
     const orders = result.rows;
 
-    console.log("Requested restaurant name:", restaurantName);
-    console.log("Returned rows:", orders);
-
     logger.info(
       `GET /api/orders/restaurant/${restaurantName} - found ${orders.length} orders`,
     );

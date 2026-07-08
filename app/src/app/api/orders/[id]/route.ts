@@ -3,6 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/validate";
 
 // Forward-only lifecycle (see SYSTEM_MEMORY.md §2 status-vocab quirk — this
 // is the API-vocabulary set, unrelated to the customer-facing display
@@ -54,10 +55,8 @@ export async function PUT(
 
   try {
     await initDb();
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
+    const body = await parseJsonBody(request);
+    if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
     const { status } = body as { status?: unknown };

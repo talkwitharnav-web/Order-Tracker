@@ -3,24 +3,29 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
-import { requireString, escapeLikePattern } from "@/lib/validate";
+import { requireString, requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
   try {
     await initDb();
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
+    const body = await parseJsonBody(request);
+    if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
     const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber } =
       body as { restaurant_name?: unknown; order_number?: unknown };
 
-    const restaurant_name = requireString(rawRestaurantName);
-    const order_number = requireString(rawOrderNumber);
+    // requireSafeName (not requireString) -- these values get stored and
+    // rendered back out (kitchen dashboard, customer tracker, admin/db), so
+    // they're restricted to a display-safe character set rather than just
+    // "any non-empty string" (see SECURITY_ATTACK_LOG.md's stored-XSS
+    // finding: React's JSX auto-escaping already prevents script execution
+    // in this app's own UI, but a stored `<img onerror=...>`-style payload
+    // would still execute in any non-React consumer of this data).
+    const restaurant_name = requireSafeName(rawRestaurantName);
+    const order_number = requireSafeName(rawOrderNumber);
 
     if (!restaurant_name || !order_number) {
       logger.warn("POST /api/orders - validation error", {
@@ -28,7 +33,7 @@ export async function POST(request: Request) {
         order_number: rawOrderNumber,
       });
       return NextResponse.json(
-        { error: "restaurant_name and order_number are required (non-empty strings, max 200 chars)" },
+        { error: "restaurant_name and order_number are required (letters, numbers, spaces, and basic punctuation only, max 200 chars)" },
         { status: 400 },
       );
     }
@@ -129,8 +134,14 @@ export async function GET(request: Request) {
       );
     }
 
+    // Narrow column list -- this is the anonymous public customer-tracker
+    // lookup, so it should only ever ship the columns that page actually
+    // renders (id/order_number/restaurant_name/status/updated_at/
+    // acknowledged_at), not every column that exists today or gets added
+    // later (e.g. internal timing columns have no reason to reach an
+    // anonymous caller).
     const result = await query(
-      "SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, order_number, restaurant_name, status, updated_at, acknowledged_at FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
       [escapeLikePattern(restaurant_name), escapeLikePattern(order_number)],
     );
     const order = result.rows[0];

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/validate";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
@@ -19,15 +20,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   try {
     await initDb();
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
+    const body = await parseJsonBody(req);
+    if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
     const { newPassword: rawNewPassword } = body as { newPassword?: unknown };
+    // Null-byte check: this value is inserted raw into raw_password (a
+    // Postgres text column, which cannot store \0 at all) -- see the
+    // identical note in restaurants/register/route.ts.
     const newPassword =
-      typeof rawNewPassword === "string" && rawNewPassword.length > 0 && rawNewPassword.length <= 200
+      typeof rawNewPassword === "string" &&
+      rawNewPassword.length > 0 &&
+      rawNewPassword.length <= 200 &&
+      !rawNewPassword.includes("\0")
         ? rawNewPassword
         : null;
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/validate";
 
 const MIN_HOURS = 0.1; // 6 minutes -- a real floor, not effectively "off"
 const MAX_HOURS = 168; // 1 week -- generous upper bound, still finite
@@ -47,10 +48,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ rest
   await initDb();
 
   try {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
+    const body = await parseJsonBody(request);
+    if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
     const { completeCapHours: rawHours } = body as { completeCapHours?: unknown };

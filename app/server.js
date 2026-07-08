@@ -3,6 +3,8 @@ const { createServer } = require("http");
 const dgram = require("dgram");
 const next = require("next");
 const { WebSocketServer } = require("ws");
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- see the dgram require above
+const { startBackupSchedule } = require("./scripts/db-backup");
 
 // True for an IPv4 address in one of the private/LAN ranges (10.0.0.0/8,
 // 172.16.0.0/12, 192.168.0.0/16) or a Node-reported IPv4-mapped-IPv6 form of
@@ -96,6 +98,38 @@ function isRestrictedHost(hostHeader) {
   return !LOCALHOST_HOSTNAMES.has(hostname);
 }
 
+// --- ROUTER/PUBLIC-EXPOSURE READINESS (not active) --------------------
+// This Host-based branch already IS the real mechanism a public deployment
+// would use (see the comment above PUBLIC_ALLOWED_PREFIXES) -- nothing here
+// needs to change structurally to go from "LAN IP" to "real domain behind
+// an open router port + Cloudflare Tunnel/reverse proxy". What DOES need to
+// happen at that point (see CLAUDE.md's "public exposure prep" entry and
+// MOBILE_MIGRATION_PLAN.md for the researched self-hosting path):
+//
+// 1. Behind a reverse proxy (Caddy/nginx via Cloudflare Tunnel), this server
+//    only ever sees plain HTTP from the proxy, never HTTPS directly -- do
+//    NOT try to terminate TLS in this file. Let the proxy handle that, this
+//    server keeps listening on plain HTTP on the LAN side of the tunnel.
+// 2. session cookies' `Secure` flag (session.ts's SESSION_COOKIE_SECURE,
+//    read from an explicit FORCE_SECURE_COOKIES=true env var, NOT tied to
+//    NODE_ENV -- see that file's comment for why) should be turned on once
+//    this is genuinely served over HTTPS from the *browser's* point of
+//    view -- true once the Cloudflare Tunnel + Caddy front end is in place,
+//    since the browser always talks HTTPS to Cloudflare even though this
+//    box speaks plain HTTP behind it. Do NOT set FORCE_SECURE_COOKIES=true
+//    before that point -- it would make the browser refuse to ever send
+//    the cookie back over the current plain-HTTP LAN connection.
+// 3. Once a real reverse proxy sits in front of this server, X-Forwarded-For
+//    handling (a few lines below) must trust the PROXY's header instead of
+//    overwriting it with req.socket.remoteAddress -- otherwise every
+//    request will appear to come from the proxy's own local IP and the
+//    rate limiter/WS LAN-allowlist checks would misbehave. Only trust
+//    X-Forwarded-For when the immediate connecting peer is the known
+//    reverse-proxy address, never trust it directly from the open internet.
+// 4. Swap/extend PUBLIC_ALLOWED_PREFIXES's Host check to the real public
+//    domain instead of (or in addition to) the LAN IP.
+// -----------------------------------------------------------------------
+
 function isPubliclyAllowedPath(pathname) {
   return PUBLIC_ALLOWED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`) || pathname.startsWith(`${prefix}?`));
 }
@@ -151,6 +185,15 @@ app.prepare().then(() => {
     // TCP remote address before Next's handler (and any API route) ever
     // sees it, so route code can keep reading the header but can no longer
     // be lied to by the client.
+    // ROUTER/PUBLIC-EXPOSURE READINESS (not active): the unconditional
+    // overwrite below is only correct with NO reverse proxy in front of this
+    // server, which is true today (LAN-direct). The moment a real reverse
+    // proxy (Caddy/Cloudflare Tunnel) sits in front of this for public
+    // exposure, req.socket.remoteAddress becomes the PROXY's own local
+    // address for every request, not the real visitor -- this line would
+    // need to instead trust the proxy's own X-Forwarded-For (only when the
+    // immediate peer IS the known proxy address) rather than always
+    // discarding it. Left unconditional here since there's no proxy yet.
     req.headers["x-forwarded-for"] = req.socket.remoteAddress || "unknown";
     // Next's request handler expects the legacy url.parse()-shaped object
     // (pathname/query/search, etc.), not a WHATWG URL instance — build that
@@ -164,6 +207,44 @@ app.prepare().then(() => {
       res.setHeader("Content-Type", "text/plain");
       res.end("404 Not Found");
       return;
+    }
+
+    // Every route in this app that reads a request body is a small JSON API
+    // call (login/register/create-order/etc.) -- none legitimately need more
+    // than a few hundred bytes. Without a limit, a caller could send an
+    // arbitrarily large body that gets fully buffered into memory by
+    // req.json() inside a route handler before that handler ever gets a
+    // chance to validate/reject anything (see SECURITY_ATTACK_LOG.md's "No
+    // Request Body Size Limit" finding -- a 100KB+ body was accepted with no
+    // pushback). Checked at this layer (not per-route) so every current and
+    // future API route gets the same protection automatically, rather than
+    // relying on each route remembering to check it individually.
+    const MAX_BODY_BYTES = 16 * 1024; // 16KB -- generous over the largest legitimate payload (a 200-char name/password pair) with headroom
+    const declaredLength = Number(req.headers["content-length"]);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+      res.statusCode = 413;
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ error: "Request body too large" }));
+      return;
+    }
+    if (parsedUrl.pathname.startsWith("/api/") && !declaredLength) {
+      // No Content-Length (e.g. chunked transfer-encoding) -- enforce the
+      // same cap by counting bytes as they arrive and aborting the
+      // connection if it's exceeded, instead of trusting a header that
+      // wasn't sent.
+      let received = 0;
+      let aborted = false;
+      req.on("data", (chunk) => {
+        if (aborted) return;
+        received += chunk.length;
+        if (received > MAX_BODY_BYTES) {
+          aborted = true;
+          res.statusCode = 413;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Request body too large" }));
+          req.destroy();
+        }
+      });
     }
 
     handle(req, res, {
@@ -258,5 +339,10 @@ app.prepare().then(() => {
         console.log(`> Also reachable on your network at http://${lanAddress}:${port}`);
       }
     }
+    // Rolling DB backup safety net -- see scripts/db-backup.js. Started here
+    // (not earlier in this file) so it only begins once the server is
+    // actually up and Postgres has had a chance to be reachable, rather than
+    // racing the very first request.
+    startBackupSchedule();
   });
 });

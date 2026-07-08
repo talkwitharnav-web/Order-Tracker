@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
-import { requireString } from "@/lib/validate";
+import { requireSafeName, parseJsonBody } from "@/lib/validate";
 
 export async function PUT(
   request: Request,
@@ -22,18 +22,16 @@ export async function PUT(
   const client = await getPool().connect();
 
   try {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
+    const body = await parseJsonBody(request);
+    if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
     const { newName: rawNewName } = body as { newName?: unknown };
-    const newName = requireString(rawNewName);
+    const newName = requireSafeName(rawNewName);
 
     if (!newName) {
       return NextResponse.json(
-        { error: "New name is required (non-empty string, max 200 chars)" },
+        { error: "New name is required (letters, numbers, spaces, and basic punctuation only, max 200 chars)" },
         { status: 400 },
       );
     }

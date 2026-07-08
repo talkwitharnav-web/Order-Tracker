@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, FormEvent, FC } from "react";
+import { useState, useEffect, useMemo, useRef, FormEvent, FC } from "react";
 import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -157,7 +157,9 @@ const OrderCard: FC<{
   <Card
     className={`flex flex-col p-5 transition-shadow duration-500 ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
   >
-    <p className="font-bold text-xl text-[var(--color-text-primary)] mb-4">#{order.order_number}</p>
+    <p className="font-bold text-xl text-[var(--color-text-primary)] mb-4 break-all" title={order.order_number}>
+      #{order.order_number}
+    </p>
     <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
     <button
       onClick={(e) => onDelete(order.id, e.shiftKey)}
@@ -235,13 +237,21 @@ const HomeTab: FC<{
       // Names keep natural casing/spacing (letters, spaces, hyphens,
       // apostrophes only) rather than the POS-style uppercase-alphanumeric
       // restriction used for code-based styles.
-      setOrderNumber(value.replace(/[^a-zA-Z\s'-]/g, "").slice(0, 60));
+      setOrderNumber(value.replace(/[^a-zA-Z\s'_-]/g, "").slice(0, 60));
     } else {
-      setOrderNumber(value.toUpperCase().replace(/[^A-Z0-9-]/g, ""));
+      setOrderNumber(value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""));
     }
   };
 
   const activeStyle = NAMING_STYLES.find((s) => s.value === namingStyle) ?? NAMING_STYLES[NAMING_STYLES.length - 1];
+
+  // Computed once per render and reused for both the rendered list and the
+  // "no matches" empty state below -- previously this filter ran twice per
+  // render (identical predicate, only to check .length the second time).
+  const filteredOrders = useMemo(
+    () => orders.filter((order) => order.order_number.toLowerCase().includes(searchQuery.trim().toLowerCase())),
+    [orders, searchQuery],
+  );
 
   return (
     <div className="space-y-6">
@@ -285,7 +295,10 @@ const HomeTab: FC<{
 
       <Card>
         <div className="flex items-center justify-between mb-4 gap-4">
-          <h3 className="text-xl font-bold text-[var(--color-text-primary)]">All Active Orders</h3>
+          <h3 className="text-lg sm:text-xl font-bold text-[var(--color-text-primary)] whitespace-nowrap">
+            <span className="sm:hidden">Active Orders</span>
+            <span className="hidden sm:inline">All Active Orders</span>
+          </h3>
           <div className="relative w-full max-w-xs">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
             <Input
@@ -299,33 +312,36 @@ const HomeTab: FC<{
           </div>
         </div>
         <div className="space-y-3">
-          {orders
-            .filter((order) => order.order_number.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-            .map((order) => (
-              <div
-                key={order.id}
-                className={`bg-[var(--color-surface-2)] p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between transition-shadow duration-500 ${
-                  recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""
-                }`}
+          {filteredOrders.map((order) => (
+            <div
+              key={order.id}
+              className={`bg-[var(--color-surface-2)] p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between transition-shadow duration-500 ${
+                recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""
+              }`}
+            >
+              <span
+                className="font-bold text-lg text-[var(--color-text-primary)] truncate min-w-0"
+                title={order.order_number}
               >
-                <span className="font-bold text-lg text-[var(--color-text-primary)]">#{order.order_number}</span>
-                <div className="flex items-center gap-3">
-                  <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
-                  <button
-                    onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
-                    title="Hold Shift to skip the confirmation"
-                    aria-label={`Delete order ${order.order_number}`}
-                    className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                </div>
+                #{order.order_number}
+              </span>
+              <div className="flex items-center gap-3 shrink-0">
+                <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+                <button
+                  onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
+                  title="Hold Shift to skip the confirmation"
+                  aria-label={`Delete order ${order.order_number}`}
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </button>
               </div>
-            ))}
+            </div>
+          ))}
           {orders.length === 0 && <p className="text-[var(--color-text-muted)]">No active orders.</p>}
-          {orders.length > 0 &&
-            orders.filter((order) => order.order_number.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-              .length === 0 && <p className="text-[var(--color-text-muted)]">No orders match your search.</p>}
+          {orders.length > 0 && filteredOrders.length === 0 && (
+            <p className="text-[var(--color-text-muted)]">No orders match your search.</p>
+          )}
         </div>
       </Card>
 

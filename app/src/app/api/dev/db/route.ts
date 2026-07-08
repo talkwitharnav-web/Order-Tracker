@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
-import { decryptFromStorage } from "@/lib/crypto";
 
 type RestaurantRow = { id: number; name: string; password: string; raw_password: string | null; deleted_at: string | null };
 
@@ -15,39 +14,30 @@ export async function GET() {
   try {
     await initDb();
 
+    // Capped at the most recent 500 rows each -- these are unbounded-growth
+    // tables (orders/deleted orders are never purged automatically) with no
+    // pagination UI on the admin/db page, so an old dev install with years
+    // of history would otherwise ship its entire order history as one JSON
+    // response on every single page load/refresh. Restaurants aren't capped
+    // since that table only grows with real registrations, not every order
+    // ever placed -- realistically stays small.
+    // Restaurants no longer have a soft-delete state -- admin DELETE is a
+    // real, permanent delete (kitchens' own order-delete stays soft, see
+    // the Deleted Orders query below), so there is no "deleted restaurants"
+    // row set to query anymore.
     logger.info("GET /api/dev/db - fetching all data...");
     const restaurantRows = (await query<RestaurantRow>("SELECT * FROM restaurants WHERE deleted_at IS NULL")).rows;
-    const orders = (await query("SELECT * FROM orders WHERE deleted_at IS NULL ORDER BY id DESC")).rows;
+    const orders = (await query("SELECT * FROM orders WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 500")).rows;
 
-    const deletedRestaurantRows = (
-      await query<RestaurantRow>("SELECT * FROM restaurants WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
-    ).rows;
     const deletedOrders = (
-      await query("SELECT * FROM orders WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+      await query("SELECT * FROM orders WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 500")
     ).rows;
-
-    // Deleted restaurants' names are encrypted at rest (see lib/crypto.ts) so
-    // the live UNIQUE index frees up their name immediately -- decrypt here
-    // purely for admin display in the Deleted view, never written back.
-    // Guarded per-row: a single undecryptable name (e.g. the encryption key
-    // was rotated by an unpersisted-key fallback since that row was
-    // deleted -- see crypto.ts's loadOrCreateKey) must not throw and take
-    // down this entire endpoint's live data along with it.
-    const deletedRestaurants = deletedRestaurantRows.map((r) => {
-      try {
-        return { ...r, name: decryptFromStorage(r.name) };
-      } catch (err) {
-        logger.error(`GET /api/dev/db - failed to decrypt name for deleted restaurant id=${r.id}`, err);
-        return { ...r, name: "[undecryptable]" };
-      }
-    });
 
     logger.info("GET /api/dev/db - data fetched");
 
     return NextResponse.json({
       restaurants: restaurantRows,
       orders,
-      deletedRestaurants,
       deletedOrders,
     });
   } catch (err) {

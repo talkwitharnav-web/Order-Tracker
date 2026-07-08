@@ -86,3 +86,24 @@ export const SESSION_COOKIE_MAX_AGE_REMEMBERED = 60 * 60 * 24 * 30; // 30 days
  * still being meaningfully shorter than the remembered duration.
  */
 export const SESSION_COOKIE_MAX_AGE_DEFAULT = 60 * 60 * 24; // 1 day
+
+/**
+ * Whether session cookies get the `Secure` flag (browser will only ever
+ * send the cookie over HTTPS). Previously this was `NODE_ENV ===
+ * "production"`, which is the wrong signal for this app: `NODE_ENV`
+ * reflects BUILD mode (`next build` vs `next dev`), not actual transport --
+ * this app can run a production build while still being served over plain
+ * HTTP on a home LAN (which is exactly how it runs today), so tying
+ * `Secure` to build mode would either (a) never actually protect anything
+ * in that real deployment shape, or (b) if flipped unconditionally to
+ * `true`, silently break every login by making the browser refuse to ever
+ * send the cookie back over the plain-HTTP LAN connection this app
+ * currently uses.
+ *
+ * Instead, this is an explicit opt-in: set `FORCE_SECURE_COOKIES=true` in
+ * the environment once this app is actually reachable over HTTPS (e.g.
+ * behind the Cloudflare Tunnel + Caddy reverse-proxy setup described in
+ * server.js's router/public-exposure readiness notes) -- not before, since
+ * doing so earlier would break the app rather than secure it.
+ */
+export const SESSION_COOKIE_SECURE = process.env.FORCE_SECURE_COOKIES === "true";

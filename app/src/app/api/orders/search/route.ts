@@ -26,8 +26,11 @@ export async function GET(req: Request) {
       );
     }
 
+    // Narrow column list -- anonymous public lookup, only ship what the
+    // customer tracker actually renders (see the identical note in
+    // /api/orders GET).
     const result = await query(
-      "SELECT * FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, order_number, restaurant_name, status, updated_at, acknowledged_at FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
       [escapeLikePattern(restaurantName), escapeLikePattern(orderNumber)],
     );
     const order = result.rows[0];

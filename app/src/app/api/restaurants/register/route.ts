@@ -6,11 +6,13 @@ import {
   createSessionToken,
   RESTAURANT_SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_DEFAULT,
+  SESSION_COOKIE_SECURE,
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { requireString, escapeLikePattern } from "@/lib/validate";
+import { requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 
 const SALT_ROUNDS = 10;
+const MIN_PASSWORD_LENGTH = 8;
 
 export async function POST(req: Request) {
   logger.info("POST /api/restaurants/register - request received");
@@ -18,31 +20,51 @@ export async function POST(req: Request) {
   // Registration was previously unauthenticated AND unthrottled, unlike the
   // login routes — an attacker could flood it to bloat the restaurants table
   // and force a full bcrypt hash (cost 10) server-side per request with zero
-  // credentials (see SECURITY_ATTACK_LOG.md F8). Same limiter/key shape as
-  // the login routes.
-  if (!checkRateLimit(`register:${getClientIp(req)}`)) {
+  // credentials (see SECURITY_ATTACK_LOG.md F8). Tighter than the login
+  // routes' 10/min default -- a failed login attempt costs an attacker
+  // nothing extra to repeat, but each registration permanently creates a
+  // real row, so mass account creation (DB pollution, visible immediately
+  // via the public suggest endpoint) is throttled harder than credential
+  // guessing.
+  if (!checkRateLimit(`register:${getClientIp(req)}`, { windowMs: 60_000, maxAttempts: 5 })) {
     return NextResponse.json({ error: "Too many registration attempts. Try again in a minute." }, { status: 429 });
   }
 
   try {
     await initDb();
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
+    const body = await parseJsonBody(req);
+    if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
     const { name: rawName, password: rawPassword } =
       body as { name?: unknown; password?: unknown };
 
-    const name = requireString(rawName);
-    const password = typeof rawPassword === "string" && rawPassword.length > 0 && rawPassword.length <= 200
-      ? rawPassword
-      : null;
+    const name = requireSafeName(rawName);
+    // Passwords legitimately need a wide character set (symbols, unicode,
+    // etc.) so they don't go through requireSafeName/requireString's
+    // stripping -- but a raw null byte still reaches Postgres unmodified via
+    // the raw_password column (see lib/session.ts/SYSTEM_MEMORY.md on that
+    // being intentional plaintext-storage debt) and Postgres text columns
+    // cannot store \0 at all, which previously surfaced as an unhandled 500
+    // instead of a clean 400 (see SECURITY_ATTACK_LOG.md's "Null Byte
+    // Injection" finding).
+    const password =
+      typeof rawPassword === "string" &&
+      rawPassword.length >= MIN_PASSWORD_LENGTH &&
+      rawPassword.length <= 200 &&
+      !rawPassword.includes("\0")
+        ? rawPassword
+        : null;
 
-    if (!name || !password) {
+    if (!name) {
       return NextResponse.json(
-        { error: "Restaurant name and password are required (non-empty strings, max 200 chars)" },
+        { error: "Restaurant name is required (letters, numbers, spaces, and basic punctuation only, max 200 chars)" },
+        { status: 400 },
+      );
+    }
+    if (!password) {
+      return NextResponse.json(
+        { error: `Password must be ${MIN_PASSWORD_LENGTH}-200 characters` },
         { status: 400 },
       );
     }
@@ -95,7 +117,7 @@ export async function POST(req: Request) {
     response.cookies.set(RESTAURANT_SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: SESSION_COOKIE_SECURE,
       path: "/",
       maxAge: SESSION_COOKIE_MAX_AGE_DEFAULT,
     });

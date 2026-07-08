@@ -41,6 +41,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
+  const isAdmin = await isAdminRequest();
   const pool = getPool();
   const started = Date.now();
   let dbLatencyMs: number | null = null;
@@ -62,11 +63,18 @@ export async function GET(request: Request) {
     // (tier: "terrible") without also being handed raw driver error strings.
     logger.error("GET /api/health - DB check failed", err);
     const rawMessage = err instanceof Error ? err.message : "Unknown DB error";
-    dbError = (await isAdminRequest()) ? rawMessage : "Database check failed";
+    dbError = isAdmin ? rawMessage : "Database check failed";
   }
 
   const globalForWs = globalThis as unknown as { __orderTrackerWsClients?: Set<unknown> };
   const wsClientCount = globalForWs.__orderTrackerWsClients?.size ?? 0;
+  // DB size/pool internals are admin-only detail -- a self-registered
+  // kitchen account still gets its tier/latency (the actual "is this
+  // usable right now" signal HealthPin needs) but not infrastructure
+  // internals that have no bearing on their own kitchen's usability (see
+  // SECURITY_ATTACK_LOG.md's "Health Endpoint Leaks Infrastructure
+  // Details" finding -- registration being open made "any authenticated
+  // caller" a much lower bar than intended when this endpoint was designed).
 
   let tier: HealthTier;
   if (dbError !== null) {
@@ -85,15 +93,11 @@ export async function GET(request: Request) {
       connected: dbError === null,
       latencyMs: dbLatencyMs,
       error: dbError,
-      sizeBytes: dbSizeBytes,
-      pool: {
-        total: pool.totalCount,
-        idle: pool.idleCount,
-        waiting: pool.waitingCount,
-      },
+      sizeBytes: isAdmin ? dbSizeBytes : null,
+      pool: isAdmin ? { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount } : null,
     },
     ws: {
-      connectedClients: wsClientCount,
+      connectedClients: isAdmin ? wsClientCount : null,
     },
     checkedAt: new Date().toISOString(),
   });

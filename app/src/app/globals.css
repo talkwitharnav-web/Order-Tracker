@@ -518,27 +518,28 @@ html[data-ui-size="big"] {
 /*
  * The toast stack (Toast.tsx) is itself `position: fixed`, unlike PageHeader's
  * in-flow content — `.clear-top-right`'s padding approach doesn't move a
- * fixed element, so this adjusts `top`/`right` directly instead.
+ * fixed element, so this adjusts `top` directly instead. `right` is a plain
+ * fixed `1rem` at every width (matching Tailwind's `right-4` on the
+ * container itself) -- the stack always sits directly below SettingsToggles,
+ * anchored to the same right edge, never beside it.
  *
- * Below sm:, SettingsToggles stacks above other top-right content, so only
- * vertical clearance is needed. At sm:+ SettingsToggles is a single-row pill
- * sitting at the SAME right-4/top-4 corner the toast stack used to sit at
- * unconditionally — both being `position: fixed` at that identical corner
- * meant a second+ toast's collapsed-stack badge rendered directly behind/
- * under SettingsToggles instead of below it (the previous rule only ever
- * reserved height, never width, so this was never actually fixed for the
- * side-by-side sm:+ layout). Reserving BOTH dimensions everywhere the
- * toolbar could plausibly be -- pushed down on narrow, pulled left on
- * sm:+ -- keeps the stack clear of it regardless of viewport width.
+ * A previous version of this rule pushed the stack LEFT by
+ * `--reserved-top-right-w` at sm:+ (to sit beside SettingsToggles rather
+ * than below it), which was only ever correct while the toolbar was narrow.
+ * As SettingsToggles grew (Colorblind picker, DB-size chip, etc. added over
+ * time -- it's ~300px+ wide now, not the ~190px it was when that rule was
+ * written), that horizontal offset grew right along with it and started
+ * pushing the whole toast stack most of the way across a medium-width
+ * viewport, landing it near screen-center instead of "top right" -- a real
+ * regression a live measurement caught (768px viewport: stack's right edge
+ * ended up 408px in from the window edge, nowhere near the actual corner).
+ * Stacking below (same fix already used on mobile) is correct at every
+ * width regardless of how wide the toolbar ever grows, so there's no longer
+ * a separate sm:+ branch that needs its own width-tracking math.
  */
 .toast-stack {
   top: calc(var(--reserved-top-right-h) + 24px);
-}
-@media (min-width: 640px) {
-  .toast-stack {
-    top: 1rem;
-    right: calc(var(--reserved-top-right-w) + 32px);
-  }
+  right: 1rem;
 }
 
 /*

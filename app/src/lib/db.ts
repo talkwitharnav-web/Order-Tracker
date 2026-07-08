@@ -187,4 +187,16 @@ async function runInitDb() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurants_unique_name_ci
     ON restaurants (LOWER(name)) WHERE deleted_at IS NULL;
   `);
+  // The Kitchen Dashboard polls GET /api/orders/restaurant/[name] every 5s
+  // per open tab, filtering on `restaurant_name ILIKE $1 AND deleted_at IS
+  // NULL` -- the single most frequently-run query in the app. A plain ILIKE
+  // can't use a normal btree index; this expression index matches the
+  // LOWER(restaurant_name) comparison the query planner can derive from an
+  // exact-match ILIKE pattern (no wildcards are ever used here, only a
+  // fully-escaped literal name), so lookups stay index-backed as order
+  // volume grows instead of falling back to a sequential scan.
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_orders_restaurant_live
+    ON orders (LOWER(restaurant_name)) WHERE deleted_at IS NULL;
+  `);
 }

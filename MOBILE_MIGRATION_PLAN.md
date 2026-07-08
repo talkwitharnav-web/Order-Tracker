@@ -2,6 +2,8 @@
 
 **Read this first if you're picking up this project in a new chat.** This file exists because the prior conversation got long/expensive; it captures the plan, decisions, and exact current state so a fresh Claude session can continue without re-deriving everything. Also read `CLAUDE.md` and `SYSTEM_MEMORY.md` for the rest of the project's history — this file is scoped only to the mobile-migration effort.
 
+> **Status note (2026-07-06): this file is a frozen snapshot from the session that did the initial LAN-access groundwork, not living state.** No Expo/React Native work has started since — the "not yet started" list near the bottom is still accurate as a to-do list. But several *unrelated* LAN/session bugs mentioned in passing here (the login-page-on-back-button issue, the Welcome-Back screen behavior) have since been properly root-caused and fixed — see `CLAUDE.md` §26 and §30, and `SYSTEM_MEMORY.md` §26/§30. Don't treat this file's "NOT yet confirmed"/"could not reproduce" framing for those as current — it predates the real fix.
+
 ---
 
 ## The big picture / decisions made so far

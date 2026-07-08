@@ -3,3 +3,9 @@
 # than committing it).
 restaurant-app-export/
 restaurant-app-export.zip
+
+# Automatic DB backups (see app/src/lib/db-backup.ts) -- real data dumps of
+# whatever's in Postgres at snapshot time, not source, and rotate themselves
+# (only the 3 most recent are ever kept) so there's nothing meaningful to
+# preserve in git history anyway.
+backups/

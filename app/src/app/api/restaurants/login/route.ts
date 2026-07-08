@@ -7,9 +7,10 @@ import {
   RESTAURANT_SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_REMEMBERED,
   SESSION_COOKIE_MAX_AGE_DEFAULT,
+  SESSION_COOKIE_SECURE,
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { requireString, escapeLikePattern } from "@/lib/validate";
+import { requireString, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 
 // Fixed dummy hash so a not-found lookup still pays bcrypt's cost (see
 // SECURITY_ATTACK_LOG.md F4 — without this, "restaurant not found" returned
@@ -27,10 +28,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
+    const body = await parseJsonBody(req);
+    if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
     const { name: rawName, password: rawPassword, rememberMe } =
@@ -75,7 +74,7 @@ export async function POST(req: Request) {
     response.cookies.set(RESTAURANT_SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: SESSION_COOKIE_SECURE,
       path: "/",
       maxAge: rememberMe ? SESSION_COOKIE_MAX_AGE_REMEMBERED : SESSION_COOKIE_MAX_AGE_DEFAULT,
     });

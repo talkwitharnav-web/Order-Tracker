@@ -4,6 +4,21 @@
  * deployment (see SYSTEM_MEMORY.md on the WS hub's similar in-process
  * assumption). Would need a shared store (Redis, etc.) if this ever ran
  * behind a load balancer with multiple instances.
+ *
+ * ROUTER/PUBLIC-EXPOSURE READINESS (not active): today, every per-IP key
+ * here is really per-*household* on a home LAN (several people/devices
+ * sharing one router IP), so the current limits (10/min login, 120/min
+ * anonymous lookups) are tuned generously with that in mind. Once this app
+ * is reachable from the open internet, per-IP is a much more precise
+ * signal (one real caller per IP, mostly), so these limits could be
+ * tightened without hurting legitimate use, e.g.:
+ *
+ * const DEFAULT_MAX_ATTEMPTS = process.env.PUBLIC_DEPLOYMENT ? 5 : 10;
+ *
+ * Also worth adding at that point: a global (not per-IP) ceiling on total
+ * requests/sec across all callers, since a distributed attack from many
+ * different IPs entirely sidesteps a per-IP limiter -- not needed against
+ * the LAN-only threat model this app has today.
  */
 const attempts = new Map<string, { count: number; windowStart: number }>();
 

@@ -12,6 +12,8 @@ A Next.js application for real-time restaurant order management. A single App Ro
 * **Real-time updates**: the customer tracker and kitchen dashboard both learn about order changes via a shared WebSocket hub scoped per-restaurant (a customer tracking one restaurant's order never sees another restaurant's traffic).
 * **Session-based auth**: signed httpOnly cookies for both admin and kitchen logins, with independent "Remember Me" persistence per role.
 * **Local Postgres**: runs via Docker Compose, no separate database install needed.
+* **Security hardening**: rate limiting on every public/write endpoint, an 8-character minimum password, server-side input validation (not just client-side) rejecting HTML/control characters in stored names, standard security response headers (CSP, X-Frame-Options, etc.), and a strict cap on request body size. See `SECURITY_ATTACK_LOG.md` for the full history of what's been tested and fixed.
+* **Automatic rolling backups**: the dev server snapshots the database every 3 hours and keeps the 3 most recent snapshots (`backups/` at the repo root) — a small safety net against an accidental destructive action (e.g. the admin console's Seed/Purge buttons), not a substitute for real backups if this app ever holds data worth keeping long-term.
 
 ## Tech Stack
 
@@ -46,7 +48,7 @@ These commands work from **either** the repo root (`Restaurant/`) or the `app/` 
 * **`startup`** (`.\startup`/`.\startup.cmd` on Windows, `./startup.sh` on Mac/Linux) — verbose dependency check (Node, npm, Docker installed, `.env.local`/`SESSION_SECRET`, npm packages actually resolvable — not just present) with auto-repair; opens Docker Desktop itself if it isn't already running; then does the same as `start:all` below. Recommended over `start:all` directly since it catches broken/missing dependencies before they cause a confusing failure mid-startup.
 * **`npm run start:all`** — checks whether Docker Desktop is open (starts it if not), starts the local Postgres container, then starts the Next.js dev server. The app will be at http://localhost:3000.
 * **Ctrl+C** — stops the dev server. This does *not* stop the database container — it keeps running in the background.
-* **`npm run db:down`** — stops *and removes* the database container (your data stays safe in a Docker volume, so nothing is lost, but the container itself goes away), then closes Docker Desktop itself if it was running. Use this when you're fully done for the day/session and want a clean slate.
+* **`npm run db:down`** — stops *and removes* the database container (your data stays safe in a Docker volume, so nothing is lost, but the container itself goes away), then closes Docker Desktop itself (and its underlying WSL VM, on Windows) if it was running. Use this when you're fully done for the day/session and want a clean slate.
 * **`npm run db:stop`** — pauses the database container without removing it (slightly faster to resume than `db:up` after `db:down`, but for local dev either is fine). Use this if you just want to free up resources for a bit but plan to come back soon.
 * **`npm run db:up`** — checks whether Docker Desktop is open (starts it if not), then starts the database container back up on its own, if you ever need the DB running without also starting Next.js.
 

@@ -124,7 +124,7 @@ Run one of these (either is safe, neither deletes your data):
 ```bash
 npm run db:down
 ```
-Fully stops and removes the database container, and closes Docker Desktop itself if it was running. Slightly "tidier." Your data is untouched — it lives in a separate Docker storage area (a "volume") that persists even when the container is removed.
+Fully stops and removes the database container, and closes Docker Desktop itself if it was running (also shuts down WSL, the Windows subsystem Docker Desktop runs on, to fully free up the memory it was using). Slightly "tidier," and frees up more resources than `db:stop`. Your data is untouched — it lives in a separate Docker storage area (a "volume") that persists even when the container is removed.
 
 ```bash
 npm run db:stop
@@ -287,7 +287,10 @@ None of these require an account or affect other users — they're a personal pr
 - **In Admin → Access DB**, click the **"Deleted"** button near the top to reveal a "Deleted Restaurants" section and see kitchen-deleted orders mixed into the main Orders table (shown greyed-out with a "Deleted" tag). Each has a restore (circular arrow) button — this only ever shows things a kitchen deleted, never something an admin deleted, since those are already gone for good.
 - **Restoring a restaurant** (only ever a kitchen-side soft-delete from before this behavior existed) brings its orders back too. If its original name has since been taken by someone else, it comes back as `OriginalName-restored` (or `-restored2`, etc. if that's also taken).
 - **"Purge Database"** in Admin → Access DB still wipes everything at once, irreversibly, same as before.
+- **"Seed Database"** is also destructive, not additive — it clears existing data first, then loads sample data. It's not a safe way to "add some test data alongside what's already there."
 - Renaming a kitchen (pencil-icon button next to Reset Password in Access DB) also updates all of that kitchen's existing orders to match. If that kitchen was logged in somewhere at the time, that device will need to log back in with the new name — the old login session won't carry over automatically.
+
+**Automatic backups**: since Seed/Purge are both instant and irreversible, the dev server now takes a full database snapshot every 3 hours in the background and keeps the 3 most recent (so up to ~9 hours of history at a time) in a `backups/` folder at the repo root, as plain `.sql` files. This is a small safety net for exactly the "oops, wrong button" scenario above, not a substitute for a real backup strategy — if you ever need to restore one, ask whoever's helping you code (or run `docker exec restaurant-postgres-1 psql -U restaurant -d restaurant < backups/<filename>.sql` after stopping the app, if you're comfortable with the terminal).
 
 ## 6c. Order Timing & Pickup Window
 
@@ -326,4 +329,4 @@ Restart the app (Ctrl+C, then `npm run start:all` again) — environment variabl
 
 ## 8. A Note on This Being a Local Dev Setup
 
-Everything above is for running this project **on your own computer for testing/development**. It is not set up for real customers to use over the internet — there's no real security hardening, the admin password is hardcoded in the code, and the database only exists on your machine. If you ever want to make this a real, live product other people can use, that's a separate (and much bigger) conversation about hosting, security, and real user accounts.
+Everything above is for running this project **on your own computer (or home network) for testing/development**. It has real security protections in place (rate limiting, input validation, standard security headers, etc. — see `SECURITY_ATTACK_LOG.md` for the full list of what's been tested), but it is still not ready for real customers to use over the open internet: the admin password is hardcoded in the code (fine on a private network only you can reach, not fine once anyone on the internet could try it), and the database only exists on your machine with no offsite backup. If you ever want to make this a real, live product other people can use, that's a separate (and much bigger) conversation about hosting, a real admin password, and backup strategy.
