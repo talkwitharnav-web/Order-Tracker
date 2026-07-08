@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
 import { fetchJson } from "@/lib/api-client";
 
@@ -21,6 +22,7 @@ export default function RestaurantSignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   // See the identical check + comment in restaurant/login/page.tsx -- this
@@ -80,7 +82,7 @@ export default function RestaurantSignupPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: trimmedName, password }),
+          body: JSON.stringify({ name: trimmedName, password, rememberMe }),
         },
         { retries: 0 }
       );
@@ -144,6 +146,7 @@ export default function RestaurantSignupPage() {
           required
         />
       </div>
+      <Checkbox label="Remember Me" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
       <Button type="submit" size="lg" disabled={isLoading} className="w-full">
         {isLoading ? "Creating..." : "Register Kitchen"}
       </Button>

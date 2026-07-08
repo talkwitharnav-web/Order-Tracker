@@ -5,7 +5,7 @@ export const Card: FC<HTMLAttributes<HTMLDivElement>> = ({
   ...props
 }) => (
   <div
-    className={`bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-6 md:p-8 ${className}`}
+    className={`bg-[var(--color-surface-1)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-6 md:p-8 card-elevated ${className}`}
     {...props}
   />
 );

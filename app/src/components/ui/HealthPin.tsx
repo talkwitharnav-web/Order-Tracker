@@ -170,7 +170,7 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
         }
       }}
     >
-      <span className={`w-2 h-2 rounded-full shrink-0 ${config.dot}`} />
+      <span className={`w-2 h-2 rounded-full shrink-0 animate-health-pulse ${config.dot}`} />
       <span className={`${config.text} whitespace-nowrap`}>{config.label}</span>
       {showDbSize && health?.db.sizeBytes != null && (
         <span className="text-[var(--color-text-muted)] whitespace-nowrap">· {formatBytes(health.db.sizeBytes)}</span>

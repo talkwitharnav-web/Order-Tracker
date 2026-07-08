@@ -588,6 +588,43 @@ Full detail in `SECURITY_ATTACK_LOG.md` ("Round 3"); CLAUDE.md §32 has the narr
 - `api/restaurants/register/route.ts`: `MIN_PASSWORD_LENGTH = 8`, null-byte check on password (bypasses `requireSafeName` since passwords need a wide charset), registration rate limit tightened to a dedicated 5/min (was sharing the 10/min default).
 - `api/restaurants/[id]/password/route.ts`: same null-byte check added (identical `raw_password` insert gap as register).
 
+## 34. Visual upgrade, responsive polish, session/UX fixes (2026-07-08, Copilot session)
+
+Work done from a separate auditing machine using Copilot. All changes are uncommitted local edits to existing files in `app/src/`.
+
+### Files changed and why
+
+| File | What changed |
+|------|-------------|
+| `components/ui/ChefSprite.tsx` | SVG body refinements: stubby legs+shoes, white apron+string, black bow tie (butterfly SVG paths), round hands, blush circles, eye highlights (tiny white dots in pupils), larger eye sockets (r=3.5). All new elements use existing SVG group hierarchy — 35 idle animations unaffected. |
+| `app/globals.css` | ~15 new CSS keyframes/classes: card shadows (`.card-elevated`), order enter/exit animations, health dot pulse, status card breathe, confetti burst particles, live indicator ripple ring, sidebar active accent, modal backdrop blur, `::selection` color, heading `text-wrap: balance`, custom scrollbar styling, iOS overscroll fix, horizontal overflow prevention. All gated behind `prefers-reduced-motion` and `[data-motion="reduced"]`. Arm animation `transform-origin` moved to shoulder joints (32px/68px). |
+| `components/ui/Card.tsx` | Added `card-elevated` class for subtle shadows. |
+| `restaurant/Dashboard.tsx` | Empty states use `ChefSprite` with contextual messages. Order list has isolated scroll (`max-h-[60vh]`). Filtered views have isolated scroll (`max-h-[65vh]`). Fixed layout (`h-dvh overflow-hidden`). Status stepper + trash icon properly share space via `flex-1 min-w-0`. Heading+search stack vertically on mobile. Active nav accent. Font-display on headings. |
+| `components/ui/StatusStepper.tsx` | Responsive text sizing (`text-[10px] sm:text-xs`), tighter padding/gaps, `whitespace-nowrap`, `min-w-0` on flex containers — prevents "Complete" button overflow at 320px. |
+| `customer/page.tsx` | Confetti burst on pickup acknowledgment (8 CSS particles in brand colors). Status breathe animation on status change. Live indicator ripple ring. Loading text personality. |
+| `components/ui/Modal.tsx` | Added `modal-backdrop-blur` class. |
+| `components/ui/BackgroundArt.tsx` | Wider letter-spacing on text banners. |
+| `components/ui/HealthPin.tsx` | Health dot uses `animate-health-pulse`. |
+| `components/ui/SettingsToggles.tsx` | Z-index `z-20` → `z-40` (fixes tooltip rendering behind admin table headers). S/M/B size toggle hidden below 640px. |
+| `admin/db/page.tsx` | Added `BackgroundArt`. Isolated table scroll (restaurant `max-h-[40vh]`, orders `max-h-[55vh]`). Sticky table headers (`z-20`) + sticky action columns (`z-10`). Scrollable area capped with `relative z-0`. Orders heading+search moved inside Card. `!p-0` on table cards. Font-display on section headings. |
+| `restaurant/signup/page.tsx` | Added Remember Me checkbox + `Checkbox` import. `rememberMe` state wired to register API body. |
+| `api/restaurants/register/route.ts` | Accepts `rememberMe` from body. Imports `SESSION_COOKIE_MAX_AGE_REMEMBERED`. Cookie `maxAge` is 30 days when remembered, 1 day otherwise (was always 1 day). |
+| `restaurant/home/page.tsx` | Session check added — redirects to `/restaurant/restauranthome` if active session exists. Uses `Promise.all` for parallel session+count checks. |
+| `restaurant/page.tsx` | Returns "Loading..." instead of `null` during redirect. |
+| `restaurant/restauranthome/page.tsx` | Returns "Loading..." instead of `null` during session check. |
+
+### Z-index hierarchy (admin page, post-fix)
+- `z-40`: `SettingsToggles` (fixed, top-right toolbar — must be above everything)
+- `z-20`: sticky `thead` rows inside scrollable table cards
+- `z-10`: sticky `td.right-0` action columns
+- `z-0`: scrollable content area (`relative z-0` — creates stacking context that caps all children below z-40)
+
+### Viewport behavior
+- **320px**: all elements fit, status stepper text shrinks, heading+search stack, S/M/B toggle hidden
+- **390px**: clean mobile layout, order list scrolls independently within card
+- **768px**: tablet layout, sidebar visible on dashboard, full-width search
+- **1440px**: desktop, sidebar + order list + pickup window all visible, S/M/B restored
+
 ## 33. Toast top-right regression fix + rolling DB backup (2026-07-08)
 
 Full narrative (including a real accidental-data-loss incident during this session — see that entry for what happened and the standing rule it produced about admin/db's Seed button) is in CLAUDE.md §33. Technical summary:

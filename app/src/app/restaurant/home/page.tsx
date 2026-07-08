@@ -16,19 +16,30 @@ async function getRestaurantCount() {
   }
 }
 
+async function hasActiveSession() {
+  try {
+    const session = await fetchJson<{ restaurant: { name: string } | null }>("/api/session");
+    return !!session.restaurant;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Kitchen Portal landing: Log In / Register choice. Deliberately has no
- * session check of its own (see restauranthome/page.tsx, which owns the
- * "already logged in?" question) — this page's only job is the first-run
- * gate: if literally zero kitchens exist anywhere, skip straight to signup
- * since there's nothing to log into yet.
+ * Kitchen Portal landing: Log In / Register choice. Checks for an existing
+ * remembered session first — if one exists, skips straight to the dashboard
+ * welcome-back screen instead of showing Login/Register buttons.
  */
 export default function RestaurantHomePage() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    getRestaurantCount().then((count) => {
+    Promise.all([hasActiveSession(), getRestaurantCount()]).then(([hasSession, count]) => {
+      if (hasSession) {
+        router.replace("/restaurant/restauranthome");
+        return;
+      }
       if (count === 0) {
         router.replace("/restaurant/signup");
         return;
@@ -37,7 +48,11 @@ export default function RestaurantHomePage() {
     });
   }, [router]);
 
-  if (checking) return null;
+  if (checking) return (
+    <div className="min-h-dvh flex items-center justify-center">
+      <p className="text-[var(--color-text-muted)] text-sm">Loading...</p>
+    </div>
+  );
 
   return (
     <KitchenPortalLanding

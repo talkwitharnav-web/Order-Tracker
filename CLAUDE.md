@@ -607,3 +607,95 @@ User's spec, clarified via `AskUserQuestion` after an initial "2 hours... no wai
 ## Update discipline for this file
 
 Append a new dated/titled entry after each substantial prompt — new features, non-trivial bug fixes, or any decision a future session might otherwise redo or second-guess without this context. Skip trivial/cosmetic asks. Prefer over-explaining *why* over documenting *what* (the diff/git history already shows what changed). If a past entry here turns out to be wrong or superseded, correct it in place rather than leaving stale reasoning for the next reader to trip over.
+
+---
+
+## 10. Visual upgrade + responsive polish + session/UX fixes (2026-07-08, Copilot session)
+
+This work was done from a separate machine (Copilot on a Windows auditing box) against a local copy of the codebase, then moved back to the main host. **All changes are purely local uncommitted edits** — verify with `git status` and commit when ready.
+
+### Chef mascot refinements (ChefSprite.tsx)
+- Added **stubby legs/feet** with brown shoes below the torso
+- Added **white apron** (trapezoid over torso + apron string)
+- Added **black bow tie** (butterfly-shaped SVG paths at the neck, drawn AFTER the head circle so it renders on top)
+- Added **round hands** (circles at the ends of both arms)
+- Added **subtle blush** (two semi-transparent pink circles on cheeks)
+- Added **eye highlights** (tiny white dots in each pupil for the "alive" look)
+- Enlarged eye sockets slightly (r=3 → r=3.5)
+- **Arm animation fix**: moved `transform-origin` for `.chef-arm-left`/`.chef-arm-right` to the shoulder joints (32px/68px instead of 28px/72px) so arms rotate naturally instead of detaching during wave/shrug/etc animations
+
+### globals.css additions (all new, additive)
+- Card shadows (`.card-elevated`): `0 1px 3px rgba(0,0,0,0.06)`, with dark-mode and hover variants
+- Order card enter animation (`@keyframes order-card-enter`): 200ms fade+slide
+- Health dot pulse (`animate-health-pulse`): gentle opacity cycle on the health indicator
+- Status card breathe (`animate-status-breathe`): scale pulse on customer status change
+- Confetti burst (`confetti-particle`): CSS-only particle animation for customer pickup celebration
+- Live indicator ripple (`.live-ripple-ring`): expanding ring around the Live dot on customer page
+- Sidebar active accent (`.nav-active-accent`): 3px left border on active tab
+- Modal backdrop blur (`.modal-backdrop-blur`): `backdrop-filter: blur(4px)` on modals
+- Text selection color (`::selection`): semi-transparent terracotta
+- Heading text-wrap balance (`text-wrap: balance` on h1-h6)
+- Custom scrollbar styling (warm-toned thin scrollbars)
+- iOS overscroll fix (`overscroll-behavior: none`) + horizontal overflow prevention
+- All new animations gated behind `prefers-reduced-motion` and `[data-motion="reduced"]`
+
+### Card.tsx
+- Added `card-elevated` class for subtle shadows on all cards
+
+### Dashboard.tsx
+- Added `ChefSprite` import for empty states
+- **Sidebar active accent**: active nav button gets `nav-active-accent` (3px terracotta left border)
+- **Order card enter animation**: `animate-order-enter` on both Home list rows and filtered grid cards
+- **Empty state with mascot**: when no orders exist, shows a small ChefSprite with contextual messages ("Quiet kitchen tonight...", "The stove is cold, boss." etc.) instead of plain text
+- **Loading text personality**: "Loading orders..." → "Setting up the kitchen..."
+- **Typography**: page heading uses `font-display` (Fraunces), kitchen name in sidebar uses `font-display`
+- **Responsive heading fix**: "Active Orders" heading + search stack vertically on mobile (`flex-col sm:flex-row`) instead of fighting for space on one line
+- **Order row scaling**: tighter padding (`p-3 sm:p-4`), reduced gaps (`gap-2 sm:gap-3`), stepper wrapped in `flex-1 min-w-0` so it shares space with trash icon, smaller trash button on mobile
+- **Isolated order list scroll**: order list inside Active Orders card has `max-h-[60vh] overflow-y-auto` — orders scroll independently while Add Order card and heading stay in place
+- **Filtered view scroll**: order grid in Received/Preparing/Complete tabs has `max-h-[65vh] overflow-y-auto`
+- **Fixed layout**: outer container uses `h-dvh overflow-hidden`, mobile topbar/menu get `shrink-0`
+
+### StatusStepper.tsx
+- Responsive text: `text-[10px] sm:text-xs`, `px-1 sm:px-2` so "Complete" doesn't overflow on 320px screens
+- `whitespace-nowrap` to prevent button text wrapping
+- Tighter gaps: `gap-0.5 sm:gap-1` + `min-w-0` on flex containers
+
+### customer/page.tsx
+- **Confetti celebration**: when customer clicks "Order Picked Up", 8 CSS-only confetti particles burst outward in brand colors
+- **Status breathe animation**: when status changes (Received→Preparing etc.), card does a subtle scale pulse
+- **Live indicator ripple**: expanding ring animation around the green Live dot
+- **Loading text**: "Searching..." → "Looking for your order..."
+
+### Modal.tsx
+- Added `modal-backdrop-blur` class for glass-like blur behind modals
+
+### BackgroundArt.tsx
+- Wider letter-spacing on text banners (`0.05em` → `0.1em`)
+
+### HealthPin.tsx
+- Added `animate-health-pulse` class to the health status dot
+
+### SettingsToggles.tsx
+- **Z-index fix**: bumped from `z-20` to `z-40` so health pin tooltip renders above admin table sticky headers
+- **Mobile cleanup**: S/M/B size toggle hidden below `sm` (640px) to reduce toolbar crowding on small screens
+
+### admin/db/page.tsx
+- Added `BackgroundArt` component for visual consistency
+- Section headings use `font-display` (Fraunces)
+- **Isolated table scroll**: restaurant table in scrollable card (`max-h-[40vh]`), orders table in scrollable card (`max-h-[55vh]`)
+- **Sticky table headers**: both tables have `sticky top-0` thead with `z-20` + bottom shadow, so column headers stay visible while scrolling
+- **Sticky action columns**: `z-10` on sticky right-0 Action th/td cells
+- **Scrollable area z-index containment**: `relative z-0` on the scrollable content area so sticky elements inside it NEVER overlap the fixed SettingsToggles at z-40
+- **Unified Orders card**: "Orders" heading + search moved INSIDE the Card with the table (border-b separator), no more detached floating header bar
+- `!p-0` on table cards to force-override Card component's base padding
+
+### Session/auth fixes
+- **Remember Me on signup**: added `Checkbox` to signup page, wired through to register API route which now accepts `rememberMe` and sets 30-day cookie (vs 1-day default). Import of `SESSION_COOKIE_MAX_AGE_REMEMBERED` added to register route.
+- **Session check at /restaurant/home**: landing page now checks for active session via `/api/session` and redirects to `/restaurant/restauranthome` (welcome-back screen) if one exists — previously showed Login/Register buttons even with a valid remembered session
+- **Loading states**: all three restaurant route pages (`/restaurant`, `/restaurant/home`, `/restaurant/restauranthome`) now show centered "Loading..." text instead of blank `null` during session checks, preventing the "blank page limbo" when hitting back button during redirects
+
+### Things to know when moving back
+- All changes are in `app/src/` — no new files were created, only existing files were edited
+- TypeScript compiles clean (`tsc --noEmit` = 0 errors)
+- The `useSearchParams` build error on `/restaurant/restauranthome` is **pre-existing** (missing Suspense boundary) — not introduced by this session; `next dev` works fine, only `next build` static generation hits it
+- Copy the entire `app/src/` directory back to replace the matching files on the main machine

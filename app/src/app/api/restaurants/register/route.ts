@@ -6,6 +6,7 @@ import {
   createSessionToken,
   RESTAURANT_SESSION_COOKIE_NAME,
   SESSION_COOKIE_MAX_AGE_DEFAULT,
+  SESSION_COOKIE_MAX_AGE_REMEMBERED,
   SESSION_COOKIE_SECURE,
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -36,8 +37,8 @@ export async function POST(req: Request) {
     if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
-    const { name: rawName, password: rawPassword } =
-      body as { name?: unknown; password?: unknown };
+    const { name: rawName, password: rawPassword, rememberMe } =
+      body as { name?: unknown; password?: unknown; rememberMe?: unknown };
 
     const name = requireSafeName(rawName);
     // Passwords legitimately need a wide character set (symbols, unicode,
@@ -119,7 +120,7 @@ export async function POST(req: Request) {
       sameSite: "lax",
       secure: SESSION_COOKIE_SECURE,
       path: "/",
-      maxAge: SESSION_COOKIE_MAX_AGE_DEFAULT,
+      maxAge: rememberMe ? SESSION_COOKIE_MAX_AGE_REMEMBERED : SESSION_COOKIE_MAX_AGE_DEFAULT,
     });
     return response;
   } catch (err) {

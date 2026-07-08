@@ -1,6 +1,15 @@
 services:
   postgres:
     image: postgres:16
+    # Pinned so the container name is always "restaurant-postgres-1"
+    # regardless of what folder this repo is checked out into — Docker
+    # Compose otherwise derives the name from the parent folder (e.g. a
+    # folder named "Order-Tracker-main" produces
+    # "order-tracker-main-postgres-1" instead), which silently broke
+    # db-backup.js's hardcoded POSTGRES_CONTAINER_NAME default and made
+    # every scheduled backup fail with "No such container" on any checkout
+    # not named exactly "restaurant".
+    container_name: restaurant-postgres-1
     restart: unless-stopped
     environment:
       POSTGRES_USER: restaurant

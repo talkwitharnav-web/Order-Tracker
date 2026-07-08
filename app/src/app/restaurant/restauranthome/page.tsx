@@ -84,7 +84,11 @@ export default function RestaurantHomeDashboardPage() {
     router.push("/restaurant/home");
   };
 
-  if (checkingSession) return null;
+  if (checkingSession) return (
+    <div className="min-h-dvh flex items-center justify-center">
+      <p className="text-[var(--color-text-muted)] text-sm">Loading...</p>
+    </div>
+  );
 
   if (awaitingContinue) {
     return (

@@ -50,7 +50,7 @@ export const BackgroundArt: FC = () => (
           fontSize: "2rem",
           color: "var(--color-accent-olive)",
           opacity: 0.08,
-          letterSpacing: "0.05em",
+          letterSpacing: "0.1em",
         }}
       >
         {text}

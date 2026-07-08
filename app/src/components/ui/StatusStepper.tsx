@@ -39,7 +39,7 @@ export const StatusStepper: FC<{
   }, [currentIndex]);
 
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="Order status">
+    <div className="flex items-center gap-0.5 sm:gap-1 min-w-0" role="group" aria-label="Order status">
       {ORDERED_STATUS_KEYS.map((key, index) => {
         const isDone = index < currentIndex;
         const isCurrent = index === currentIndex;
@@ -47,13 +47,13 @@ export const StatusStepper: FC<{
         const next = NEXT_API_STATUS[currentKey];
 
         return (
-          <div key={key} className="flex items-center gap-1 flex-1">
+          <div key={key} className="flex items-center gap-0.5 sm:gap-1 flex-1 min-w-0">
             <button
               type="button"
               disabled={!isNext}
               onClick={() => isNext && next && onAdvance(next)}
               aria-current={isCurrent ? "step" : undefined}
-              className={`flex-1 py-2 px-2 text-xs font-semibold rounded-[var(--radius-sm)] transition-colors text-center ${
+              className={`flex-1 py-2 px-1 sm:px-2 text-[10px] sm:text-xs font-semibold rounded-[var(--radius-sm)] transition-colors text-center whitespace-nowrap ${
                 isCurrent && justAdvanced ? "animate-step-advance" : ""
               } ${
                 isDone

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent, useEffect, useRef, FC } from "react";
+import { useState, FormEvent, useEffect, useRef, FC, useCallback } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
@@ -60,6 +60,37 @@ const STATUS_DESCRIPTION: Record<StatusKey, string> = {
   complete: "Your order is ready. Come and get it!",
 };
 
+const CONFETTI_COLORS = ["#c1602f", "#6b7a4f", "#e07a45", "#9caf7a", "#f2c9a0", "#d8c6a3"];
+
+const ConfettiBurst: FC = () => {
+  const particles = Array.from({ length: 8 }, (_, i) => {
+    const angle = (i / 8) * 360;
+    const distance = 40 + Math.random() * 30;
+    const x = Math.cos((angle * Math.PI) / 180) * distance;
+    const y = Math.sin((angle * Math.PI) / 180) * distance - 20;
+    return { x, y, color: CONFETTI_COLORS[i % CONFETTI_COLORS.length], delay: Math.random() * 0.1 };
+  });
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      {particles.map((p, i) => (
+        <span
+          key={i}
+          className="confetti-particle"
+          style={{
+            left: "50%",
+            top: "40%",
+            backgroundColor: p.color,
+            ['--confetti-x' as string]: `${p.x}px`,
+            ['--confetti-y' as string]: `${p.y}px`,
+            animationDelay: `${p.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
 const OrderStatusCard: FC<{ order: Order; onAcknowledge: () => void; acknowledging: boolean }> = ({
   order,
   onAcknowledge,
@@ -81,15 +112,38 @@ const OrderStatusCard: FC<{ order: Order; onAcknowledge: () => void; acknowledgi
   // polls/refetches on every WS update, so it disappears the moment the
   // click lands, same as any other status change on this page.
   const showAcknowledge = statusKey === "complete" && !order.acknowledged_at;
+  const [showConfetti, setShowConfetti] = useState(false);
+  const prevStatusRef = useRef(statusKey);
+  const [breathe, setBreathe] = useState(false);
+
+  useEffect(() => {
+    if (prevStatusRef.current !== statusKey) {
+      setBreathe(true);
+      const timer = setTimeout(() => setBreathe(false), 300);
+      prevStatusRef.current = statusKey;
+      return () => clearTimeout(timer);
+    }
+  }, [statusKey]);
+
+  useEffect(() => {
+    if (order.acknowledged_at && !showConfetti) {
+      setShowConfetti(true);
+      const timer = setTimeout(() => setShowConfetti(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [order.acknowledged_at]);
 
   return (
     <div
-      className={`mt-8 w-full p-8 rounded-[var(--radius-md)] border ${visual.border} ${visual.bg} text-center`}
+      className={`relative mt-8 w-full p-8 rounded-[var(--radius-md)] border ${visual.border} ${visual.bg} text-center ${breathe ? "animate-status-breathe" : ""}`}
     >
+      {showConfetti && <ConfettiBurst />}
       <StatusIcon status={order.status} className="w-16 h-16 mx-auto mb-4 animate-pulse" />
-      <h2 className={`text-3xl font-bold ${visual.text}`}>{title}</h2>
+      <h2 className={`text-3xl font-bold ${visual.text}`}>
+        {order.acknowledged_at ? "Enjoy Your Meal!" : title}
+      </h2>
       <p className="text-[var(--color-text-secondary)] mt-2 text-base">
-        {STATUS_DESCRIPTION[statusKey]}
+        {order.acknowledged_at ? "Thanks for picking up your order. Bon appétit!" : STATUS_DESCRIPTION[statusKey]}
       </p>
       <p className="text-xs text-[var(--color-text-muted)] mt-6">
         Order &ldquo;{order.order_number}&rdquo; &bull; Last updated {lastUpdated}
@@ -98,9 +152,6 @@ const OrderStatusCard: FC<{ order: Order; onAcknowledge: () => void; acknowledgi
         <Button onClick={onAcknowledge} disabled={acknowledging} className="mt-6">
           {acknowledging ? "Marking as picked up..." : "Order Picked Up"}
         </Button>
-      )}
-      {order.acknowledged_at && (
-        <p className="text-xs text-[var(--color-success)] mt-4 font-medium">Marked as picked up. Enjoy your meal!</p>
       )}
     </div>
   );
@@ -117,7 +168,10 @@ const ConnectionIndicator: FC<{ state: ConnectionState }> = ({ state }) => {
 
   return (
     <div className="flex items-center gap-2 justify-center text-xs text-[var(--color-text-muted)] mt-4">
-      <span className={`w-2 h-2 rounded-full ${config.dot}`} />
+      <span className="relative flex items-center justify-center w-2 h-2">
+        <span className={`absolute inset-0 rounded-full ${config.dot}`} />
+        {state === "live" && <span className="live-ripple-ring" />}
+      </span>
       {config.label}
     </div>
   );
@@ -263,7 +317,7 @@ export default function CustomerPage() {
   // kitchen registered with one (or an order name containing one) needs to
   // remain reachable from this lookup form — stripping it here silently made
   // such a restaurant/order invisible to its own customers.
-  const formatOrderInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9_- ]/g, "");
+  const formatOrderInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9_ -]/g, "");
   const formatRestaurantInput = (value: string) => value.replace(/[^a-zA-Z0-9_' -]/g, "");
 
   return (
@@ -300,7 +354,7 @@ export default function CustomerPage() {
               </div>
             </div>
             <Button type="submit" variant="primary" size="lg" disabled={isLoading} className="w-full">
-              {isLoading ? "Searching..." : "Find My Order"}
+              {isLoading ? "Looking for your order..." : "Find My Order"}
             </Button>
           </form>
 

@@ -35,7 +35,7 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4"
+      className="fixed inset-0 bg-black/70 modal-backdrop-blur flex justify-center items-center z-50 p-4"
       onClick={onClose}
     >
       <div

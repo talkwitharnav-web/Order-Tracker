@@ -28,7 +28,7 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
   return (
   <div
     ref={ref}
-    className={`fixed top-4 right-4 z-20 flex items-center gap-1 px-1.5 h-10 rounded-[var(--radius-full)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] ${className ?? ""}`}
+    className={`fixed top-4 right-4 z-40 flex items-center gap-1 px-1.5 h-10 rounded-[var(--radius-full)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] ${className ?? ""}`}
   >
     {health && (
       <>
@@ -37,9 +37,11 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
       </>
     )}
     <ThemedTooltip label="Interface size">
-      <UiSizeToggle />
+      <span className="hidden sm:inline-flex">
+        <UiSizeToggle />
+      </span>
     </ThemedTooltip>
-    <span className="w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
+    <span className="hidden sm:block w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
     <AccessibilityMenu />
     <ThemedTooltip label="Toggle theme">
       <ThemeToggle />

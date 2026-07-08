@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, FormEvent, FC } from "react";
 import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ChefSprite } from "@/components/ui/ChefSprite";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
@@ -81,7 +82,7 @@ const Nav: FC<{
           tab === "Home" ? "justify-center md:justify-start" : ""
         } ${
           activeTab === tab
-            ? "bg-[var(--color-brand)] text-white"
+            ? "bg-[var(--color-brand)] text-white nav-active-accent"
             : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-white"
         }`}
       >
@@ -95,7 +96,7 @@ const Nav: FC<{
       <SettingsToggles health={<HealthPin />} />
 
       {/* Mobile top bar */}
-      <div className="md:hidden clear-top-right flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
+      <div className="md:hidden clear-top-right flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] shrink-0">
         <div className="min-w-0">
           <h2 className="text-base font-bold text-[var(--color-text-primary)] truncate" title={restaurantName}>
             {restaurantName}
@@ -111,7 +112,7 @@ const Nav: FC<{
         </button>
       </div>
       {mobileOpen && (
-        <div className="md:hidden flex flex-col gap-1 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]">
+        <div className="md:hidden flex flex-col gap-1 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] shrink-0">
           {navButtons((tab) => {
             setActiveTab(tab);
             setMobileOpen(false);
@@ -129,7 +130,7 @@ const Nav: FC<{
       <div className="hidden md:flex w-60 shrink-0 sticky top-0 h-screen overflow-y-auto bg-[var(--color-surface-1)] border-r border-[var(--color-border)] flex-col p-4">
         <div className="flex flex-col items-start gap-1 w-full overflow-hidden px-2 mb-6">
           <h2
-            className="text-xl font-bold tracking-tight text-[var(--color-text-primary)] truncate w-full"
+            className="font-display text-xl font-bold tracking-tight text-[var(--color-text-primary)] truncate w-full"
             title={restaurantName}
           >
             {restaurantName}
@@ -155,9 +156,9 @@ const OrderCard: FC<{
   onDelete: (id: number, skipConfirm: boolean) => void;
 }> = ({ order, justUpdated, onAdvance, onDelete }) => (
   <Card
-    className={`flex flex-col p-5 transition-shadow duration-500 ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
+    className={`flex flex-col p-4 sm:p-5 transition-all duration-200 animate-order-enter ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
   >
-    <p className="font-bold text-xl text-[var(--color-text-primary)] mb-4 break-all" title={order.order_number}>
+    <p className="font-bold text-lg sm:text-xl text-[var(--color-text-primary)] mb-3 sm:mb-4 break-all" title={order.order_number}>
       #{order.order_number}
     </p>
     <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
@@ -293,13 +294,13 @@ const HomeTab: FC<{
         </form>
       </Card>
 
-      <Card>
-        <div className="flex items-center justify-between mb-4 gap-4">
-          <h3 className="text-lg sm:text-xl font-bold text-[var(--color-text-primary)] whitespace-nowrap">
+      <Card className="flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2 sm:gap-4 shrink-0">
+          <h3 className="text-lg sm:text-xl font-bold text-[var(--color-text-primary)] shrink-0">
             <span className="sm:hidden">Active Orders</span>
             <span className="hidden sm:inline">All Active Orders</span>
           </h3>
-          <div className="relative w-full max-w-xs">
+          <div className="relative w-full sm:max-w-xs">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
             <Input
               type="text"
@@ -311,36 +312,42 @@ const HomeTab: FC<{
             />
           </div>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto">
           {filteredOrders.map((order) => (
             <div
               key={order.id}
-              className={`bg-[var(--color-surface-2)] p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between transition-shadow duration-500 ${
+              className={`bg-[var(--color-surface-2)] p-3 sm:p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:justify-between transition-all duration-200 animate-order-enter card-elevated ${
                 recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""
               }`}
             >
               <span
-                className="font-bold text-lg text-[var(--color-text-primary)] truncate min-w-0"
+                className="font-bold text-base sm:text-lg text-[var(--color-text-primary)] truncate min-w-0"
                 title={order.order_number}
               >
                 #{order.order_number}
               </span>
-              <div className="flex items-center gap-3 shrink-0">
-                <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+                </div>
                 <button
                   onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
                   title="Hold Shift to skip the confirmation"
                   aria-label={`Delete order ${order.order_number}`}
-                  className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1.5 sm:p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
                 >
                   <TrashIcon className="w-4 h-4" />
                 </button>
               </div>
             </div>
           ))}
-          {orders.length === 0 && <p className="text-[var(--color-text-muted)]">No active orders.</p>}
+          {orders.length === 0 && (
+            <div className="flex flex-col items-center py-8 gap-2">
+              <ChefSprite size={80} lines={["Quiet kitchen tonight...", "Add your first order above!", "I'll just be here... waiting...", "The stove is cold, boss."]} />
+            </div>
+          )}
           {orders.length > 0 && filteredOrders.length === 0 && (
-            <p className="text-[var(--color-text-muted)]">No orders match your search.</p>
+            <p className="text-[var(--color-text-muted)]">No orders matching &ldquo;{searchQuery}&rdquo;. Try a different search?</p>
           )}
         </div>
       </Card>
@@ -432,10 +439,14 @@ const OrderGrid: FC<{
   onDelete: (id: number, skipConfirm: boolean) => void;
 }> = ({ orders, recentlyUpdatedId, onAdvance, onDelete }) => {
   if (orders.length === 0) {
-    return <p className="text-[var(--color-text-muted)]">No orders in this category.</p>;
+    return (
+      <div className="flex flex-col items-center py-8 gap-2">
+        <ChefSprite size={70} lines={["All caught up!", "Nothing on the stove right now.", "No orders ready for pickup yet.", "Kitchen's taking a breather."]} />
+      </div>
+    );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 max-h-[65vh] overflow-y-auto">
       {orders.map((order) => (
         <OrderCard
           key={order.id}
@@ -549,7 +560,7 @@ function KitchenDashboardContent({
   };
 
   const renderContent = () => {
-    if (isLoading) return <p className="text-[var(--color-text-muted)]">Loading orders...</p>;
+    if (isLoading) return <p className="text-[var(--color-text-muted)]">Setting up the kitchen...</p>;
 
     const displayedOrders =
       activeTab === "Home" ? orders : orders.filter((o) => normalizeStatus(o.status) === normalizeStatus(activeTab));
@@ -579,10 +590,10 @@ function KitchenDashboardContent({
   };
 
   return (
-    <div className="min-h-dvh flex flex-col md:flex-row">
+    <div className="h-dvh flex flex-col md:flex-row overflow-hidden">
       <Nav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={onLogout} restaurantName={restaurantName} />
-      <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-auto">
-        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)] mb-6">{activeTab}</h1>
+      <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto">
+        <h1 className="font-display text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)] mb-6 shrink-0">{activeTab}</h1>
         {renderContent()}
       </main>
 

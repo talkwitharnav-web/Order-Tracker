@@ -142,18 +142,45 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
         onClick={handleClick}
       >
         <ellipse cx="50" cy="111" rx="20" ry="4" fill="black" opacity="0.15" />
+        {/* Stubby legs/feet — grounded, derpy */}
+        <rect x="40" y="92" width="7" height="10" rx="3.5" fill="#f2c9a0" />
+        <rect x="53" y="92" width="7" height="10" rx="3.5" fill="#f2c9a0" />
+        {/* Shoes — tiny rounded ovals */}
+        <ellipse cx="43.5" cy="102" rx="5" ry="3" fill="#6b5c4d" />
+        <ellipse cx="56.5" cy="102" rx="5" ry="3" fill="#6b5c4d" />
         <g className="chef-arm-left">
           <rect x="24" y="63" width="8" height="20" rx="4" fill="#f2c9a0" />
+          {/* Round hand */}
+          <circle cx="28" cy="83" r="3.5" fill="#f2c9a0" />
         </g>
         <g className="chef-arm-right">
           <rect x="68" y="63" width="8" height="20" rx="4" fill="#f2c9a0" />
+          {/* Round hand */}
+          <circle cx="72" cy="83" r="3.5" fill="#f2c9a0" />
         </g>
+        {/* Body */}
         <rect x="34" y="60" width="32" height="34" rx="8" fill="#e8e8e8" />
         <rect x="34" y="60" width="32" height="8" fill="#d6d6d6" />
+        {/* Apron — white triangle/trapezoid over the torso */}
+        <path d="M42 66 L50 64 L58 66 L56 92 L44 92 Z" fill="white" opacity="0.9" />
+        <path d="M42 66 L50 64 L58 66" stroke="#d6d6d6" strokeWidth="0.8" fill="none" />
+        {/* Apron string */}
+        <path d="M44 72 Q50 75 56 72" stroke="#d6d6d6" strokeWidth="0.8" fill="none" />
+        {/* Head */}
         <circle cx="50" cy="46" r="16" fill="#f2c9a0" />
+        {/* Black bow tie at neck — drawn after head so it's visible */}
+        <path d="M50 62 L42 58 Q40 62 42 66 Z" fill="#1a1512" />
+        <path d="M50 62 L58 58 Q60 62 58 66 Z" fill="#1a1512" />
+        <circle cx="50" cy="62" r="2" fill="#2b2320" />
+        <circle cx="50" cy="62" r="1" fill="#3d3128" />
+        {/* Subtle blush */}
+        <circle cx="38" cy="49" r="4" fill="#f5a0a0" opacity="0.2" />
+        <circle cx="62" cy="49" r="4" fill="#f5a0a0" opacity="0.2" />
         <g className={isTracking ? "" : "chef-eyes"}>
-          <circle cx="44" cy="45" r="3" fill="white" />
-          <circle cx="56" cy="45" r="3" fill="white" />
+          {/* Slightly larger eye sockets */}
+          <circle cx="44" cy="45" r="3.5" fill="white" />
+          <circle cx="56" cy="45" r="3.5" fill="white" />
+          {/* Pupils */}
           <circle
             cx={44 + pupilOffset.x}
             cy={45 + pupilOffset.y}
@@ -168,6 +195,9 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
             fill="#2b2b2b"
             style={{ transition: isTracking ? "none" : "cx 0.3s ease, cy 0.3s ease" }}
           />
+          {/* Eye highlights — tiny white dots for life */}
+          <circle cx={44.8 + pupilOffset.x * 0.3} cy={44.2 + pupilOffset.y * 0.3} r="0.8" fill="white" opacity="0.9" />
+          <circle cx={56.8 + pupilOffset.x * 0.3} cy={44.2 + pupilOffset.y * 0.3} r="0.8" fill="white" opacity="0.9" />
         </g>
         <path d="M44 52 Q50 56 56 52" stroke="#8a5a3a" strokeWidth="2.25" fill="none" strokeLinecap="round" />
 

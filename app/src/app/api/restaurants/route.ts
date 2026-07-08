@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
 export async function GET() {
   try {
+    await initDb();
     const result = await query<{ count: string }>("SELECT COUNT(*) FROM restaurants WHERE deleted_at IS NULL");
     const count = Number(result.rows[0].count);
     return NextResponse.json({ count });

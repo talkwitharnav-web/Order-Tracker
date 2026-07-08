@@ -15,5 +15,9 @@ export default function RestaurantIndexRedirect() {
   useEffect(() => {
     router.replace("/restaurant/home");
   }, [router]);
-  return null;
+  return (
+    <div className="min-h-dvh flex items-center justify-center">
+      <p className="text-[var(--color-text-muted)] text-sm">Loading...</p>
+    </div>
+  );
 }

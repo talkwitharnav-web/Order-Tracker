@@ -16,6 +16,7 @@ import { RestaurantFilterDropdown } from "@/components/ui/RestaurantFilterDropdo
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { StatusDurationCell, StatusDurationCompleteCell } from "@/components/ui/StatusDurationCell";
+import { BackgroundArt } from "@/components/ui/BackgroundArt";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 interface Restaurant {
@@ -333,6 +334,7 @@ function AdminDbContent() {
 
   return (
     <>
+      <BackgroundArt />
       <Modal isOpen={confirmState.isOpen} title={confirmState.title} onClose={closeConfirm} danger={confirmState.danger}>
         <p className="text-[var(--color-text-secondary)] mb-6">{confirmState.message}</p>
         <ModalActions
@@ -397,8 +399,9 @@ function AdminDbContent() {
         />
       </Modal>
 
-      <div className="min-h-dvh p-4 sm:p-8">
+      <div className="h-dvh flex flex-col overflow-hidden p-4 sm:p-8">
         <SettingsToggles health={<HealthPin showDbSize />} />
+        <div className="shrink-0">
         <PageHeader
           title="Admin Dashboard"
           backHref="/"
@@ -422,10 +425,12 @@ function AdminDbContent() {
             </>
           }
         />
+        </div>
 
+        <div className="flex-1 min-h-0 overflow-y-auto relative z-0">
         <section className="mb-10">
           <div className="flex items-center justify-between mb-3 gap-4">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Restaurants</h2>
+            <h2 className="font-display text-lg font-semibold text-[var(--color-text-primary)]">Restaurants</h2>
             <div className="relative w-full max-w-xs">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
               <Input
@@ -438,9 +443,9 @@ function AdminDbContent() {
               />
             </div>
           </div>
-          <Card className="p-0 overflow-x-auto">
+          <Card className="!p-0 overflow-x-auto max-h-[40vh] overflow-y-auto">
             <table className="min-w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-[var(--color-surface-1)] z-20 shadow-[0_1px_0_var(--color-border)]">
                 <tr className="border-b border-[var(--color-border)]">
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
                     ID
@@ -460,7 +465,7 @@ function AdminDbContent() {
                   >
                     Raw Password
                   </th>
-                  <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
+                  <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)] z-10">
                     Actions
                   </th>
                 </tr>
@@ -480,7 +485,7 @@ function AdminDbContent() {
                     <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono text-xs hidden md:table-cell">
                       {r.raw_password && <CopyableValue value={r.raw_password} label="raw password" />}
                     </td>
-                    <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
+                    <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)] z-10">
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => {
@@ -517,25 +522,26 @@ function AdminDbContent() {
         </section>
 
         <section>
-          <div className="flex flex-wrap items-center justify-between mb-3 gap-3">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Orders</h2>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative w-full max-w-xs">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
-                <Input
-                  type="text"
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  placeholder="Search order name..."
-                  aria-label="Search orders by name"
-                  className="pl-9"
-                />
+          <Card className="!p-0 overflow-hidden max-h-[55vh] flex flex-col">
+            <div className="flex flex-wrap items-center justify-between px-4 py-3 gap-3 shrink-0 border-b border-[var(--color-border)]">
+              <h2 className="font-display text-lg font-semibold text-[var(--color-text-primary)]">Orders</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative w-full max-w-xs">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
+                  <Input
+                    type="text"
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    placeholder="Search order name..."
+                    aria-label="Search orders by name"
+                    className="pl-9"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-          <Card className="p-0 overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto flex-1">
             <table className="min-w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-[var(--color-surface-1)] z-20 shadow-[0_1px_0_var(--color-border)]">
                 <tr className="border-b border-[var(--color-border)]">
                   <SortableHeader label="ID" sortKey="id" activeSort={orderSort} onSort={handleSort} />
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">
@@ -581,7 +587,7 @@ function AdminDbContent() {
                     onSort={handleSort}
                     className="hidden md:table-cell"
                   />
-                  <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)]">
+                  <th className="sticky right-0 py-3 px-4 text-right text-[var(--color-text-muted)] font-medium bg-[var(--color-surface-1)] z-10">
                     Actions
                   </th>
                 </tr>
@@ -653,7 +659,7 @@ function AdminDbContent() {
                       <td className="py-3 px-4 text-[var(--color-text-muted)] hidden md:table-cell">
                         {new Date(o.created_at).toLocaleString()}
                       </td>
-                      <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)]">
+                      <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)] z-10">
                         {o.isDeleted ? (
                           <button
                             onClick={() => handleUndelete("order", o.id)}
@@ -678,8 +684,10 @@ function AdminDbContent() {
                 )}
               </tbody>
             </table>
+            </div>
           </Card>
         </section>
+        </div>
 
       </div>
     </>
