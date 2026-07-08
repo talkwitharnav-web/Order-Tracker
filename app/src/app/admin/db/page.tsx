@@ -15,6 +15,7 @@ import { HealthPin } from "@/components/ui/HealthPin";
 import { RestaurantFilterDropdown } from "@/components/ui/RestaurantFilterDropdown";
 import { StatusFilterDropdown } from "@/components/ui/StatusFilterDropdown";
 import { CopyableValue } from "@/components/ui/CopyableValue";
+import { Select } from "@/components/ui/Select";
 import { StatusDurationCell, StatusDurationCompleteCell } from "@/components/ui/StatusDurationCell";
 import { BackgroundArt } from "@/components/ui/BackgroundArt";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
@@ -651,16 +652,17 @@ function AdminDbContent() {
                           ) : (
                             <>
                               <StatusBadge status={o.status} />
-                              <select
+                              <Select
                                 value={o.status}
-                                onChange={(e) => handleStatusChange(o.id, e.target.value)}
-                                aria-label={`Change status for order ${o.order_number}`}
-                                className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] rounded-[var(--radius-sm)] p-1 text-xs border border-[var(--color-border-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
-                              >
-                                <option value="Received">Received</option>
-                                <option value="Preparing">Preparing</option>
-                                <option value="Complete">Complete</option>
-                              </select>
+                                onChange={(next) => handleStatusChange(o.id, next)}
+                                ariaLabel={`Change status for order ${o.order_number}`}
+                                size="sm"
+                                options={[
+                                  { value: "Received", label: "Received" },
+                                  { value: "Preparing", label: "Preparing" },
+                                  { value: "Complete", label: "Complete" },
+                                ]}
+                              />
                             </>
                           )}
                         </div>

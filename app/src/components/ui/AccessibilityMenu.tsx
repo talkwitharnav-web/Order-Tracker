@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, FC } from "react";
 import { Accessibility } from "lucide-react";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
 import { getA11yPref, setA11yPref, getCvdMode, setCvdMode, type A11yPrefKey, type CvdMode } from "@/lib/accessibility-prefs";
+import { useDropdownReveal } from "@/lib/useDropdownReveal";
 
 const OPTIONS: { key: A11yPrefKey; label: string; description: string }[] = [
   {
@@ -47,6 +48,7 @@ export const AccessibilityMenu: FC = () => {
   });
   const [cvdMode, setCvdModeState] = useState<CvdMode>("off");
   const containerRef = useRef<HTMLDivElement>(null);
+  const { shouldRender: showMenu, animationClass: menuAnimationClass } = useDropdownReveal(open);
 
   useEffect(() => {
     setPrefs({
@@ -96,11 +98,11 @@ export const AccessibilityMenu: FC = () => {
         </button>
       </ThemedTooltip>
 
-      {open && (
+      {showMenu && (
         <div
           role="menu"
           aria-label="Accessibility options"
-          className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40"
+          className={`${menuAnimationClass} absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40`}
         >
           <div className="px-4 py-3 border-b border-[var(--color-border)]">
             <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Accessibility</h3>

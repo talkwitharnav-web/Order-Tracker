@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/api-client";
+import { useDropdownReveal } from "@/lib/useDropdownReveal";
 import type { HealthTier } from "@/app/api/health/route";
 
 type HealthResponse = {
@@ -115,6 +116,7 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
   }, [tapped]);
 
   const isActive = hovering || tapped;
+  const { shouldRender: showPopover, animationClass: popoverAnimationClass } = useDropdownReveal(isActive);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,8 +178,8 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
         <span className="text-[var(--color-text-muted)] whitespace-nowrap">· {formatBytes(health.db.sizeBytes)}</span>
       )}
 
-      {(hovering || tapped) && (
-        <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg p-4 text-xs text-[var(--color-text-secondary)] z-30">
+      {showPopover && (
+        <div className={`${popoverAnimationClass} absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg p-4 text-xs text-[var(--color-text-secondary)] z-30`}>
           {failed ? (
             <p className="text-[var(--color-danger)]">Health check request failed — server may be unreachable.</p>
           ) : health ? (

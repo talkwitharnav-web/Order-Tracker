@@ -204,35 +204,220 @@
 }
 
 /*
- * Light/dark theme transition (ThemeToggle.tsx) -- animates the swap as a
- * directional or circular reveal via the View Transitions API instead of an
- * instant flip. ThemeToggle.tsx picks one of several shapes at random per
- * toggle (wipes, diagonals, expanding circles from the click point/viewport
- * center/a random point) and writes the resulting clip-path pair into
- * --theme-transition-clip-from/-to on <html> just before calling
- * document.startViewTransition() -- these two rules read those values back
- * to animate the browser's own before/after snapshots of the page.
- * ::view-transition-old(root) is the OLD (pre-toggle) snapshot, which stays
- * clipped to the full page throughout (root default, not overridden here)
- * so the old theme visibly stays put underneath; ::view-transition-new(root)
- * is the NEW theme's snapshot, revealed by animating its clip-path from
- * -from to -to. Falls back to a plain instant swap in ThemeToggle.tsx itself
- * when the API isn't supported (Firefox, older Safari) or Reduce Motion is
- * active -- this CSS is simply inert in that case, nothing to disable here.
+ * Light/dark theme transition (ThemeToggle.tsx) -- a soft cross-fade of
+ * colors rather than a directional wipe/reveal (an earlier View-Transitions
+ * based wipe/circle-reveal approach was tried and explicitly rejected, see
+ * CLAUDE.md). Every themed surface/border/text color is a CSS custom
+ * property (--color-surface-*, --color-border*, --color-text-*, etc.,
+ * redefined per [data-theme]) but a custom property's own value change never
+ * transitions by itself -- only concrete properties (background-color,
+ * border-color, color, fill, stroke) that reference var(...) actually
+ * animate, and only if they carry their own `transition`.
+ *
+ * Scoped to [data-theme-transitioning] rather than applied permanently to
+ * `*` -- a permanent blanket transition-property would also slow down every
+ * ordinary hover/press color change site-wide (buttons, nav active state,
+ * etc.) down to this rule's 0.45s, which reads as sluggish for interactions
+ * that have nothing to do with a theme swap. ThemeToggle.tsx adds the
+ * attribute to <html> right before flipping [data-theme], then removes it
+ * once the transition duration has elapsed, so this rule is only ever live
+ * for the ~0.6s the swap itself takes.
+ *
+ * `body` is deliberately EXCLUDED from the animated background-color fade:
+ * its `background-image` (BackgroundArt's decorative radial-gradient blobs,
+ * see the `body` rule below) references the same theme color tokens but
+ * gradients don't transition, so animating body's background-color alone
+ * made the solid color fade slowly while the gradient ovals snapped
+ * instantly underneath it -- a visibly broken, "oval popping in" mismatch.
+ * Letting body's background snap together as one unit avoids that; the
+ * fade instead reads entirely from the foreground UI (cards, nav, borders,
+ * text), which is also what was actually asked for ("I want UI elements to
+ * make the shift, not an oval").
+ *
+ * "Back to front" staggering (background first, then cards, front-most
+ * last) is now: body snaps instantly (no fade to stagger), card-level
+ * surfaces (.card-elevated, nav, header) fade first among the animated UI,
+ * everything else nested inside follows slightly after -- so the sweep
+ * still reads back-to-front across the UI layers that DO fade.
  */
-::view-transition-new(root) {
-  animation: theme-reveal 0.5s ease;
+[data-theme-transitioning] * {
+  transition-property: background-color, border-color, color, fill, stroke !important;
+  transition-duration: 0.4s !important;
+  transition-timing-function: ease !important;
+  transition-delay: 0.1s !important;
 }
-::view-transition-old(root) {
-  animation: none;
+[data-theme-transitioning] body {
+  transition-property: color !important;
+  transition-duration: 0.4s !important;
+  transition-delay: 0s !important;
 }
-@keyframes theme-reveal {
+[data-theme-transitioning] .card-elevated,
+[data-theme-transitioning] nav,
+[data-theme-transitioning] header {
+  transition-delay: 0s !important;
+}
+/* Reduce Motion must still win over the !important rules above -- matched
+   here with equal-or-higher specificity so cascade order can't flip it.
+   Both [data-motion="reduced"] and [data-theme-transitioning] land on
+   <html>, so one combined selector covers the manual-toggle case; the
+   media query covers an OS-level Reduce Motion preference with no manual
+   toggle involved. */
+[data-motion="reduced"][data-theme-transitioning] * {
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-theme-transitioning] * {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/*
+ * Shared "graceful reveal" for hover/click popovers and dropdowns (HealthPin's
+ * stats card, ThemedTooltip, AccessibilityMenu's panel, ThemeToggle's style
+ * menu) -- slides down a few pixels while fading in, instead of an abrupt
+ * conditional-mount pop. Applied via the .dropdown-reveal utility class on
+ * mount; consumers that also want a graceful close should add
+ * .dropdown-reveal-out and defer the real unmount the same way order card
+ * exits do (setTimeout, not animationend -- see globals.css's existing
+ * order-card-exit for why). Both directions are covered by the blanket
+ * Reduce Motion override below (transition/animation-duration -> 0.01ms).
+ */
+@keyframes dropdown-reveal-in {
   from {
-    clip-path: var(--theme-transition-clip-from);
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.96);
   }
   to {
-    clip-path: var(--theme-transition-clip-to);
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
   }
+}
+@keyframes dropdown-reveal-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.96);
+  }
+}
+.dropdown-reveal {
+  transform-origin: top center;
+  animation: dropdown-reveal-in 0.18s ease-out both;
+}
+.dropdown-reveal-out {
+  transform-origin: top center;
+  animation: dropdown-reveal-out 0.15s ease-in forwards;
+}
+
+/*
+ * Modal.tsx open/close -- backdrop fades, panel scales+fades in from
+ * slightly below/small, same "stay mounted through the close, driven by
+ * useDropdownReveal" pattern as the dropdowns above (a modal isn't anchored
+ * to a trigger button, so it gets its own centered scale+fade shape rather
+ * than reusing .dropdown-reveal's translateY/top-anchored one).
+ */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes modal-panel-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.95) translateY(8px); }
+}
+.modal-backdrop-reveal { animation: modal-backdrop-in 0.18s ease-out both; }
+.modal-backdrop-reveal-out { animation: modal-backdrop-out 0.15s ease-in forwards; }
+.modal-panel-reveal { animation: modal-panel-in 0.2s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+.modal-panel-reveal-out { animation: modal-panel-out 0.15s ease-in forwards; }
+
+/*
+ * In-flow slide-down reveal (Dashboard.tsx's mobile hamburger nav panel) --
+ * unlike .dropdown-reveal (a floating, absolutely-positioned panel that
+ * doesn't affect layout), this content sits in normal flow and pushes
+ * everything below it down as it opens, so a scaleY transform would look
+ * wrong (squashing/distorting the nav buttons' own text). Animates
+ * max-height + opacity instead so the reveal still reads as a graceful
+ * slide, with layout genuinely growing/shrinking to match.
+ */
+@keyframes inflow-reveal-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes inflow-reveal-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.inflow-reveal {
+  animation: inflow-reveal-in 0.2s ease-out both;
+  max-height: 400px;
+  transition: max-height 0.2s ease-out;
+  overflow: hidden;
+}
+.inflow-reveal-out {
+  animation: inflow-reveal-out 0.15s ease-in forwards;
+  max-height: 0;
+  transition: max-height 0.15s ease-in, opacity 0.15s ease-in;
+  overflow: hidden;
+}
+
+/*
+ * One-shot entrance for content that appears once and is then either
+ * replaced or stays put (form error banners in AuthCard/customer page, the
+ * customer tracker's order-result card) -- these don't need the
+ * mount/unmount exit-timing dance .dropdown-reveal's JS half provides,
+ * since React already remounts a fresh element each time (error goes
+ * null -> string, or order goes null -> object), so a plain CSS
+ * animation-on-mount is enough; no graceful "close" state exists for these.
+ */
+@keyframes alert-reveal-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.alert-reveal { animation: alert-reveal-in 0.25s ease-out both; }
+
+/*
+ * Shared loading -> loaded handoff -- several pages gate their real content
+ * behind `if (loading) return <div>Loading...</div>`, then swap straight to
+ * the loaded UI with no transition once ready. Apply to the loaded content's
+ * outer wrapper (not the loading text itself, which is about to be replaced
+ * anyway) so the handoff reads as a soft arrival instead of a hard cut.
+ */
+@keyframes content-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.content-fade-in { animation: content-fade-in 0.3s ease-out both; }
+
+/*
+ * Kitchen Dashboard tab-content crossfade (Dashboard.tsx) -- activeTab swaps
+ * HomeTab/OrderGrid instantly via a plain conditional render today. Applied
+ * to a wrapper div keyed by the active tab, so React remounts it on every
+ * tab change and the animation re-triggers automatically (a CSS animation on
+ * an element that never unmounts would only ever play once).
+ */
+@keyframes tab-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tab-content-enter {
+  animation: tab-content-enter 0.22s ease-out both;
 }
 
 /* High-contrast mode thickens real borders for a stronger, less ambiguous
@@ -722,9 +907,16 @@ summary {
   /* Random lines vary a lot in length (some are one word, some a full
      sentence) — capping width and allowing wrap keeps a long line from
      rendering at its full one-line width and overflowing a narrow phone
-     screen, which `white-space: nowrap` + no max-width used to allow. */
+     screen, which `white-space: nowrap` + no max-width used to allow.
+     Divided by --chef-bubble-counter-scale (set inline by ChefSprite.tsx,
+     defaults to 1 if unset so this rule is still sane standalone) because
+     this element lives inside a scale() transform that undoes the SVG's
+     own viewBox scaling -- without dividing here, the 220px/42vw targets
+     are measured BEFORE that transform and then get visually multiplied
+     by it, ballooning far past their intended on-screen size at every
+     `size` prop under 100 (every mobile call site: 70/80/110/120). */
   white-space: normal;
-  max-width: min(220px, 42vw);
+  max-width: min(calc(220px / var(--chef-bubble-counter-scale, 1)), calc(42vw / var(--chef-bubble-counter-scale, 1)));
   text-align: center;
   animation: chef-bubble-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.3s;
 }

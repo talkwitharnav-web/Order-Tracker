@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { AccessibilityMenu } from "@/components/ui/AccessibilityMenu";
 import { UiSizeToggle } from "@/components/ui/UiSizeToggle";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
+import { FullscreenToggle } from "@/components/ui/FullscreenToggle";
 import { useReservedTopRight } from "@/lib/useReservedTopRight";
 
 /**
@@ -43,7 +44,10 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
     </ThemedTooltip>
     <span className="hidden sm:block w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
     <AccessibilityMenu />
-    <ThemedTooltip label="Toggle theme">
+    <ThemedTooltip label="Fullscreen" align="right" className="sm:hidden">
+      <FullscreenToggle />
+    </ThemedTooltip>
+    <ThemedTooltip label="Toggle theme" align="right">
       <ThemeToggle />
     </ThemedTooltip>
   </div>

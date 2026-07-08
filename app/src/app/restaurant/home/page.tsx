@@ -55,9 +55,11 @@ export default function RestaurantHomePage() {
   );
 
   return (
-    <KitchenPortalLanding
-      onChooseLogin={() => router.push("/restaurant/login")}
-      onChooseRegister={() => router.push("/restaurant/signup")}
-    />
+    <div className="content-fade-in">
+      <KitchenPortalLanding
+        onChooseLogin={() => router.push("/restaurant/login")}
+        onChooseRegister={() => router.push("/restaurant/signup")}
+      />
+    </div>
   );
 }

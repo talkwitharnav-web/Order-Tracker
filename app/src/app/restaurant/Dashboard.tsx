@@ -10,10 +10,12 @@ import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import { StatusStepper } from "@/components/ui/StatusStepper";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
+import { Select } from "@/components/ui/Select";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
 import { fetchJson } from "@/lib/api-client";
 import { NAMING_STYLES, suggestNextOrderName, type NamingStyle } from "@/lib/order-naming";
+import { useDropdownReveal } from "@/lib/useDropdownReveal";
 
 export type OrderStatus = ApiOrderStatus;
 export type Order = {
@@ -71,6 +73,10 @@ const Nav: FC<{
   restaurantName: string;
 }> = ({ activeTab, setActiveTab, onLogout, restaurantName }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { shouldRender: showMobileMenu, animationClass: mobileMenuAnimationClass } = useDropdownReveal(
+    mobileOpen,
+    "inflow-reveal",
+  );
 
   const navButtons = (onSelect: (tab: Tab) => void) =>
     TAB_ITEMS.map(({ tab, Icon }) => (
@@ -111,8 +117,10 @@ const Nav: FC<{
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
       </div>
-      {mobileOpen && (
-        <div className="md:hidden flex flex-col gap-1 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] shrink-0">
+      {showMobileMenu && (
+        <div
+          className={`md:hidden flex flex-col gap-1 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] shrink-0 ${mobileMenuAnimationClass}`}
+        >
           {navButtons((tab) => {
             setActiveTab(tab);
             setMobileOpen(false);
@@ -264,18 +272,14 @@ const HomeTab: FC<{
           <label htmlFor="namingStyle" className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
             Naming Style
           </label>
-          <select
+          <Select
             id="namingStyle"
             value={namingStyle}
-            onChange={(e) => handleStyleChange(e.target.value as NamingStyle)}
-            className="w-full sm:w-auto px-4 py-2.5 text-sm bg-[var(--color-surface-0)] text-[var(--color-text-primary)] border border-[var(--color-border-strong)] rounded-[var(--radius-sm)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-[var(--color-brand)]"
-          >
-            {NAMING_STYLES.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+            onChange={handleStyleChange}
+            ariaLabel="Naming style"
+            className="w-full sm:w-64"
+            options={NAMING_STYLES.map(({ value, label }) => ({ value, label }))}
+          />
         </div>
         <form onSubmit={handleCreateOrder} className="flex flex-col sm:flex-row sm:items-end gap-4">
           <div className="flex-grow">
@@ -345,7 +349,19 @@ const HomeTab: FC<{
           ))}
           {orders.length === 0 && (
             <div className="flex flex-col items-center py-8 gap-2">
-              <ChefSprite size={80} lines={["Quiet kitchen tonight...", "Add your first order above!", "I'll just be here... waiting...", "The stove is cold, boss."]} />
+              {/* Hidden below md: -- see ChefSprite's own file for why (the
+                  speech bubble's counter-scale has repeatedly rendered
+                  oversized on narrow viewports). A plain wrapper div carries
+                  the hidden/md:block toggle rather than ChefSprite's own
+                  className, matching the pattern already used in
+                  KitchenPortalLanding/SessionWelcomeBack -- ChefSprite's
+                  .chef-sprite-wrap sets display:flex internally, which
+                  collides in specificity with Tailwind's .hidden/.md\:block
+                  when applied to the same element. */}
+              <div className="hidden md:block">
+                <ChefSprite size={80} lines={["Quiet kitchen tonight...", "Add your first order above!", "I'll just be here... waiting...", "The stove is cold, boss."]} />
+              </div>
+              <p className="md:hidden text-sm text-[var(--color-text-muted)]">No orders yet — add your first one above!</p>
             </div>
           )}
           {orders.length > 0 && filteredOrders.length === 0 && (
@@ -444,7 +460,12 @@ const OrderGrid: FC<{
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center py-8 gap-2">
-        <ChefSprite size={70} lines={["All caught up!", "Nothing on the stove right now.", "No orders ready for pickup yet.", "Kitchen's taking a breather."]} />
+        {/* Hidden below md: -- see ChefSprite's own file and the identical
+            comment on the Home tab's empty state above for why. */}
+        <div className="hidden md:block">
+          <ChefSprite size={70} lines={["All caught up!", "Nothing on the stove right now.", "No orders ready for pickup yet.", "Kitchen's taking a breather."]} />
+        </div>
+        <p className="md:hidden text-sm text-[var(--color-text-muted)]">All caught up — nothing here right now.</p>
       </div>
     );
   }
@@ -628,7 +649,9 @@ function KitchenDashboardContent({
       <Nav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={onLogout} restaurantName={restaurantName} />
       <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto">
         <h1 className="font-display text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)] mb-6 shrink-0">{activeTab}</h1>
-        {renderContent()}
+        <div key={activeTab} className="tab-content-enter">
+          {renderContent()}
+        </div>
       </main>
 
       <Modal isOpen={orderToDelete !== null} title="Confirm Deletion" onClose={() => setOrderToDelete(null)} danger>

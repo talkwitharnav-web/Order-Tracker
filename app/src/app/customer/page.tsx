@@ -359,16 +359,16 @@ export default function CustomerPage() {
           </form>
 
           {error && (
-            <div className="mt-8 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
+            <div className="alert-reveal mt-8 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
               <p className="font-semibold text-[var(--color-danger)] text-center">{error}</p>
             </div>
           )}
 
           {order && (
-            <>
+            <div className="alert-reveal">
               <OrderStatusCard order={order} onAcknowledge={handleAcknowledge} acknowledging={acknowledging} />
               <ConnectionIndicator state={connection} />
-            </>
+            </div>
           )}
         </Card>
       </main>

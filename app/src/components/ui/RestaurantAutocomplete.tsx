@@ -132,7 +132,7 @@ export const RestaurantAutocomplete: FC<{
         <div
           id={`${id}-listbox`}
           role="listbox"
-          className="absolute z-30 mt-1 w-full rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden"
+          className="dropdown-reveal absolute z-30 mt-1 w-full rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden"
         >
           <ul className={expanded ? "max-h-64 overflow-y-auto" : ""}>
             {visibleSuggestions.map((name, i) => (

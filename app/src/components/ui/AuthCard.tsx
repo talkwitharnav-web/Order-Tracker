@@ -24,7 +24,7 @@ export const AuthCard: FC<{
           {children}
         </form>
         {error && (
-          <div className="mt-4 sm:mt-6 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
+          <div className="alert-reveal mt-4 sm:mt-6 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
             <p className="font-semibold text-[var(--color-danger)] text-center">{error}</p>
           </div>
         )}

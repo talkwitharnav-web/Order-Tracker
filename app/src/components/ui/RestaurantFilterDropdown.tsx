@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, FC } from "react";
 import { ChevronDown, Search } from "lucide-react";
+import { useDropdownReveal } from "@/lib/useDropdownReveal";
 
 /**
  * Multi-select restaurant filter for admin/db's Orders table -- a button
@@ -19,8 +20,10 @@ export const RestaurantFilterDropdown: FC<{
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const { shouldRender, animationClass } = useDropdownReveal(open);
 
   useEffect(() => {
+    if (!open) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
@@ -28,7 +31,7 @@ export const RestaurantFilterDropdown: FC<{
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [open]);
 
   const sortedNames = useMemo(() => [...restaurantNames].sort((a, b) => a.localeCompare(b)), [restaurantNames]);
   const filteredNames = useMemo(
@@ -63,11 +66,11 @@ export const RestaurantFilterDropdown: FC<{
         <ChevronDown size={14} className="shrink-0" />
       </button>
 
-      {open && (
+      {shouldRender && (
         <div
           role="menu"
           aria-label="Filter by restaurant"
-          className="absolute left-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40"
+          className={`${animationClass} absolute left-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40`}
         >
           <div className="p-2 border-b border-[var(--color-border)]">
             <div className="relative">

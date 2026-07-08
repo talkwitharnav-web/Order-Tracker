@@ -92,18 +92,24 @@ export default function RestaurantHomeDashboardPage() {
 
   if (awaitingContinue) {
     return (
-      <SessionWelcomeBack
-        restaurantName={awaitingContinue}
-        onContinue={() => {
-          setActiveRestaurant(awaitingContinue);
-          setAwaitingContinue(null);
-        }}
-        onLogout={handleLogout}
-      />
+      <div className="content-fade-in">
+        <SessionWelcomeBack
+          restaurantName={awaitingContinue}
+          onContinue={() => {
+            setActiveRestaurant(awaitingContinue);
+            setAwaitingContinue(null);
+          }}
+          onLogout={handleLogout}
+        />
+      </div>
     );
   }
 
   if (!activeRestaurant) return null;
 
-  return <KitchenDashboard restaurantName={activeRestaurant} onLogout={handleLogout} />;
+  return (
+    <div className="content-fade-in">
+      <KitchenDashboard restaurantName={activeRestaurant} onLogout={handleLogout} />
+    </div>
+  );
 }

@@ -226,6 +226,18 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
               // whenever `size` differs from the original hardcoded 140
               // default (e.g. KitchenPortalLanding's size={168}), which is
               // exactly what caused the bubble to drift off-screen there.
+              //
+              // `--chef-bubble-counter-scale` publishes that same factor as a
+              // CSS var so .chef-speech-bubble's max-width (globals.css) can
+              // divide by it: max-width is measured in this div's PRE-
+              // transform coordinate space, then the whole box gets visually
+              // multiplied by this scale() on top -- at every mobile call
+              // site (size 70/80/110/120, all < 100) that factor is > 1,
+              // so an unscaled `max-width: min(220px, 42vw)` rendered far
+              // larger on screen than intended (worst at size=70, ~1.43x),
+              // which is exactly the "humongous, doesn't fit the window"
+              // bubble reported on the Kitchen page's empty-order states.
+              ["--chef-bubble-counter-scale" as string]: 100 / size,
               transform: `scale(${100 / size}) translateX(-50%)`,
               transformOrigin: "bottom left",
             }}

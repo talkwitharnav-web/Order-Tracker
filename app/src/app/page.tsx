@@ -93,7 +93,15 @@ export default function GatewayCommandCenter() {
 
         {hasAdminSession ? (
           <div className="flex-1 flex flex-col items-center justify-center p-4 gap-6">
-            <ChefSprite className={loggingOut ? "chef-sprite-out" : ""} />
+            {/* Hidden below md: -- see ChefSprite's own file for why. A
+                plain wrapper div carries the hidden/md:block toggle rather
+                than ChefSprite's own className, since its internal
+                .chef-sprite-wrap sets display:flex, which collides in
+                specificity with Tailwind's .hidden/.md\:block (same
+                pattern as KitchenPortalLanding/SessionWelcomeBack). */}
+            <div className="hidden md:block">
+              <ChefSprite className={loggingOut ? "chef-sprite-out" : ""} />
+            </div>
             <div className="md:hidden flex flex-col items-center gap-2 w-full max-w-xs">
               <button
                 onClick={handleLogout}

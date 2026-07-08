@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, FC } from "react";
 import { ChevronDown } from "lucide-react";
+import { useDropdownReveal } from "@/lib/useDropdownReveal";
 
 const BASE_STATUSES = ["Received", "Preparing", "Complete"] as const;
 
@@ -19,8 +20,10 @@ export const StatusFilterDropdown: FC<{
 }> = ({ selected, onChange, includeDeletedOption }) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { shouldRender, animationClass } = useDropdownReveal(open);
 
   useEffect(() => {
+    if (!open) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
@@ -28,7 +31,7 @@ export const StatusFilterDropdown: FC<{
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [open]);
 
   const options = includeDeletedOption ? [...BASE_STATUSES, "Deleted"] : BASE_STATUSES;
 
@@ -54,11 +57,11 @@ export const StatusFilterDropdown: FC<{
         <ChevronDown size={14} className="shrink-0" />
       </button>
 
-      {open && (
+      {shouldRender && (
         <div
           role="menu"
           aria-label="Filter by status"
-          className="absolute left-0 top-full mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40"
+          className={`${animationClass} absolute left-0 top-full mt-2 w-48 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40`}
         >
           {selected.length > 0 && (
             <button

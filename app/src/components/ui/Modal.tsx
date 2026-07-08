@@ -2,6 +2,7 @@
 
 import { FC, ReactNode, useEffect, useRef } from "react";
 import { Button } from "./Button";
+import { useDropdownReveal } from "@/lib/useDropdownReveal";
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,6 +14,11 @@ interface ModalProps {
 
 export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger = false }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  // useDropdownReveal's own animationClass names (dropdown-reveal[-out])
+  // don't fit a centered modal's scale+fade shape -- only shouldRender
+  // (the deferred-unmount timing) is reused here; modal-backdrop-reveal[-out]/
+  // modal-panel-reveal[-out] below are this component's own animation pair.
+  const { shouldRender } = useDropdownReveal(isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -31,11 +37,14 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
+
+  const backdropClass = isOpen ? "modal-backdrop-reveal" : "modal-backdrop-reveal-out";
+  const panelClass = isOpen ? "modal-panel-reveal" : "modal-panel-reveal-out";
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 modal-backdrop-blur flex justify-center items-center z-50 p-4"
+      className={`fixed inset-0 bg-black/70 modal-backdrop-blur flex justify-center items-center z-50 p-4 ${backdropClass}`}
       onClick={onClose}
     >
       <div
@@ -46,7 +55,7 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
         onClick={(e) => e.stopPropagation()}
         className={`bg-[var(--color-surface-1)] border ${
           danger ? "border-[var(--color-danger)]" : "border-[var(--color-border-strong)]"
-        } rounded-[var(--radius-md)] shadow-xl p-6 w-full max-w-md`}
+        } rounded-[var(--radius-md)] shadow-xl p-6 w-full max-w-md ${panelClass}`}
       >
         <h2
           id="modal-title"
