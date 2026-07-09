@@ -102,6 +102,7 @@ async function runInitDb() {
     CREATE TABLE IF NOT EXISTS orders (
       id SERIAL PRIMARY KEY,
       order_number TEXT NOT NULL,
+      order_lookup_key TEXT GENERATED ALWAYS AS (regexp_replace(upper(order_number), '[^A-Z0-9]', '', 'g')) STORED,
       restaurant_name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'Received',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -109,7 +110,9 @@ async function runInitDb() {
       deleted_at TIMESTAMPTZ,
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       preparing_at TIMESTAMPTZ,
-      complete_at TIMESTAMPTZ
+      complete_at TIMESTAMPTZ,
+      status_transition_token TEXT,
+      status_transition_at TIMESTAMPTZ
     );
   `);
   await db.query(`
@@ -155,6 +158,22 @@ async function runInitDb() {
   // trust level as every other customer-tracker read/action -- this only
   // lets someone stop a timer early, not see or change anything sensitive).
   await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ;`);
+  // One-time token for the kitchen's short Undo window. Every genuine
+  // forward transition replaces it; successful Undo clears it. Keeping the
+  // token server-side prevents an old toast or another tab from reverting a
+  // newer status change.
+  await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_transition_token TEXT;`);
+  await db.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_transition_at TIMESTAMPTZ;`);
+  // Human-readable order_number remains exactly what the kitchen entered;
+  // this generated key makes customer lookup and duplicate prevention ignore
+  // harmless differences in spaces, punctuation, and case. Generated in
+  // Postgres so every insert path (including dev seed/imports) stays aligned
+  // with the same invariant without trusting each caller to populate it.
+  await db.query(`
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS order_lookup_key TEXT
+    GENERATED ALWAYS AS (regexp_replace(upper(order_number), '[^A-Z0-9]', '', 'g')) STORED;
+  `);
   // Per-kitchen fallback cap on the live-ticking Complete duration, in case
   // a customer never clicks "Order Picked Up" -- REAL (not INTEGER) so a
   // kitchen can set a fractional value (e.g. 0.5 for 30 minutes) if they
@@ -165,16 +184,15 @@ async function runInitDb() {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_updated_at ON orders (updated_at);
   `);
-  // Case-insensitive uniqueness: prevents the same order (e.g. "ASDF"/"asdf")
-  // being created twice for a restaurant regardless of which client (Kitchen
-  // vs Customer) normalized casing differently. Scoped to live (non-deleted)
-  // orders only -- a soft-deleted "ORD1" must not block a brand new "ORD1"
-  // from being created for the same restaurant.
-  await db.query(`DROP INDEX IF EXISTS idx_orders_unique_restaurant_order;`);
+  // Canonical uniqueness: "Pager 14", "PAGER14", and "pager-14" are the
+  // same live pickup identifier. Create the replacement before dropping the
+  // older case-only index, so a migration collision fails closed and leaves
+  // the existing protection intact for manual resolution.
   await db.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_unique_restaurant_order
-    ON orders (LOWER(restaurant_name), LOWER(order_number)) WHERE deleted_at IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_unique_restaurant_lookup
+    ON orders (LOWER(restaurant_name), order_lookup_key) WHERE deleted_at IS NULL;
   `);
+  await db.query(`DROP INDEX IF EXISTS idx_orders_unique_restaurant_order;`);
   // Same reasoning as above, applied to restaurant registration: the plain
   // UNIQUE on name is case-sensitive, so "Golden Spoon" and "GOLDEN SPOON"
   // could otherwise both register and desync login/lookup behavior. Scoped

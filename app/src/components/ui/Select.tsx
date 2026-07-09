@@ -89,13 +89,13 @@ export function Select<T extends string>({
                   }}
                   className={`w-full text-left flex flex-col gap-0.5 transition-colors ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2.5 text-sm"} ${
                     option.value === value
-                      ? "bg-[var(--color-brand)] text-white"
+                      ? "bg-[var(--color-brand)] text-[var(--color-on-brand)]"
                       : "text-[var(--color-text-primary)] hover:bg-[var(--color-surface-2)]"
                   }`}
                 >
                   <span className="font-medium">{option.label}</span>
                   {option.description && (
-                    <span className={`text-xs ${option.value === value ? "text-white/80" : "text-[var(--color-text-muted)]"}`}>
+                    <span className={`text-xs ${option.value === value ? "text-[var(--color-on-brand)] opacity-80" : "text-[var(--color-text-muted)]"}`}>
                       {option.description}
                     </span>
                   )}

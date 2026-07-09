@@ -1,78 +1,85 @@
 # Restaurant Order Tracker
 
-A Next.js application for real-time restaurant order management. A single App Router instance serves three separate experiences — a kitchen dashboard, a public customer order tracker, and an admin database console — all sharing one Postgres-backed API.
+A self-hosted Next.js app for three connected workflows:
 
-## Features
+- **Kitchen**: create orders, move them through Received → Preparing → Complete, undo recent status mistakes, search, delete, and monitor order age.
+- **Customer**: scan the kitchen’s reusable QR sign or enter a restaurant/order label, then receive live status updates and confirm pickup.
+- **Admin**: inspect restaurants/orders, restore kitchen-deleted orders, reset passwords, rename kitchens, and view service health.
 
-* **Kitchen Portal** (`/restaurant/home`): sign in or register a kitchen account, then manage orders from a live dashboard — create orders (with several naming-convention presets: sequential numbers, letter+number, customer name, table/pager code, or freeform), advance status (Received → Preparing → Complete), delete orders. Polls every 5 seconds for updates.
-* **Customer Tracker** (`/customer`): anonymous, no account needed — type a restaurant name (with autocomplete) and order name to see live status, pushed instantly over WebSocket rather than polling.
-* **Admin Console** (`/` to log in, then `/admin/db`): view every restaurant and order in the database, seed sample data, purge everything, reset a kitchen's password. Includes a live health indicator (DB latency, connection pool stats, WebSocket listener count, and total database size).
-* **Accessibility**: a dedicated menu (top-right on every page) with independently-togglable High Contrast, Reduce Motion, Enhanced Focus Outline, and a Colorblind-Friendly Palette picker (separate palettes tuned for deuteranopia, protanopia, and tritanopia — pick the one that matches your vision, not a one-size-fits-all filter). A separate Small/Medium/Big control scales the whole UI for kitchens that want bigger text/touch targets during a rush.
-* **Light/dark theme**, warm "bistro" visual style, toggle available everywhere.
-* **Real-time updates**: the customer tracker and kitchen dashboard both learn about order changes via a shared WebSocket hub scoped per-restaurant (a customer tracking one restaurant's order never sees another restaurant's traffic).
-* **Session-based auth**: signed httpOnly cookies for both admin and kitchen logins, with independent "Remember Me" persistence per role.
-* **Local Postgres**: runs via Docker Compose, no separate database install needed.
-* **Security hardening**: rate limiting on every public/write endpoint, an 8-character minimum password, server-side input validation (not just client-side) rejecting HTML/control characters in stored names, standard security response headers (CSP, X-Frame-Options, etc.), and a strict cap on request body size. See `SECURITY_ATTACK_LOG.md` for the full history of what's been tested and fixed.
-* **Automatic rolling backups**: the dev server snapshots the database every 3 hours and keeps the 3 most recent snapshots (`backups/` at the repo root) — a small safety net against an accidental destructive action (e.g. the admin console's Seed/Purge buttons), not a substitute for real backups if this app ever holds data worth keeping long-term.
+## Highlights
 
-## Tech Stack
+- Readable order labels with forgiving lookup: `Pager 14`, `pager-14`, and `#PAGER14` resolve to the same live order.
+- Customer tracking survives refresh, tab suspension, reconnects, and temporary network failures.
+- Restaurant-scoped WebSockets; kitchen dashboard polls every 5 seconds.
+- Warm light/dark themes, S/M/B interface sizing, high contrast, reduced motion, enhanced focus, and three color-vision palettes.
+- Kitchen delete is recoverable; admin delete is permanent.
+- Offline QR generation and a printable, restaurant-specific customer sign.
+- Signed httpOnly admin/kitchen sessions, input validation, rate limits, security headers, request-size limits, and rolling local backups.
 
-* Next.js 16 (App Router) + a custom Node server (`app/server.js`) for the WebSocket endpoint
-* React 19, TypeScript
-* Tailwind CSS v4
-* PostgreSQL 16 (via `pg`)
-* Lucide React (icons)
+## Quick Start
 
-## Setup
+Requirements: Node.js 20+, npm, and Docker Desktop.
 
-1. Clone the repository and navigate into the nested Next.js root:
-   ```bash
-   cd app
-   ```
+From the repo root or `app/`:
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+```powershell
+# Windows
+.\startup
+```
 
-3. Copy `.env.example` to `.env.local` (already done if you're on a checkout that includes it) — it points at the local Postgres container started below.
+```bash
+# macOS/Linux
+./startup.sh
+```
 
-### Running everything for local dev
+The script checks dependencies, repairs local setup when possible, starts PostgreSQL, and runs the required custom server. Open <http://localhost:3000>.
 
-This project needs two things running: the Postgres database (via Docker) and the Next.js dev server. If you're not sure which command to use, just run `startup` (`.\startup` on Windows, `./startup.sh` on Mac/Linux) — it does both for you, and also checks Docker Desktop itself is open and starts it if not.
+> Run `node server.js` through the provided scripts. Plain `next dev`/`next start` does not host this app’s WebSocket endpoint.
 
-These commands work from **either** the repo root (`Restaurant/`) or the `app/` folder — the root `package.json` just forwards them into `app/` for convenience, so you don't have to remember to `cd app` first. The `startup`/`export`/`unpack` scripts below have their own copy in both locations (thin wrappers around `scripts/`) for the same reason.
+## Routes
 
-**Windows and Mac/Linux each have their own native implementation of `startup`/`export`/`unpack`** (`.ps1`+`.cmd` vs. `.sh`) — they are independent scripts kept behaviorally in sync by hand, not generated from one shared source. If you change behavior in one, the equivalent change likely belongs in the other too.
-
-* **`startup`** (`.\startup`/`.\startup.cmd` on Windows, `./startup.sh` on Mac/Linux) — verbose dependency check (Node, npm, Docker installed, `.env.local`/`SESSION_SECRET`, npm packages actually resolvable — not just present) with auto-repair; opens Docker Desktop itself if it isn't already running; then does the same as `start:all` below. Recommended over `start:all` directly since it catches broken/missing dependencies before they cause a confusing failure mid-startup.
-* **`npm run start:all`** — checks whether Docker Desktop is open (starts it if not), starts the local Postgres container, then starts the Next.js dev server. The app will be at http://localhost:3000.
-* **Ctrl+C** — stops the dev server. This does *not* stop the database container — it keeps running in the background.
-* **`npm run db:down`** — stops *and removes* the database container (your data stays safe in a Docker volume, so nothing is lost, but the container itself goes away), then closes Docker Desktop itself (and its underlying WSL VM, on Windows) if it was running. Use this when you're fully done for the day/session and want a clean slate.
-* **`npm run db:stop`** — pauses the database container without removing it (slightly faster to resume than `db:up` after `db:down`, but for local dev either is fine). Use this if you just want to free up resources for a bit but plan to come back soon.
-* **`npm run db:up`** — checks whether Docker Desktop is open (starts it if not), then starts the database container back up on its own, if you ever need the DB running without also starting Next.js.
-
-If you're unsure which of `db:down` vs `db:stop` to use: it doesn't matter much day-to-day — `db:down` is the "tidier" option and is what these docs assume, `db:stop` is marginally faster to undo. Either is safe; your data isn't deleted by either command.
-
-### Exporting a portable, self-contained build
-
-* **`export`** (`.\export`/`.\export.cmd` on Windows, `./export.sh` on Mac/Linux) — builds a Docker image of the app, bundles it with the Postgres image, a compose file, and one-click launcher scripts into `restaurant-app-export.zip` at the repo root. (Mac/Linux needs the `zip` command available — usually already installed; the script tells you the exact install command for your OS/distro if it's missing.)
-* **`unpack`** (`.\unpack`/`.\unpack.cmd` on Windows, `./unpack.sh` on Mac/Linux) — extracts `restaurant-app-export.zip` and loads both images into Docker on this same machine (e.g. for testing an export); add `-Start`/`--start` to also launch it immediately.
-
-The result runs on **any machine with Docker installed** — no Node.js, no copy of this repo, no Docker registry account, and (since both images are bundled in the zip) no internet connection required on that machine either. Unzip and run `run.cmd` (Windows) / `run.sh` (Mac/Linux) inside the bundle; it generates a fresh `SESSION_SECRET`, loads both images, and brings up Postgres + the app together. Full instructions are printed every time `export` runs, and also included as `README.txt` inside the bundle.
-
-This always starts the target machine with an empty database — existing data isn't included in the export.
-
-## Where things are
-
-| Page | Route |
+| Experience | Route |
 |---|---|
-| Customer order tracker | `/customer` |
-| Kitchen portal (log in / register) | `/restaurant/home` |
-| Kitchen login | `/restaurant/login` |
-| Kitchen registration | `/restaurant/signup` |
-| Kitchen dashboard (after login) | `/restaurant/restauranthome` |
 | Admin login | `/` |
 | Admin database console | `/admin/db` |
+| Customer tracker | `/customer` |
+| Kitchen portal | `/restaurant/home` |
+| Kitchen dashboard | `/restaurant/restauranthome` |
 
-Full plain-English usage instructions (setup, day-to-day commands, troubleshooting, sharing with another computer) are in [`USER_HELP.md`](USER_HELP.md).
+## Common Commands
+
+| Command | Purpose |
+|---|---|
+| `startup` / `startup.sh` | Recommended full local startup |
+| `npm run start:all` | Start DB and editable dev server |
+| `npm run dev` | Start only the custom app server |
+| `npm run db:up` | Start only PostgreSQL |
+| `npm run db:stop` | Stop PostgreSQL without removing its container |
+| `npm run db:down` | Remove the container and close Docker; the volume remains |
+| `npm run lint` | Run static checks (known baseline is documented in `SYSTEM_MEMORY.md`) |
+| `export` / `export.sh` | Build an offline Docker handoff bundle |
+| `unpack` / `unpack.sh` | Load/test that bundle |
+
+The normal workflow stays in editable development mode. Production builds are not routine validation for this project.
+
+## Architecture
+
+- Next.js 16 + React 19 + TypeScript + Tailwind CSS v4
+- Custom Node server with `ws`
+- PostgreSQL 16 in Docker
+- `qrcode` for offline customer-sign encoding
+- One process and one database; WebSocket state is in memory and is not horizontally scalable
+
+## Safety
+
+- **Seed** and **Purge** erase existing data. Both require an exact typed phrase in the UI and API.
+- The server keeps three rolling SQL snapshots in `backups/`; these are a local safety net, not offsite backup.
+- The app is currently a private LAN/dev system. Public deployment still needs real admin secrets, HTTPS, and offsite backups.
+
+## Documentation
+
+- [`USER_HELP.md`](USER_HELP.md): plain-English setup, daily use, features, and troubleshooting
+- [`SYSTEM_MEMORY.md`](SYSTEM_MEMORY.md): current technical truth, routes, schema, and invariants
+- [`CLAUDE.md`](CLAUDE.md): judgment calls, debugging lessons, and machine-specific guardrails
+- [`SECURITY_ATTACK_LOG.md`](SECURITY_ATTACK_LOG.md): condensed security audit record and verification
+- [`MOBILE_MIGRATION_PLAN.md`](MOBILE_MIGRATION_PLAN.md): remaining Expo/Android and self-hosting plan

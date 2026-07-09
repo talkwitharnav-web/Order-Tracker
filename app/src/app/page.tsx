@@ -98,7 +98,7 @@ export default function GatewayCommandCenter() {
                 than ChefSprite's own className, since its internal
                 .chef-sprite-wrap sets display:flex, which collides in
                 specificity with Tailwind's .hidden/.md\:block (same
-                pattern as KitchenPortalLanding/SessionWelcomeBack). */}
+                pattern as KitchenPortalLanding). */}
             <div className="hidden md:block">
               <ChefMascot className={loggingOut ? "chef-sprite-out" : ""} />
             </div>
@@ -111,7 +111,7 @@ export default function GatewayCommandCenter() {
               </button>
               <a
                 href="/admin/db"
-                className="w-full text-center px-4 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white transition-colors"
+                className="w-full text-center px-4 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-[var(--color-on-brand)] transition-colors"
               >
                 Access DB
               </a>

@@ -53,7 +53,7 @@ export const StatusStepper: FC<{
               disabled={!isNext}
               onClick={() => isNext && next && onAdvance(next)}
               aria-current={isCurrent ? "step" : undefined}
-              className={`flex-1 py-2 px-1 sm:px-2 text-[10px] sm:text-xs font-semibold rounded-[var(--radius-sm)] transition-colors text-center whitespace-nowrap ${
+              className={`flex-1 min-h-10 sm:min-h-0 py-2 px-1 sm:px-2 text-[10px] sm:text-xs font-semibold rounded-[var(--radius-sm)] transition-colors text-center whitespace-nowrap ${
                 isCurrent && justAdvanced ? "animate-step-advance" : ""
               } ${
                 isDone
@@ -61,7 +61,7 @@ export const StatusStepper: FC<{
                   : isCurrent
                     ? "bg-[var(--color-status-preparing-bg)] text-[var(--color-status-preparing-text)] border border-[var(--color-status-preparing-border)]"
                     : isNext
-                      ? "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-brand)] hover:text-white hover:border-[var(--color-brand)] cursor-pointer"
+                      ? "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-brand)] hover:text-[var(--color-on-brand)] hover:border-[var(--color-brand)] cursor-pointer"
                       : "bg-transparent text-[var(--color-text-muted)] border border-[var(--color-border)] cursor-not-allowed opacity-50"
               }`}
             >

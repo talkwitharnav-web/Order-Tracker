@@ -222,7 +222,12 @@ globalThis.__orderTrackerWsClients = clients;
 
 // Per-IP cap on concurrent /ws connections (see SECURITY_ATTACK_LOG.md F7) —
 // bounds how many passive listener sockets a single caller can hold open.
-const MAX_WS_CONNECTIONS_PER_IP = 5;
+// A restaurant's customers commonly share one public/NAT address, and a
+// future reverse proxy may make every internet client appear to come from
+// the proxy's own socket address. Five connections therefore cuts off normal
+// customer traffic. Connections are read-only and restaurant-scoped, so a
+// higher ceiling still bounds resource use without blocking a modest venue.
+const MAX_WS_CONNECTIONS_PER_IP = 50;
 const wsConnectionsByIp = new Map(); // ip -> count
 
 app.prepare().then(() => {

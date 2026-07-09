@@ -32,8 +32,8 @@ export async function POST(
     // original) -- the partial unique index only guards live rows, so
     // un-deleting this one would collide. Reject with a clear error rather
     // than let the UPDATE fail with a raw constraint-violation message.
-    const existing = await query<{ restaurant_name: string; order_number: string }>(
-      "SELECT restaurant_name, order_number FROM orders WHERE id = $1 AND deleted_at IS NOT NULL",
+    const existing = await query<{ restaurant_name: string; order_number: string; order_lookup_key: string }>(
+      "SELECT restaurant_name, order_number, order_lookup_key FROM orders WHERE id = $1 AND deleted_at IS NOT NULL",
       [orderId],
     );
     const row = existing.rows[0];
@@ -42,8 +42,8 @@ export async function POST(
     }
 
     const clash = await query(
-      "SELECT 1 FROM orders WHERE LOWER(restaurant_name) = LOWER($1) AND LOWER(order_number) = LOWER($2) AND deleted_at IS NULL",
-      [row.restaurant_name, row.order_number],
+      "SELECT 1 FROM orders WHERE LOWER(restaurant_name) = LOWER($1) AND order_lookup_key = $2 AND deleted_at IS NULL",
+      [row.restaurant_name, row.order_lookup_key],
     );
     if (clash.rows.length > 0) {
       return NextResponse.json(

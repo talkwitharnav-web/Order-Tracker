@@ -32,7 +32,7 @@ export default function AppError({
       <div className="flex flex-wrap items-center justify-center gap-3">
         <button
           onClick={reset}
-          className="px-5 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white transition-colors"
+          className="px-5 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-[var(--color-on-brand)] transition-colors"
         >
           Try again
         </button>

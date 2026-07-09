@@ -248,7 +248,27 @@ if [ ! -f "$COMPOSE_FILE" ]; then
   err "docker-compose.yml not found at $COMPOSE_FILE"
   exit 1
 fi
-docker compose -f "$COMPOSE_FILE" up -d
+POSTGRES_CONTAINER_NAME="restaurant-postgres-1"
+EXISTING_CONTAINER="$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fx "$POSTGRES_CONTAINER_NAME" || true)"
+
+if [ "$EXISTING_CONTAINER" = "$POSTGRES_CONTAINER_NAME" ]; then
+  EXISTING_IMAGE="$(docker inspect "$POSTGRES_CONTAINER_NAME" --format '{{.Config.Image}}' 2>/dev/null || true)"
+  if [ "$EXISTING_IMAGE" != "postgres:16" ]; then
+    err "A container named $POSTGRES_CONTAINER_NAME already exists but uses image '$EXISTING_IMAGE', not postgres:16."
+    info "Rename or remove that unrelated container, then run startup again."
+    exit 1
+  fi
+
+  CONTAINER_RUNNING="$(docker inspect "$POSTGRES_CONTAINER_NAME" --format '{{.State.Running}}' 2>/dev/null || true)"
+  if [ "$CONTAINER_RUNNING" != "true" ]; then
+    info "Found the existing Postgres container from another checkout; starting it now..."
+    docker start "$POSTGRES_CONTAINER_NAME" >/dev/null
+  else
+    info "Found the existing Postgres container from another checkout; reusing it."
+  fi
+else
+  docker compose -f "$COMPOSE_FILE" up -d
+fi
 ok "Postgres container is up (or was already running)."
 
 info "Waiting for Postgres to report healthy..."
@@ -256,7 +276,8 @@ MAX_WAIT_SECONDS=30
 WAITED=0
 HEALTHY=0
 while [ "$WAITED" -lt "$MAX_WAIT_SECONDS" ]; do
-  if docker compose -f "$COMPOSE_FILE" ps --format json 2>/dev/null | grep -q '"Health":"healthy"'; then
+  STATUS="$(docker inspect "$POSTGRES_CONTAINER_NAME" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)"
+  if [ "$STATUS" = "healthy" ] || [ "$STATUS" = "running" ]; then
     HEALTHY=1
     break
   fi

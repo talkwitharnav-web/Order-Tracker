@@ -8,6 +8,23 @@
  */
 export type NamingStyle = "sequential" | "letter-number" | "customer-name" | "table-pager" | "freeform";
 
+const ORDER_DISPLAY_MAX_LENGTH = 200;
+
+/**
+ * Canonical customer/kitchen lookup key. Display punctuation, spacing, and
+ * case are intentionally ignored, so "Pager 14", "pager-14", and "#PAGER14"
+ * all identify the same order while the stored display label stays readable.
+ */
+export function normalizeOrderLookupKey(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** Keeps only the same display-safe characters accepted by requireSafeName. */
+export function formatOrderDisplayInput(value: string, uppercase = false): string {
+  const formatted = value.replace(/[^A-Za-z0-9 '.,#_-]/g, "").slice(0, ORDER_DISPLAY_MAX_LENGTH);
+  return uppercase ? formatted.toUpperCase() : formatted;
+}
+
 export const NAMING_STYLES: { value: NamingStyle; label: string; example: string }[] = [
   { value: "sequential", label: "Sequential Number", example: "e.g. 42" },
   { value: "letter-number", label: "Letter + Number", example: "e.g. A12" },
@@ -20,9 +37,9 @@ export const NAMING_STYLES: { value: NamingStyle; label: string; example: string
  * Computes the next suggested order name for sequential/letter-number/
  * table-pager styles, given the restaurant's existing order names. Purely
  * a suggestion — the kitchen can still edit the field before submitting,
- * and the server does not enforce any particular format (see
- * api/orders/route.ts's requireString — any non-empty string under 200
- * chars is accepted), so this never blocks an unusual value.
+ * and the server accepts any display-safe label under 200 characters (see
+ * api/orders/route.ts's requireSafeName), so this never blocks an unusual
+ * real-world pickup identifier.
  */
 export function suggestNextOrderName(style: NamingStyle, existingNames: string[]): string {
   if (style === "sequential" || style === "table-pager") {

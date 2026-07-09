@@ -86,12 +86,9 @@ export default function RestaurantSignupPage() {
         },
         { retries: 0 }
       );
-      // register/route.ts sets the restaurant session cookie on success
-      // (auto-login on signup). ?fresh=1 tells restauranthome to skip the
-      // "still signed in, continue or log out?" screen for this specific
-      // just-happened login/signup -- see the identical comment in
-      // restaurant/login/page.tsx for why.
-      router.push("/restaurant/restauranthome?fresh=1");
+      // register/route.ts sets the restaurant session cookie on success,
+      // so signup can continue directly into the dashboard.
+      router.push("/restaurant/restauranthome");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
       setIsLoading(false);
@@ -140,11 +137,17 @@ export default function RestaurantSignupPage() {
           id="password"
           type="password"
           autoComplete="new-password"
+          minLength={8}
+          maxLength={200}
+          aria-describedby="password-requirements"
           value={password}
           onChange={(e) => setPassword(e.target.value.replace(/\s/g, ""))}
           placeholder="••••••••"
           required
         />
+        <p id="password-requirements" className="mt-1.5 text-xs text-[var(--color-text-muted)]">
+          Use 8–200 characters with no spaces.
+        </p>
       </div>
       <Checkbox label="Remember Me" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
       <Button type="submit" size="lg" disabled={isLoading} className="w-full">

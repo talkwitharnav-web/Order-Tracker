@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/validate";
 
 type RestaurantRow = { id: number; name: string; password: string; raw_password: string | null; deleted_at: string | null };
 
@@ -49,13 +50,21 @@ export async function GET() {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   logger.warn("DELETE /api/dev/db - request received to PURGE DATABASE");
 
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
 
   try {
+    const body = await parseJsonBody(request);
+    const confirmation = body && typeof body === "object"
+      ? (body as { confirmation?: unknown }).confirmation
+      : undefined;
+    if (confirmation !== "PURGE DATABASE") {
+      return NextResponse.json({ error: "Type PURGE DATABASE to confirm" }, { status: 400 });
+    }
+
     await initDb();
 
     logger.warn("DELETE /api/dev/db - DELETING ALL DATA...");

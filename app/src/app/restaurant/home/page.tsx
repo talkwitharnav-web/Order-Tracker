@@ -28,7 +28,7 @@ async function hasActiveSession() {
 /**
  * Kitchen Portal landing: Log In / Register choice. Checks for an existing
  * remembered session first — if one exists, skips straight to the dashboard
- * welcome-back screen instead of showing Login/Register buttons.
+ * instead of showing Login/Register buttons.
  */
 export default function RestaurantHomePage() {
   const router = useRouter();

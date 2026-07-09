@@ -13,14 +13,21 @@ import { useDropdownReveal } from "@/lib/useDropdownReveal";
  * stats popover already does this by hand — this factors that pattern out
  * for reuse by the Accessibility menu button).
  */
-export const ThemedTooltip: FC<{ label: string; children: ReactNode; className?: string; align?: "center" | "right" }> = ({
+export const ThemedTooltip: FC<{
+  label: string;
+  children: ReactNode;
+  className?: string;
+  align?: "center" | "right";
+  disabled?: boolean;
+}> = ({
   label,
   children,
   className,
   align = "center",
+  disabled = false,
 }) => {
   const [hovering, setHovering] = useState(false);
-  const { shouldRender, animationClass } = useDropdownReveal(hovering);
+  const { shouldRender, animationClass } = useDropdownReveal(hovering && !disabled);
 
   // "center" anchors under the middle of the trigger (fine for controls with
   // room on both sides); "right" anchors flush to the trigger's right edge

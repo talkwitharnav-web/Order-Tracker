@@ -8,7 +8,8 @@ import { StatusIcon } from "@/components/ui/StatusBadge";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { RestaurantAutocomplete } from "@/components/ui/RestaurantAutocomplete";
 import { getStatusVisual, normalizeStatus, type CustomerOrderStatus, type StatusKey } from "@/lib/order-status";
-import { fetchJson } from "@/lib/api-client";
+import { ApiError, fetchJson } from "@/lib/api-client";
+import { formatOrderDisplayInput } from "@/lib/order-naming";
 
 type Order = {
   id: number;
@@ -19,20 +20,64 @@ type Order = {
   acknowledged_at: string | null;
 };
 
+type StoredTracking = { restaurantName: string; orderNumber: string };
+type FetchOrderOptions = { background?: boolean; persist?: boolean };
+const TRACKING_STORAGE_KEY = "restaurant-order-tracker:active-order";
+const formatRestaurantInput = (value: string) => value.replace(/[^a-zA-Z0-9 '.,#_-]/g, "").slice(0, 200);
+
+const clearStoredTracking = () => {
+  try {
+    sessionStorage.removeItem(TRACKING_STORAGE_KEY);
+  } catch {
+    // Tracking recovery is best-effort when storage is unavailable.
+  }
+};
+
+const saveStoredTracking = (restaurantName: string, orderNumber: string) => {
+  try {
+    sessionStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify({ restaurantName, orderNumber }));
+  } catch {
+    // The live tracker still works when private-mode storage is unavailable.
+  }
+};
+
+const readStoredTracking = (): StoredTracking | null => {
+  try {
+    const raw = sessionStorage.getItem(TRACKING_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredTracking>;
+    if (typeof parsed.restaurantName !== "string" || typeof parsed.orderNumber !== "string") {
+      clearStoredTracking();
+      return null;
+    }
+    const restaurantName = parsed.restaurantName.trim();
+    const orderNumber = parsed.orderNumber.trim();
+    if (!restaurantName || !orderNumber) {
+      clearStoredTracking();
+      return null;
+    }
+    return { restaurantName, orderNumber };
+  } catch {
+    clearStoredTracking();
+    return null;
+  }
+};
+
 const timeSince = (date: string) => {
   const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
+  const ago = (value: number, unit: string) => `${value} ${unit}${value === 1 ? "" : "s"} ago`;
   let interval = seconds / 31536000;
-  if (interval > 1) return Math.floor(interval) + " years ago";
+  if (interval >= 1) return ago(Math.floor(interval), "year");
   interval = seconds / 2592000;
-  if (interval > 1) return Math.floor(interval) + " months ago";
+  if (interval >= 1) return ago(Math.floor(interval), "month");
   interval = seconds / 86400;
-  if (interval > 1) return Math.floor(interval) + " days ago";
+  if (interval >= 1) return ago(Math.floor(interval), "day");
   interval = seconds / 3600;
-  if (interval > 1) return Math.floor(interval) + " hours ago";
+  if (interval >= 1) return ago(Math.floor(interval), "hour");
   interval = seconds / 60;
-  if (interval > 1) return Math.floor(interval) + " minutes ago";
+  if (interval >= 1) return ago(Math.floor(interval), "minute");
   if (seconds < 10) return "just now";
-  return Math.floor(seconds) + " seconds ago";
+  return ago(Math.max(0, seconds), "second");
 };
 
 // Keyed by the canonical StatusKey (see order-status.ts), not the raw string
@@ -190,23 +235,88 @@ export default function CustomerPage() {
     orderRef.current = order;
   }, [order]);
 
-  const fetchOrderStatus = async (restName: string, ordNum: string) => {
+  const fetchOrderStatus = useCallback(async (
+    restName: string,
+    ordNum: string,
+    { background = false, persist = true }: FetchOrderOptions = {},
+  ): Promise<Order | null> => {
     try {
       const query = new URLSearchParams({ restaurant_name: restName, order_number: ordNum });
       const data = await fetchJson<Order>(`/api/orders/search?${query}`);
       setOrder(data);
+      setError(null);
+      if (data.acknowledged_at) {
+        clearStoredTracking();
+      } else if (persist) {
+        saveStoredTracking(data.restaurant_name, data.order_number);
+      }
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
-      setOrder(null);
+      const notFound = err instanceof ApiError && err.status === 404;
+      if (!background || notFound) setOrder(null);
+      if (notFound) clearStoredTracking();
+      return null;
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const linkedValue = new URLSearchParams(window.location.search).get("restaurant");
+    const linkedRestaurant = linkedValue ? formatRestaurantInput(linkedValue).trim() : "";
+    const stored = readStoredTracking();
+
+    if (linkedRestaurant && (!stored || stored.restaurantName.toLowerCase() !== linkedRestaurant.toLowerCase())) {
+      let cancelled = false;
+      clearStoredTracking();
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setRestaurantName(linkedRestaurant);
+        setOrderNumber("");
+        setOrder(null);
+        setError(null);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!stored) return;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setRestaurantName(stored.restaurantName);
+      setOrderNumber(stored.orderNumber);
+      setIsLoading(true);
+      void fetchOrderStatus(stored.restaurantName, stored.orderNumber).finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchOrderStatus]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      const current = orderRef.current;
+      if (current) {
+        void fetchOrderStatus(current.restaurant_name, current.order_number, { background: true });
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [fetchOrderStatus]);
 
   const handleAcknowledge = async () => {
     if (!order) return;
     setAcknowledging(true);
     try {
       await fetchJson(`/api/orders/${order.id}/acknowledge`, { method: "POST" });
-      await fetchOrderStatus(order.restaurant_name, order.order_number);
+      clearStoredTracking();
+      setOrder((current) => current ? { ...current, acknowledged_at: new Date().toISOString() } : current);
+      await fetchOrderStatus(order.restaurant_name, order.order_number, { background: true, persist: false });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to mark order as picked up");
     } finally {
@@ -241,6 +351,7 @@ export default function CustomerPage() {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closedByEffect = false;
     let reconnectAttempt = 0;
+    let hasConnected = false;
 
     // Exponential backoff (2s, 4s, 8s... capped at 30s) instead of a fixed
     // 2s retry forever — a fixed interval means a real outage (server
@@ -262,6 +373,13 @@ export default function CustomerPage() {
       socket.onopen = () => {
         reconnectAttempt = 0;
         setConnection("live");
+        if (hasConnected) {
+          const current = orderRef.current;
+          if (current) {
+            void fetchOrderStatus(current.restaurant_name, current.order_number, { background: true });
+          }
+        }
+        hasConnected = true;
       };
 
       socket.onmessage = (event) => {
@@ -269,7 +387,7 @@ export default function CustomerPage() {
           const data = JSON.parse(event.data);
           const current = orderRef.current;
           if ((data.type === "order_updated" || data.type === "order_deleted") && current) {
-            fetchOrderStatus(current.restaurant_name, current.order_number);
+            void fetchOrderStatus(current.restaurant_name, current.order_number, { background: true });
           }
         } catch {
           // ignore malformed messages
@@ -303,23 +421,10 @@ export default function CustomerPage() {
     // became complete while connected, leaving it running (and reconnecting
     // on any drop) indefinitely on a long-lived tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?.id, order && normalizeStatus(order.status) === "complete"]);
+  }, [fetchOrderStatus, order?.id, order && normalizeStatus(order.status) === "complete"]);
 
-  // Order names keep the POS-style uppercase-code convention (matches the
-  // Kitchen Dashboard's own formatting), but restaurant names are real
-  // proper nouns ("The Golden Way") — force-uppercasing them read as a bug
-  // (the stored name keeps its real casing; ILIKE lookup is already
-  // case-insensitive server-side, so uppercasing here was never actually
-  // load-bearing for search, just a cosmetic leftover from copying the order
-  // field's formatting).
-  // Both allow underscore now: the server's storage whitelist
-  // (requireSafeName in lib/validate.ts) permits `_` in stored names, so a
-  // kitchen registered with one (or an order name containing one) needs to
-  // remain reachable from this lookup form — stripping it here silently made
-  // such a restaurant/order invisible to its own customers.
-  const formatOrderInput = (value: string) => value.toUpperCase().replace(/[^A-Z0-9_ -]/g, "");
-  const formatRestaurantInput = (value: string) => value.replace(/[^a-zA-Z0-9_' -]/g, "");
-
+  // Keep the customer's readable spelling; the server canonicalizes case,
+  // spaces, punctuation, and a leading # to the same lookup key.
   return (
     <div className="min-h-dvh flex items-center justify-center p-4">
       <SettingsToggles />
@@ -347,7 +452,7 @@ export default function CustomerPage() {
                   id="orderNumber"
                   type="text"
                   value={orderNumber}
-                  onChange={(e) => setOrderNumber(formatOrderInput(e.target.value))}
+                  onChange={(e) => setOrderNumber(formatOrderDisplayInput(e.target.value))}
                   placeholder="e.g., 'ORD-12345'"
                   required
                 />
@@ -359,7 +464,11 @@ export default function CustomerPage() {
           </form>
 
           {error && (
-            <div className="alert-reveal mt-8 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]">
+            <div
+              role="alert"
+              aria-atomic="true"
+              className="alert-reveal mt-8 bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/40 p-4 rounded-[var(--radius-sm)]"
+            >
               <p className="font-semibold text-[var(--color-danger)] text-center">{error}</p>
             </div>
           )}

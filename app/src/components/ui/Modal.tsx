@@ -14,6 +14,8 @@ interface ModalProps {
 
 export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger = false }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   // useDropdownReveal's own animationClass names (dropdown-reveal[-out])
   // don't fit a centered modal's scale+fade shape -- only shouldRender
   // (the deferred-unmount timing) is reused here; modal-backdrop-reveal[-out]/
@@ -21,21 +23,71 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
   const { shouldRender } = useDropdownReveal(isOpen);
 
   useEffect(() => {
-    if (!isOpen) return;
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen && previousFocusRef.current === null) {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
+
+    if (!shouldRender) {
+      const previousFocus = previousFocusRef.current;
+      previousFocusRef.current = null;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    }
+  }, [isOpen, shouldRender]);
+
+  useEffect(() => {
+    if (!shouldRender) return;
+
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const getFocusable = () => {
+      return Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.getClientRects().length > 0 && element.getAttribute("aria-hidden") !== "true");
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (isOpen) onCloseRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
 
-    const panel = panelRef.current;
-    const focusable = panel?.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    focusable?.[0]?.focus();
+    if (isOpen && !panel.contains(document.activeElement)) {
+      const firstFocusable = getFocusable()[0];
+      if (firstFocusable) firstFocusable.focus();
+      else panel.focus();
+    }
 
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, shouldRender]);
 
   if (!shouldRender) return null;
 
@@ -52,6 +104,7 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className={`bg-[var(--color-surface-1)] border ${
           danger ? "border-[var(--color-danger)]" : "border-[var(--color-border-strong)]"
@@ -74,12 +127,13 @@ export const ModalActions: FC<{
   onConfirm: () => void;
   confirmLabel?: string;
   danger?: boolean;
-}> = ({ onCancel, onConfirm, confirmLabel = "Confirm", danger = false }) => (
+  confirmDisabled?: boolean;
+}> = ({ onCancel, onConfirm, confirmLabel = "Confirm", danger = false, confirmDisabled = false }) => (
   <div className="flex justify-end gap-3 mt-6">
     <Button variant="secondary" onClick={onCancel}>
       Cancel
     </Button>
-    <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
+    <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} disabled={confirmDisabled}>
       {confirmLabel}
     </Button>
   </div>

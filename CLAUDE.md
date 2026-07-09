@@ -1,138 +1,112 @@
 # CLAUDE.md
 
-## CRITICAL — READ FIRST
+Narrative decisions, debugging lessons, and machine-specific guardrails for future coding sessions. Read `SYSTEM_MEMORY.md` first for current architecture/schema/routes; this file explains why settled choices exist.
 
-- **NEVER `taskkill /IM chrome.exe` or any blanket/by-name Chrome kill.** Filter to specific headless-test PIDs first (`--user-data-dir`/`--headless` in the command line via `Get-CimInstance Win32_Process`). This has killed the user's real browser before.
-- **`/admin/db`'s "Seed Database" button is destructive** (wipes existing data, then reseeds) — not additive. Never click it during testing/verification without confirming with the user first. (Caused a real data-loss incident once — see "Rolling DB backup" note below.)
-- **`raw_password` plaintext storage in `restaurants`** is intentional, user-approved technical debt. Don't flag or "fix" it unless the user raises it themselves.
-- **The status vocabulary mismatch is real and still unresolved at the type/API level**: `Received/Preparing/Complete` (Kitchen/API) vs `Received/Making/Finished` (old Customer type) are different string sets for the same concept. Display layer (`order-status.ts`'s `normalizeStatus`/`getStatusVisual`) unifies them — **any new code comparing `order.status` via raw `===` against a literal string will silently break**; always go through `normalizeStatus`.
-- **Don't `git checkout -- <file>`** to undo "the last edit" if there have been multiple uncommitted changes to that file this session — it reverts to the last *commit*, wiping everything since, not just the most recent change.
-- Ask before restarting/stopping the project's own `node.exe` dev server if a user session might be live.
-- This machine: Windows, PowerShell/Git Bash hybrid. Prefer forward slashes for any path passed to Node/scripts even though the OS accepts either backslash — Bash-tool quoting of Windows backslash paths is unreliable.
-- Docker Desktop: fine to auto-start it yourself if it's simply not running (user has explicitly OK'd this). Don't force-restart an already-running instance or assume a paused one was accidental.
+## Critical — Read First
 
----
+- **Never blanket-kill Chrome.** Target only test PIDs identified by `--headless`/test `--user-data-dir`. A one-time blanket kill was explicitly authorized on 2026-07-09; that does not create standing permission.
+- **Never run Seed or Purge during testing.** Both erase data and require exact typed confirmation in UI/API. The user intentionally purged on 2026-07-09; preserved backups exist but must not be restored unless asked.
+- **Do not commit, push, pull, fetch, or otherwise sync from the `.141` machine.** Do not run routine production builds; the user prefers the editable dev server.
+- Treat the shared VS Code browser’s cookies/tabs as live user state. Isolate auth tests; never log out the shared session as cleanup.
+- `raw_password` plaintext storage is intentional local-dev debt. Do not flag/fix it unless asked.
+- Never compare raw `order.status` to literals in display code. The API and legacy customer vocabularies differ; use `normalizeStatus()`/`getStatusVisual()`.
+- Never use `git checkout -- <file>` to undo one edit in a dirty file; it can erase unrelated uncommitted work.
+- Ask before restarting/stopping the project server when a user session may be active. Docker may be auto-started if stopped, but never force-restart an already-running instance.
+- Windows host, PowerShell/Git Bash hybrid. Prefer forward slashes in Node/script paths.
 
-**Purpose of this file**: narrative/judgment-call log for whichever Claude picks up this project next. `SYSTEM_MEMORY.md` is the technical "what is true about this repo" reference (architecture, routes, schema). This file is "what happened and why" — the decisions a future Claude might otherwise redo or second-guess. Read `SYSTEM_MEMORY.md` first, then this file, then `git log --oneline -20` to check nothing's drifted.
+## The User and Working Style
 
-This file was condensed 2026-07-08 — many now-superseded iteration details (theme v1, session mechanism v1, etc.) were cut in favor of only the *current* state and the *lessons*. Full blow-by-blow history is in git log / `git blame` if ever needed; don't assume it's lost, it's just not narrated here anymore.
+- Non-expert developer who built this by vibe-coding. Explain in plain English; do the coding and stack-trace interpretation yourself.
+- Cares deeply about UI craft, warm bistro identity, accessibility, and the derpy chef. This is not disposable software.
+- Thinks visually and describes desired feelings/workflows rather than APIs. Ask only for real product/architecture forks; execute once direction is clear.
+- Wants visual/UX claims verified live. If a reported bug cannot be reproduced, say so plainly and ask for the missing real-world condition instead of guessing.
+- Be direct about mistakes. The user responds better to honest disclosure than minimization.
 
----
+## UI Verification Recipe
 
-## Who the user is and how they like to work
+There is no dedicated test suite. Normal validation is `tsc --noEmit`, focused ESLint, and a real JS browser.
 
-- Non-expert developer — assume no deep Next.js/Docker/Postgres background in explanations. Don't assume they can parse a stack trace unassisted.
-- Project originated from Gemini Pro output the user called "duct tape"/"AI slop." When something looks inconsistent, it's likely inherited cruft from that origin — check `git blame` before assuming recent work caused a bug.
-- Prefers `AskUserQuestion` for real architectural forks, but wants execution without further check-ins once direction is set.
-- Wants visual/UX work actually verified live, not just claimed — see the CDP recipe below.
-- Gets frustrated (understandably) when a reported bug can't be reproduced — several session-related bugs took multiple rounds to actually pin down (see §"Hard-to-reproduce bugs" below). When a repro fails, say so plainly, don't paper over it.
-- Reacts fast and honestly to mistakes going wrong — e.g. hated a mascot placement immediately, and a real data-loss incident (an admin/db "Seed Database" click during testing that wiped the DB, see below) was disclosed immediately rather than downplayed. Match that directness back.
+1. Use VS Code browser tools when practical. For separate headless Chrome, launch with a unique scratch `--user-data-dir` and remote-debugging port; open tabs through `PUT /json/new?...`.
+2. React controlled inputs need the native `HTMLInputElement.prototype.value` setter plus a bubbling `input` event; assigning `.value` alone does not update state.
+3. Use real CDP mouse/touch input for hover, mousedown, click-outside, and touch behavior; synthetic `.click()`/`MouseEvent` can silently miss React paths.
+4. Do not use curl as proof of client rendering. Pages are client components and dev bundles contain misleading strings; use a JS browser.
+5. Fast CSS animations can settle before screenshots. Verify computed values or slow animation playback before declaring failure.
+6. Test relevant desktop/mobile widths, Big UI, themes, contrast/CVD, Reduce Motion, keyboard focus, and horizontal overflow.
+7. Clean only uniquely prefixed test rows through targeted admin deletion. Never Seed/Purge. Preserve shared cookies.
+8. Stop only exact headless-test PIDs and remove their scratch profiles. Never kill Chrome by name without fresh explicit permission.
+9. Global CSS/keyframe and dynamic-route changes can remain stale in Turbopack. If behavior contradicts source, stop the exact server, delete only `app/.next`, and restart through `startup`.
 
----
+## Hard-to-Reproduce Bugs and Lessons
 
-## How I verify UI changes (reusable recipe)
+- **Remember Me appeared to forget the kitchen.** Real cause: the old session endpoint returned early for an admin cookie, hiding a simultaneous valid restaurant cookie. Failed reproductions lacked both cookies. Lesson: reproduce the user’s full browser state, including other roles/tabs.
+- **Back button forced login.** Login/signup pages did not check an existing session, and scripted navigation did not reproduce raw browser history. Lesson: when a report says Back, test real history navigation.
+- **First logout sometimes appears ineffective (unresolved report).** Four dashboard/welcome/history repro attempts cleared on first logout. If reported again, ask about multiple tabs/devices and the exact URL; do not claim a fix without reproduction.
+- **Chef speech bubble oversized/off-center on a physical phone.** Several breakpoint/transform fixes passed emulation but failed the real report. The durable fix moved the bubble out of SVG `foreignObject` into normal flow above the SVG and made mascot sizing container-aware. Lesson: after repeated synthetic passes disagree with a real device, simplify the rendering model rather than adding transform math.
 
-No test suite exists (deliberate — see "no new dependencies" below). Verification = `tsc --noEmit` + `eslint`, plus driving the real app via headless Chrome + Chrome DevTools Protocol (the `ws` package is already a dependency; Chrome is at `C:\Program Files\Google\Chrome\Application\chrome.exe`).
+## Decisions Not to Re-Litigate Casually
 
-1. `chrome.exe --headless=new --disable-gpu --remote-debugging-port=<port> --user-data-dir=<scratch dir> about:blank`
-2. Open a tab via `PUT http://localhost:<port>/json/new?<url>` — **must be PUT, not GET**.
-3. Connect a `ws` client to the tab's `webSocketDebuggerUrl`, send CDP commands (`Page.navigate`, `Runtime.evaluate`, `Page.captureScreenshot`, `Emulation.setDeviceMetricsOverride`) as JSON-RPC.
-4. **Setting an `<input>`'s `.value` via `Runtime.evaluate` does NOT update React's controlled state.** Use the native setter + dispatch a real event:
-   ```js
-   const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-   nativeSetter.call(el, 'value'); el.dispatchEvent(new Event('input', { bubbles: true }));
-   ```
-5. Screenshots: `Buffer.from(data, 'base64')`. Use forward slashes in output paths even on Windows.
-6. Clean up: stop the headless Chrome test process by specific PID, delete any test restaurants/orders created via the admin API.
-7. **Known limitation**: this setup's screenshots are unreliable for catching genuinely fast (~300-500ms) CSS animations/transitions mid-flight — normal-timed screenshot loops often show only the settled end state even when the animation is provably running correctly (confirmed via `getComputedStyle()` polling or CDP's `Animation.setPlaybackRate` slow-motion capture). If a screenshot shows "no visible change" for a fast animation, don't conclude it's broken — verify numerically or slow it down first.
-8. **Synthetic DOM events can silently no-op**: a scripted `.click()` doesn't fire `mousedown` (breaks click-outside-to-close listeries), and `dispatchEvent(new MouseEvent(...))` doesn't reliably trigger React's `onMouseEnter`. Use CDP's `Input.dispatchMouseEvent` for anything hover/mousedown-dependent.
-9. **Never trust raw `curl` output as proof of what a client-rendered page shows** — every page here is `"use client"`, so curl's response never contains real rendered content, and Next's dev bundle can embed misleading strings (e.g. the shared not-found boundary's source) into unrelated routes' payloads. Only a real JS-executing browser confirms rendering.
+Technical mechanics are in `SYSTEM_MEMORY.md`; these are the settled judgment calls:
 
----
+- Keep `node server.js`; App Router alone does not host the raw WebSocket endpoint.
+- Keep same-process/global WebSocket state unless multi-instance deployment is actually requested.
+- No broad UI/headless/JWT dependencies. `qrcode` is the approved narrow offline exception.
+- Keep HMAC httpOnly-cookie sessions without a session table until forced remote revocation is requested.
+- Cookie persistence is controlled by cookie `maxAge`, not token expiry. Admin/kitchen cookies remain separate and role logout remains scoped.
+- Kitchen order delete is recoverable; admin delete is permanent. This asymmetry is deliberate.
+- Windows and shell versions of startup/export/unpack are independent implementations. Mirror behavior manually.
+- Public exposure remains future work. Comment/scaffolding is not production infrastructure.
+- Keep restaurant autocomplete public but constrained; removing it would damage the customer workflow.
 
-## Hard-to-reproduce bugs — a recurring pattern, read before giving up
+## Recurring Bug Patterns
 
-Several real bugs in this project resisted reproduction for a session or more, each time because the repro attempt didn't match the *actual* failure conditions:
-- **"Remember Me forgets me" (session-split bug)**: looked unreproducible for two sessions. Real cause: `GET /api/session` checked the admin cookie first and returned immediately if valid — a caller with BOTH an admin session and a valid remembered restaurant session never saw the restaurant session. Every failed repro attempt lacked an admin cookie in the test browser at the same time. **Lesson: match ALL of the user's real browser state (cookies from other roles too), not just the click sequence.**
-- **"Back button forces re-login"**: `restaurant/login`/`signup` never checked for an existing session (by original design). Scripted `router.push`/click-based repros never actually exercised raw `history.back()` landing on the page as a fresh load — that's a genuinely different code path from an in-app navigation. **Lesson: when a report specifically mentions the back button, test real browser history navigation (CDP `Page.navigateToHistoryEntry`), not just equivalent-looking pushes.**
-- **"Still signed in after logout" (2026-07-08, unresolved)**: user reports logging out from `/restaurant/restauranthome`, then revisiting shows "still signed in?" — logging out a *second* time then actually clears it. Ran four separate repro attempts (dashboard's real Logout button, Welcome-Back's own Logout button, in-app router navigation, real back-button history navigation) — **could not reproduce under any of them**, every attempt cleared the session correctly on the first logout. Left open. If reported again, ask specifically: was more than one tab/device open, what did the URL bar show. Don't mark this fixed without an actual reproduction.
+- Responsive twin components: put `hidden/block` on wrappers to avoid specificity ties; use `useId()` for internal SVG/DOM IDs.
+- `animation-direction: reverse` does not mirror motion signs. Mirrored parts need explicit opposite keyframes.
+- SVG rotation intuition has been wrong repeatedly. Verify real transforms through an animation cycle.
+- Fixed top-right controls collide as the toolbar changes. Use `useReservedTopRight` and `.clear-top-right`, never guessed padding. The mobile kitchen menu belongs inside `SettingsToggles`.
+- Use `min-h-dvh`, then still measure short viewports; content can exceed even correct viewport units.
+- Feature-gating props must cover every render path, including popovers/tooltips.
+- Persisted browser preferences must not be read in a hydration-sensitive state initializer. Start neutral/null, sync after mount, and keep the placeholder’s dimensions stable.
+- Every user value used with `ILIKE` needs `escapeLikePattern()`, even when parameterized.
+- Prefer shared `ui-awareness.ts` measurement hooks to new one-off ResizeObservers; measure intrinsic widths to avoid stack/unstack oscillation.
 
-The general lesson: if a repro genuinely fails, say so and ask for more precise conditions (exact navigation method, other open tabs/sessions) rather than continuing to guess blindly.
+## Load-Bearing Product and Design Decisions
 
-- **ChefSprite's speech bubble "humongous on mobile" (2026-07-08)**: user reported the bubble rendering wildly oversized on their actual phone. Two fix attempts in this session (a CSS `max-width` counter-scale correction, then a `ResizeObserver`-based "hide if container too narrow" approach) both tested as correct via headless-Chrome CDP mobile-viewport emulation (375px/200px/130px, screenshots, computed-style checks) — **never reproduced the bug in this session's own testing**, and the user was on a real phone (not devtools responsive mode) they couldn't screenshot from. Landed on the user's own simpler fallback instead of continuing to chase the repro: **ChefSprite is now unconditionally hidden below `sm:`** at every call site that doesn't already do its own responsive size-swap (`Dashboard.tsx`'s two empty-order-state cards, the gateway `/` page), with plain-text fallback messages so mobile doesn't lose the empty-state copy. `KitchenPortalLanding`/`SessionWelcomeBack` keep their own pre-existing `sm:hidden`/`hidden sm:block` two-instance swap (a different, working pattern — don't apply the new unconditional hide there too, it would double up). **Lesson: after 2 rounds of the same bug reappearing despite passing synthetic mobile-emulation tests, stop trying to fix the underlying rendering and take the simpler "don't render it there" path the user asks for** — don't keep re-deriving CSS math against a bug that isn't reproducing for you.
+- **Theme:** warm light/dark bistro. A directional/circular View Transition was tried and rejected as weird; keep the calmer staggered cross-fade, instant under Reduce Motion.
+- **UI size:** root `font-size` transition is intentional. A transform-scale version was tried and rejected for blur and fixed-element misalignment.
+- **Mascot:** keep the pleated-toque, cheerful awkwardness, 2D/3D preference, container-aware sizing, and normal-flow speech bubble. Arm/hand-only animations were removed after repeated SVG-direction bugs. If 3D appears flat, check `.chef3d-*` CSS before component logic.
+- **Order motion:** add/delete slide from the right, matching toasts. Delete waits a fixed 300ms rather than `animationend`, because Reduce Motion can disable animation events.
+- **Accessibility:** size, theme, high contrast, motion, focus, and each CVD palette are independent axes; do not bundle them into one mode.
+- **Status Undo:** server-issued one-time token, 8-second deadline, stale/cross-tab/picked-up rejection, and only the mistaken timestamp is cleared. Normal kitchen flow remains forward-only.
+- **Customer handoff:** one reusable restaurant QR/sign, never a per-order QR. On localhost, `/api/customer-origin` substitutes a reachable LAN address.
+- **Order identity:** readable display label plus generated canonical lookup key. Preserve human labels while matching harmless punctuation/case variants.
+- **Sessions:** valid remembered kitchens resume directly to the dashboard. The redundant Welcome Back screen and `?fresh=1` bypass were removed.
+- **Error handling:** route/root/dashboard boundaries catch render failures; async handlers still need explicit try/catch.
+- **Security:** settled audits are summarized in `SYSTEM_MEMORY.md` and evidenced in `SECURITY_ATTACK_LOG.md`. Do not reopen fixed/rejected findings without a new reason.
 
----
+## Data Safety and Recovery
 
-## Architecture decisions that must not be casually "simplified" back
+- Seed/Purge require exact UI and API phrases. Do not bypass this guard in tests.
+- Rolling `pg_dump` runs every 3 hours and keeps three snapshots. It is a local safety net, not offsite backup.
+- Proven restore procedure: restore a dump into a temporary database, verify counts/names, stop the exact app server, rename/swap databases, restart, and let `initDb()` migrate. Never restore blindly over live data.
+- On 2026-07-09 a validated backup proved this process after an intentional purge. The user later intentionally purged again. The current live DB is intentionally empty; do not restore old kitchens unless asked.
 
-- **`node server.js`, never `next dev`/`next start`** — custom server needed to attach a raw WebSocket upgrade handler (Next's App Router can't host one). Reverting to plain `next dev` silently breaks WebSockets.
-- **WS client registry lives in `globalThis`** (`ws-hub.ts`), shared between `server.js` and API routes since they're one process. Does NOT survive horizontal scaling — don't add Redis for this unless the user actually asks for multi-instance deployment.
-- **No new dependencies for UI/animation** (no Radix/Headless UI, no Puppeteer/Playwright, no JWT library) — deliberate, so the user can read/maintain the code themselves. Custom CSS keyframes and the CDP recipe above instead.
-- **Sessions are signed httpOnly cookies via `crypto.createHmac`**, no DB-backed session table — no per-session remote revocation is possible by design (only client-side cookie clearing). Revisit only if the user asks for forced remote logout.
-- **Cookie persistence is controlled by the cookie's `maxAge` at set-time, not the token's internal `exp`.** The token itself is always valid 30 days as a safety bound. Don't tie cookie lifetime to token `exp` — that breaks the session-only (non-remembered) case.
-- **Session cookies are split**: `admin_session` / `restaurant_session` (`session.ts`), so both roles coexist without clobbering each other. `/api/logout` clears only the role passed in `{ type }` — never make it clear both unconditionally, or logging out one role kills an unrelated session for the other role in another tab.
-- **Kitchen delete = soft delete (`deleted_at`), Admin delete = real, permanent `DELETE`.** This is intentional and asymmetric (confirmed via `AskUserQuestion`) — admin/db's "Deleted" view only ever shows kitchen-soft-deleted rows, never an admin's own deletes, by design.
-- **`.ps1` (Windows) and `.sh` (Mac/Linux) scripts for `startup`/`export`/`unpack` are genuinely independent implementations, NOT generated from one source** — explicit user choice, they'll drift if only one is edited. Check whether a change to one needs mirroring in the other, but don't assume it's automatically your job to keep them synced.
-- **Router/public-exposure readiness is comment-only scaffolding today** (`server.js`, `api/admin/login/route.ts`, `rate-limit.ts`) — no real implementation exists yet for going public. Don't assume any of it is live.
+## Cross-Device and Repository Incidents
 
----
+### USB copy ahead of Git (2026-07-08)
 
-## Recurring bug classes worth checking for (each has bitten this project more than once)
+A corrupted `.next` cache and missing features happened together. The cache was safe to delete, but the USB copy also contained newer uncommitted laptop work. Lesson: after multi-device copying, compare mtimes/content on every copy before blaming corruption; preserve `.git`, `node_modules`, `.env.local`, and backups when copying a newer working tree.
 
-- **CSS specificity collisions when two instances of a component are mounted for responsive breakpoint-swapping** (`ChefSprite` at two sizes): (1) a component's own internal CSS class can tie in specificity with the Tailwind `hidden`/`block` utility meant to toggle between instances — put the toggle on an external wrapper `<div>`, never on the component's own `className` prop if it has competing display rules. (2) any hardcoded SVG/DOM `id` inside the component becomes a real duplicate-ID bug the moment two instances share a page — use `useId()`.
-- **`animation-direction: reverse` does NOT mirror a keyframe's sign.** For a front-to-back-symmetric keyframe it plays identically forward and reversed (no mirroring, both elements move in lockstep). For an asymmetric-timed keyframe it staggers elements into alternating solo animations. Any two-element mirrored animation needs two explicit keyframes with opposite signs, never a shared keyframe + `reverse`.
-- **SVG `rotate()` direction is easy to get backwards and re-derive wrong more than once** — always confirm empirically via `getBoundingClientRect()`/`getComputedStyle().transform` polling through a real animation cycle, never by reasoning about clockwise/counter-clockwise in the abstract (this has cost multiple debugging rounds in this project — see "ChefSprite" in the "Current, load-bearing feature/architecture notes" section below for the actual sign convention if arm animation is ever touched again).
-- **Fixed top-right UI elements collide as the toolbar grows.** `SettingsToggles`, `Toast`'s stack, `PageHeader`'s actions, and dashboard mobile bars have all independently collided with each other at various points as the settings toolbar gained icons. The durable fix is `useReservedTopRight.ts` (measures the toolbar's real bounding box via `ResizeObserver`, publishes `--reserved-top-right-w/-h` CSS vars) + `.clear-top-right` utility class — use this for any new top-right element, don't hand-tune a margin/padding number.
-- **`min-h-screen`/`100vh` overflows on real mobile browsers** (measured against the largest-possible viewport, not what's visible with the address bar showing) — use `min-h-dvh`. But fixing the viewport unit doesn't guarantee no overflow: re-measure after, since content can just be taller than a short viewport regardless of the unit used (a content/spacing problem, not a units problem).
-- **A prop meant to gate a feature needs checking on EVERY render path that feature touches** (inline display AND any tooltip/popover), not just the most visible one — bit the project twice (DB-size health-pin gating, `.clear-top-right` header-vs-actions-div).
-- **`useState(lazyInitializerThatReadsDocument)` causes hydration mismatches** whenever the persisted value differs from the hardcoded SSR default. Fix: start state as `null`, sync in a `useEffect`, render a same-sized neutral placeholder until then (see `ThemeToggle.tsx`/`UiSizeToggle.tsx`).
-- **`ILIKE` needs `escapeLikePattern()` on every user-supplied value** — a raw `%`/`_` acts as a wildcard regardless of parameterization. Re-derive this every time a new `ILIKE` lookup is added; it's an easy one-line inconsistency to introduce even when three other patterns in the same query use it correctly.
+### Stray Git init + GitHub ZIP + Windows locks (2026-07-08/09)
 
----
+One folder had an empty unrelated `.git`; a GitHub ZIP had current files but no history and CRLF noise; the real GitHub repo held history. After verifying remotes/logs and comparing with trailing-CR ignored, genuinely new files were copied to a fresh clone. Folder renames then failed because VS Code held handles. The workable recovery was initializing/fetching/checking out the real remote **in place**, avoiding OS-level moves.
 
-## Current, load-bearing feature/architecture notes
+Lessons:
 
-- **Theme**: "warm bistro," light (cream/parchment/terracotta) + dark (espresso/terracotta), toggle in `ThemeToggle.tsx`, `data-theme` on `<html>`, no-flash inline script in `layout.tsx`. **Theme transition (2026-07-08, revised same day)**: a `document.startViewTransition()`-based directional/circular wipe (9 random variants) was tried first, then explicitly rejected by the user as "weird" in favor of a calmer soft cross-fade — background layer fades first, then cards/nav, then everything else (staggered `transition-delay`, see globals.css's `[data-theme-transitioning]` rules). `ThemeToggle.tsx` just toggles that attribute on `<html>` around the swap; no View Transitions API involved anymore. Collapses to instant under Reduce Motion via the same attribute-scoped rules. Don't reintroduce the wipe/circle-reveal approach without checking with the user first — it was a real, tried-and-reverted design decision, not an oversight.
-- **UI size (S/M/B)**: `transition: font-size 0.35s ease` on `<html>` in `globals.css` — smooth zoom since everything is rem-based. Don't try to "improve" this to `transform: scale()` without checking git history for the reverted attempt first — it was tried, hit real problems (blurred text, fixed-element misalignment via new containing-block rules for `position: fixed` descendants), and reverted.
-- **ChefSprite**: 25 idle animations remain (arm/hand-only ones were removed entirely 2026-07-08 after a multi-round debugging chase — see "Recurring bug classes" above for the SVG-rotation-direction convention before ever re-adding one). Pleated-toque hat SVG is the accepted baseline design — don't regress to earlier chibi/scalloped attempts. `size` is now the IDEAL/max size, not a fixed one. **Container-aware sizing + bubble refactor (2026-07-09)**: ChefSprite measures its own container via `ResizeObserver` and shrinks `renderSize` to fit (clamped to `minSize`), and publishes `--chef-bubble-max` (a live container-width cap) so the bubble can never overflow whatever box it's dropped into. The speech bubble was MOVED OUT of the SVG — it used to be an in-`foreignObject` div with a `scale()/translateX(-50%)` + `--chef-bubble-counter-scale` transform stack whose fragile math rendered it oversized AND ~65-82px off-center (measured, not guessed); it is now a plain flow sibling ABOVE the `<svg>` inside `.chef-sprite-wrap` (a centered flex column), so it auto-centers with zero transform math. That is what finally fixed the "bubble too big / off-center on mobile" bug that never reproduced under headless emulation before. Consequently the `Dashboard.tsx` empty-state `hidden md:block` band-aids + text fallbacks were **removed** — the chef now shows and fits at every viewport (live-verified at 320/390/768/1440, bubble-vs-sprite center offset 0). The gateway `/` page keeps its `md:hidden` block because that's a *functional* mobile action-button layout (Log Out / Access DB), not just mascot-hiding. `KitchenPortalLanding.tsx`/`SessionWelcomeBack.tsx` keep their two-instance `sm:` swap (the "kitchen login page" exception the user wanted) and still inherit the centered-bubble fix. **Gotcha**: editing `@keyframes` in globals.css does NOT hot-reload under Turbopack (the browser keeps the old computed transform) — kill the dev server + `rm .next` + restart to pick it up; TSX changes hot-reload fine.
-- **Chef mascot 2D/3D toggle** (2026-07-09): `ChefSprite3D.tsx` is a pure-CSS 3D build of the same chef character (`perspective`/`preserve-3d` layered divs, `.chef3d-*` classes + 11 idle keyframes in `globals.css`, no WebGL). `ChefMascot.tsx` is now the actual call site everywhere (`page.tsx`, `Dashboard.tsx`, `KitchenPortalLanding.tsx`, `SessionWelcomeBack.tsx` all render `ChefMascot`, not bare `ChefSprite` directly) — it picks 2D or 3D per `lib/mascot-style.ts`'s persisted preference and plays a walk-off/walk-in swap ONLY on a genuine toggle flip, never on remount. `MascotStyleToggle.tsx` (in `SettingsToggles`) is only shown when a mascot is actually mounted on the page (`useHasMascot()`). See `SYSTEM_MEMORY.md` §15 for the full breakdown. **This CSS is substantial and easy to lose in a file-sync/merge** (it did go missing once mid-session on 2026-07-08 — the component existed but its ~20 classes/11 keyframes didn't, so it would've rendered as an unstyled div stack) — if the 3D chef ever looks broken/flat, check `globals.css` for `.chef3d-*` before assuming a component bug.
-- **Order card animations**: add = slide in from right, delete = slide out to right (matches notification toast direction), both `translateX`-based in `globals.css`. Deletion is deferred via a 300ms `setTimeout` (not `animationend` — Reduce Motion disables the animation outright via `!important`, which would mean the listener never fires) in both `Dashboard.tsx` (`exitingIds` state) and `admin/db/page.tsx` (`exitingOrderIds` state).
-- **Accessibility toolbar**: `SettingsToggles` — S/M/B size, Accessibility dropdown (High Contrast, Reduce Motion, Enhanced Focus, Colorblind palette picker: Off/Deuteranopia/Protanopia/Tritanopia, each independently palette-tuned and simulation-verified), theme toggle. All independent axes, never bundle into one "accessibility mode" switch (researched and explicitly rejected).
-- **Self-aware layout layer** (`lib/ui-awareness.ts`, 2026-07-09): reusable primitives so a component can notice when it's about to break its own layout and adapt, instead of trusting a fixed breakpoint that can't see the content. Pure geometry helpers (`boxesIntersect`/`horizontalGap`/`isOverflowingX`/`clamp`), a dev-only `reportUiIssue` logger, and three hooks: `useAutoFitText` (clipped-text detection → auto `title` tooltip; wired to the sidebar kitchen name), `useSideBySideFit` (measures a row's INTRINSIC content width — `scrollWidth`+`offsetWidth`, NOT live positions, specifically to avoid stack↔unstack oscillation — against its container to choose row-vs-stack by CONTENT; wired to the Home order rows, so a long order name stacks even on a wide screen while a short one stays inline at the same width), and `useUiSelfCheck` (dev-only; logs elements causing GENUINE page-level horizontal overflow, gated on `documentElement.scrollWidth` and skipping `aria-hidden` decorative layers so BackgroundArt's edge-bleed watermarks aren't false-flagged). All SSR-safe, ResizeObserver-feature-detected, try/catch-wrapped, silent in production. Generalises the same measure-your-own-box idea already in ChefSprite and `useReservedTopRight` — reuse these before hand-rolling another bespoke ResizeObserver.
-- **Error boundaries** (2026-07-09): `app/error.tsx` (route-level recovery screen — Try again / Go home) + `app/global-error.tsx` (root-layout failure fallback, inline-styled because CSS vars may be gone in that mode) + reusable `components/ui/ErrorBoundary.tsx` (wraps the dashboard's tab content so one widget's render error shows an inline "this part hiccuped" fallback instead of blanking the whole view). Boundaries only catch render/lifecycle errors — async event-handler errors still ride on the API layer's existing try/catch. localStorage reads/writes (naming-style pref) are now try/catch-wrapped too (private-mode / sandboxed-iframe safety).
-- **Soft-delete**: orders only (kitchen-initiated `DELETE` sets `deleted_at`; admin `DELETE` is real). Restaurant soft-delete/encryption system was removed entirely 2026-07-07 (dead code after admin-delete became real — confirmed zero legacy rows existed first).
-- **`/restaurant` routes**: `/home` (Log In/Register choice, session-agnostic by design), `/login`, `/signup` (both check session on mount and redirect if one exists — this was a real, twice-investigated bug, see above), `/restauranthome` (the actual dashboard + "still signed in?" Welcome-Back screen — the only place that owns session-restore UI). Fresh login/signup navigates with `?fresh=1` to skip the redundant Welcome-Back confirm.
-- **Rate limiting**: per-IP on all anonymous endpoints (search/suggest/acknowledge at 120/min, login/register tighter), per-restaurant on order creation (30/min) — admin is NOT exempt from the creation limiter.
-- **Security posture**: all 11 + 6 + 16 findings across three audit rounds are fixed and live-verified — see `SECURITY_ATTACK_LOG.md` and `SYSTEM_MEMORY.md` §9 for specifics if touching auth/validation/rate-limiting code. Don't re-litigate settled findings without a new reason.
-- **Rolling DB backup**: `app/scripts/db-backup.js`, `pg_dump` every 3h via `docker exec`, keeps 3 most recent in `backups/` (gitignored). Small safety net, not a real backup system — added directly in response to a real accidental data-loss incident (an admin/db "Seed Database" click during live testing wiped the whole DB, including test accounts an external security-audit instance was actively using).
-- **Cross-platform tooling**: `startup`/`export`/`unpack`, each with independent `.ps1`+`.cmd` (Windows) and `.sh` (Mac/Linux) implementations, thin wrappers in both `Restaurant/` and `Restaurant/app/` calling `scripts/`. See "genuinely independent" note above.
-- **Mobile-migration (Expo/Android) and self-hosting**: research/groundwork only, not built. See `MOBILE_MIGRATION_PLAN.md` for the authoritative next-steps list — LAN access (server binds `0.0.0.0`, `allowedDevOrigins` in `next.config.ts` hardcoded to the current LAN IP, WS origin check widened for private-LAN no-Origin callers) is done and verified from the PC itself, **NOT yet re-confirmed from an actual phone** since the last fix.
+- A `.git` directory does not prove useful history; a GitHub ZIP never includes history.
+- Normalize/ignore CRLF before trusting “every file differs” reports.
+- If Windows says a workspace folder is in use, stop retrying moves. Prefer an in-place Git repair after verifying it is safe.
+- On this `.141` machine, however, current user instruction is stricter: no Git operations that sync or commit.
 
----
+## Update Discipline
 
-## 2026-07-08: File-sync incident (USB copy was ahead of this repo)
-
-`npm run start:all` crashed with a corrupted `.next/dev/cache` (Turbopack panic) right after a multi-device file copy (laptop → USB → this machine). Fixed by deleting `.next` (pure build cache, always safe). But the user then reported the sprite/scroll/security work "was missing" — turned out `E:\Restaurant files` (the USB copy) had file mtimes newer than this repo's last git commit: a prior laptop session's work had never been committed or pushed, only existed as loose files on the USB drive. Confirmed via `find -newer <repo>/.git/HEAD`, then copied the USB copy over this repo (preserving `.git`/`node_modules`/`.env.local`/`backups/`) after confirming via `git diff --stat` that nothing session-local was at risk.
-
-**Lesson**: when a user says a whole feature "is missing" after a multi-device copy, check file mtimes against git log on both copies before assuming a crash/corruption is the whole story — a corrupted build cache and an entire uncommitted work session can both be true at once.
-
----
-
-## 2026-07-08/09: Second file-sync incident — repo working directory got tangled with a stray git init + a GitHub zip export
-
-Similar shape to the incident above but messier: a second desktop's work arrived as a Lexar-drive copy again, but this time also as a **GitHub "Download ZIP" export** (`Order-Tracker-main.zip`, no `.git` — GitHub zips never include history) extracted into a nested subfolder of `Downloads\Restaurant`, while `Downloads\Restaurant` itself turned out to have its own separate, disconnected `git init` with **zero commits** (not the real project history — likely a stray init from earlier tooling). Meanwhile `talkwitharnav-web/Order-Tracker` on GitHub had the real history from `git log`/`git push` in an earlier session.
-
-Resolution: cloned the real GitHub repo fresh to a clean sibling folder, diffed it against the zip export with `--strip-trailing-cr` (CRLF-vs-LF line-ending noise from the Windows zip download made a naive `diff -rq` claim nearly every file "differed" when almost none actually did in content), copied over the genuinely new files (the 3D chef mascot work), committed, and pushed. Then hit a **file-lock wall trying to rename/move folders into place** — VS Code had `Downloads\Restaurant` open as a workspace and held handles on it; both `Move-Item`/`Rename-Item` (PowerShell) and this tool's own Bash cwd (which the harness force-resets between calls, so `cd` can't escape it either) failed with "in use" errors, including one partially-executed PowerShell block that silently deleted the stray empty `.git` before erroring on the next line — no data lost, but state became hard to reason about mid-sequence.
-
-**Final approach that worked without needing to move/rename anything**: `git init` directly inside the still-open `Downloads\Restaurant` folder, `git remote add origin <url>`, `git fetch`, `git checkout -b main origin/main` — this populates/overwrites the working tree via a normal checkout, which doesn't require an OS-level move/rename and so isn't blocked by another process's open-file handle the way `Move-Item`/`Rename-Item` are.
-
-**Lessons**:
-- When multiple copies of a project surface after a multi-device sync, check **each one's actual git connection** (`git remote -v`, `git log -1`, `git ls-remote <suspected-origin>`) before assuming any of them is "the repo" — a folder having a `.git` directory doesn't mean it has real history, and a zip export having no `.git` doesn't mean it's not the most current content.
-- A GitHub "Download ZIP" always uses CRLF and never includes `.git` — expect every text file to show as "differing" from a native `git clone` on the same commit; re-diff with `--strip-trailing-cr` (or normalize line endings) before trusting a diff's file list.
-- If a folder-level move/rename fails with "in use" on Windows mid-session, don't retry blindly — check whether VS Code (or this tool's own Bash, whose cwd the harness resets automatically and can't be escaped via `cd`) has it open, and prefer `git init` + `remote add` + `fetch` + `checkout` **in place** over trying to relocate directories out from under a live lock.
-
----
-
-## Update discipline for this file
-
-Append a new dated entry only for genuinely new architectural decisions, non-obvious lessons, or unresolved issues a future session needs. Prefer folding a new fact into the relevant existing section above over starting a new narrative entry — this file was condensed once already because unbounded chronological entries become unreadable; don't let it regrow that way. Skip trivial/cosmetic changes entirely. If something here turns out wrong or superseded, correct it in place.
+Keep this file for non-obvious lessons, rejected approaches, unresolved reports, and reasons behind decisions. Put current mechanics in `SYSTEM_MEMORY.md`, security proof in `SECURITY_ATTACK_LOG.md`, and user instructions in `USER_HELP.md`. Update existing bullets instead of growing a chronological diary; skip routine cosmetic changes.

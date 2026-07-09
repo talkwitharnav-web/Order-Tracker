@@ -16,6 +16,22 @@ export function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+/** Compact total age for kitchen scanning (for example: <1m, 8m, 2h 14m). */
+export function formatOrderAge(ms: number): string {
+  if (!Number.isFinite(ms)) return "—";
+  const totalMinutes = Math.floor(Math.max(ms, 0) / 60_000);
+  if (totalMinutes < 1) return "<1m";
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (totalHours < 24) return minutes > 0 ? `${totalHours}h ${minutes}m` : `${totalHours}h`;
+
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+}
+
 /**
  * Duration spent in one status, given when it started and when it ended
  * (null end means "still in this status" -- caller passes `Date.now()` as

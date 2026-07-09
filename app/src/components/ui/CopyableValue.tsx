@@ -17,15 +17,45 @@ export const CopyableValue: FC<{ value: string; label: string; className?: strin
 }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
+  const copyWithFallback = () => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.readOnly = true;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
     try {
-      await navigator.clipboard.writeText(value);
+      document.body.appendChild(textarea);
+      textarea.select();
+      return document.execCommand("copy");
+    } finally {
+      textarea.remove();
+      if (previousFocus?.isConnected) previousFocus.focus();
+    }
+  };
+
+  const handleCopy = async () => {
+    let succeeded = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        succeeded = true;
+      }
+    } catch {
+      // Plain-HTTP LAN origins may deny the modern Clipboard API.
+    }
+
+    if (!succeeded) {
+      try {
+        succeeded = copyWithFallback();
+      } catch {
+        succeeded = false;
+      }
+    }
+
+    if (succeeded) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard API can fail (no permission, non-secure context) -- there's
-      // no selectable-text fallback anymore, so just silently no-op; the
-      // button staying in its un-copied state is signal enough that it didn't work.
     }
   };
 

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { escapeLikePattern, requireString } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { normalizeOrderLookupKey } from "@/lib/order-naming";
 
 export async function GET(req: Request) {
   logger.info("GET /api/orders/search - request received");
@@ -15,11 +16,13 @@ export async function GET(req: Request) {
   }
 
   try {
+    await initDb();
     const { searchParams } = new URL(req.url);
     const restaurantName = requireString(searchParams.get("restaurant_name"));
     const orderNumber = requireString(searchParams.get("order_number"));
+    const orderLookupKey = orderNumber ? normalizeOrderLookupKey(orderNumber) : "";
 
-    if (!restaurantName || !orderNumber) {
+    if (!restaurantName || !orderNumber || !orderLookupKey) {
       return NextResponse.json(
         { error: "Restaurant name and order number are required" },
         { status: 400 },
@@ -30,8 +33,8 @@ export async function GET(req: Request) {
     // customer tracker actually renders (see the identical note in
     // /api/orders GET).
     const result = await query(
-      "SELECT id, order_number, restaurant_name, status, updated_at, acknowledged_at FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
-      [escapeLikePattern(restaurantName), escapeLikePattern(orderNumber)],
+      "SELECT id, order_number, restaurant_name, status, updated_at, acknowledged_at FROM orders WHERE restaurant_name ILIKE $1 AND order_lookup_key = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+      [escapeLikePattern(restaurantName), orderLookupKey],
     );
     const order = result.rows[0];
 

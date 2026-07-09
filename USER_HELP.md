@@ -1,332 +1,189 @@
 # User Help Guide
 
-This is the plain-English guide to this project. If `SYSTEM_MEMORY.md` is the technical reference for AI coding assistants, this file is for **you** (or a friend) — no coding background required.
+Plain-English instructions for running and using the Restaurant Order Tracker. Technical details are in `SYSTEM_MEMORY.md`.
 
----
+## What the App Does
 
-## 1. What This Project Actually Is
+| Experience | Who uses it | Purpose |
+|---|---|---|
+| Customer Tracker (`/customer`) | Diners | Scan the kitchen QR sign or enter restaurant + order label to see live status and confirm pickup |
+| Kitchen Portal (`/restaurant/home`) | Staff | Log in/register, create/search orders, advance status, undo recent mistakes, and print the customer sign |
+| Admin (`/`, then `/admin/db`) | Owner | Inspect data, restore kitchen-deleted orders, rename kitchens, reset passwords, view health, Seed, or Purge |
 
-This is a **restaurant order tracker** web app with three separate "views," all part of the same app:
+The app needs PostgreSQL (Docker) and the Node/Next.js server.
 
-**Customer Tracker** — `/customer`
-  Used by: diners
-  What it does: type in a restaurant name + order number to see live order status
+## First-Time Setup
 
-**Kitchen Dashboard** — `/restaurant/home`
-  Used by: restaurant staff
-  What it does: log in or register, create orders, update their status (Received → Preparing → Complete), delete orders
+Install:
 
-**Admin Panel** — `/` then `/admin/db`
-  Used by: you (the owner)
-  What it does: see everything in the database, seed test data, wipe the database, reset passwords
+1. Node.js 20+
+2. Docker Desktop
+3. Git only if cloning from GitHub
 
-Under the hood it needs **two things running** to work:
-1. A **PostgreSQL database** (stores restaurants + orders) — runs in Docker.
-2. The **Next.js app itself** (the website/server) — runs with Node.
+Get the project by copying the folder or cloning it. Then run the normal startup command; it creates/repairs `.env.local`, generates `SESSION_SECRET`, installs dependencies when needed, starts PostgreSQL, and starts the app.
 
-Both are covered below.
-
----
-
-## 2. One-Time Setup (Do This Once)
-
-Follow this section the *first* time you (or a friend) get this project on a new computer.
-
-### Step 1 — Install the required software
-
-You need three things installed on the computer. Skip any you already have.
-
-1. **Node.js** (v20 or newer) — download from [nodejs.org](https://nodejs.org). This lets you run the app.
-2. **Docker Desktop** — download from [docker.com](https://www.docker.com/products/docker-desktop/). This runs the database for you, so you don't have to install Postgres by hand.
-   - After installing, **open Docker Desktop at least once** and leave it running in the background. If Docker Desktop isn't running, the database commands below won't work.
-3. **Git** (only needed if you're cloning the project from a repository like GitHub) — download from [git-scm.com](https://git-scm.com).
-
-### Step 2 — Get the project files
-
-If you're copying the folder directly (USB drive, zip file, etc.), just copy the whole `Restaurant` folder onto the new computer.
-
-If it's on GitHub or similar, open a terminal and run:
-```bash
-git clone <the-repository-url>
-cd Restaurant
-```
-
-### Step 3 — Install the app's dependencies
-
-Open a terminal **inside the `Restaurant` folder**, then run:
-```bash
-cd app
-npm install
-```
-This downloads all the code libraries the app needs (React, Next.js, etc.). It can take a minute or two. You'll see a `node_modules` folder appear — that's normal, it's just where those libraries live.
-
-### Step 4 — Set up the database connection file
-
-Inside the `app` folder, there should be a file called `.env.local`. If it's missing (e.g. you cloned a fresh copy and it wasn't included — this file is intentionally left out of Git for security reasons), create it yourself:
-
-1. Copy `app/.env.example`
-2. Rename the copy to `.env.local`
-3. Its contents should look like this:
-   ```
-   DATABASE_URL=postgres://restaurant:restaurant@localhost:5432/restaurant
-   ```
-   You don't need to change anything — these are just local dev credentials that match the database Docker will spin up for you.
-
-**Setup is now done.** You won't need to repeat these steps again on this computer.
-
----
-
-## 3. Everyday Use — Starting and Stopping the App
-
-Once setup is done, this is all you need to know day-to-day.
-
-### The easy way: `startup`
-
-From either the `Restaurant` folder or the `app` folder:
-
-**Windows:**
-```
+```powershell
+# Windows, from the repo root or app/
 .\startup
 ```
-(You can also just double-click `startup.cmd` in File Explorer — no terminal needed.)
 
-**Mac/Linux:**
 ```bash
+# macOS/Linux
 ./startup.sh
 ```
 
-This does everything `npm run start:all` does (see below), but first checks that everything it needs is actually installed and working — Node, npm, Docker, your dependencies — and fixes anything it finds broken or missing, printing what it's doing every step of the way. If something's wrong (Docker isn't running, a dependency got corrupted, whatever), it tells you exactly what and how to fix it, instead of failing with a cryptic error partway through. This is the recommended way to start the app, especially if it's been a while since you last ran it or you're not sure everything's still set up correctly.
+Open <http://localhost:3000> when the terminal says the server is ready.
 
-### The direct way: `npm run start:all`
-
-Open a terminal in the `Restaurant` folder (the outer folder, or the `app` folder — both work) and run:
-```bash
-npm run start:all
-```
-
-This single command:
-1. Checks whether Docker Desktop is open, and opens it for you if it isn't (waits for it to finish starting up).
-2. Starts the database (in Docker) if it isn't already running.
-3. Starts the website itself.
-
-Wait for a message like `Ready on http://localhost:3000`, then open that address in your web browser. You're now running the app locally on your own computer.
-
-### To stop working
-
-Press **Ctrl+C** in the terminal where the app is running. This stops the website.
-
-The database will **keep running in the background** — this is intentional, so you can restart the website quickly next time without waiting on the database to boot up again.
-
-### If you're done for the day and want to free up your computer's resources
-
-Run one of these (either is safe, neither deletes your data):
+If Windows blocks PowerShell scripts, use `startup.cmd`. If a copied shell script says “permission denied,” run:
 
 ```bash
-npm run db:down
+chmod +x startup.sh export.sh unpack.sh
 ```
-Fully stops and removes the database container, and closes Docker Desktop itself if it was running (also shuts down WSL, the Windows subsystem Docker Desktop runs on, to fully free up the memory it was using). Slightly "tidier," and frees up more resources than `db:stop`. Your data is untouched — it lives in a separate Docker storage area (a "volume") that persists even when the container is removed.
 
-```bash
-npm run db:stop
-```
-Just pauses the database container without removing it. Marginally quicker to resume later. Also perfectly safe.
+## Everyday Commands
 
-If in doubt, use `db:down` — that's what these docs assume by default.
+| Command | What it does |
+|---|---|
+| `startup` / `startup.sh` | Recommended complete startup with checks/repairs |
+| `npm run start:all` | Start DB and editable dev server with fewer checks |
+| `npm run dev` | Start only the app server; DB must already be running |
+| `Ctrl+C` | Stop the app server; DB keeps running |
+| `npm run db:up` | Start only PostgreSQL |
+| `npm run db:stop` | Stop the DB container temporarily |
+| `npm run db:down` | Remove the container and close Docker; its data volume remains |
+| `npm run lint` | Developer code checks; not needed for normal use |
 
-### To bring the database back up on its own
+The project normally stays in editable development mode. Routine production builds are not part of the user’s workflow.
 
-```bash
-npm run db:up
-```
-Useful if you just want the database running without also starting the website (rare — most people just use `start:all`).
+## Pages and Login
 
----
+- Customer tracker: `http://localhost:3000/customer`
+- Kitchen login/register: `http://localhost:3000/restaurant/home`
+- Admin login: `http://localhost:3000/`
+- Admin console: `http://localhost:3000/admin/db`
 
-## 4. Command Reference
+Local-dev admin credentials:
 
-All of these can be run from either the `Restaurant` folder or the `app` folder.
-
-**`startup`** (`.\startup` on Windows, `./startup.sh` on Mac/Linux) — the recommended command, checks everything is actually working first
-  What it does: verifies Node/npm/Docker are installed and Docker is running, checks and repairs your `.env.local` and dependencies if anything's missing/broken, then does the same thing `start:all` does
-  When to use it: any time you're starting a work session, especially if it's been a while or something seems off
-
-**`export`** (`.\export` on Windows, `./export.sh` on Mac/Linux) — packages the whole app into a file for another computer
-  What it does: builds a portable version of the app + database that runs on any computer with Docker, no coding tools needed there — see Section 5 above
-  When to use it: sharing/deploying this app to a different computer
-
-**`unpack`** (`.\unpack` on Windows, `./unpack.sh` on Mac/Linux) — unpacks an export bundle on a machine that already has this repo
-  What it does: extracts `restaurant-app-export.zip`, loads both Docker images, generates a fresh `.env`; add `-Start` (Windows) / `--start` (Mac/Linux) to also launch it immediately
-  When to use it: testing an export locally, or if you're using this same repo's checkout as the machine you're deploying to
-
-**`npm run start:all`** — starts the database, then the website, no extra checks
-  What it does: starts the database, then starts the website
-
-**`npm run dev`**
-  What it does: starts *only* the website (assumes the database is already running)
-  When to use it: if the database is already up and you just restarted the website
-
-**`npm run db:up`**
-  What it does: starts the database container
-  When to use it: rarely needed directly — `start:all` already does this
-
-**`npm run db:down`**
-  What it does: stops **and removes** the database container (data is safe)
-  When to use it: end of a work session, want a clean slate
-
-**`npm run db:stop`**
-  What it does: pauses the database container without removing it
-  When to use it: end of a work session, want a quicker restart next time
-
-**`npm run build`**
-  What it does: compiles the app for production use (not needed for local testing)
-  When to use it: only relevant if actually deploying this somewhere
-
-**`npm run lint`**
-  What it does: checks the code for style/quality issues
-  When to use it: for developers making code changes, not needed for regular use
-
----
-
-## 5. Sharing the App With Another Computer
-
-There are two ways to get this app running on a different computer. Pick whichever fits the situation:
-
-- **Option A (zip handoff)** — best when the other person doesn't want to install any coding tools, or you're setting it up in person with a USB drive. Downside: it's a snapshot — if you change the code later, you have to re-export and re-send the file every time.
-- **Option B (GitHub clone)** — best when the other person is at all comfortable with a terminal, or when more than one person might want to set this up over time (a friend today, someone else next month). They pull the code themselves, so they always get whatever's currently on GitHub — no file to hand off, nothing to re-send after you push changes. This project's repo is already on GitHub, so this option requires no extra setup on your end beyond making sure your latest work is pushed there.
-
-### Option A (easiest for a one-off with no dev tools): the `export` command
-
-This packages the entire app — the website AND its database — into one file that runs on any computer with **just Docker Desktop installed**. The other computer does not need Node.js, does not need this project's source code, and does not even need an internet connection to run it (everything it needs is bundled inside the file).
-
-**On your computer** (the one with this project), from either the `Restaurant` folder or the `app` folder:
-
-**Windows:** `.\export`
-**Mac/Linux:** `./export.sh`
-
-This takes a few minutes (it has to build and package everything). When it's done, it prints exactly what to do next, and creates a file called `restaurant-app-export.zip` in the `Restaurant` folder. That file is fairly large (a few hundred MB) — expected, since it contains the whole app and database engine bundled together, that's what makes the other computer not need anything else installed. (On Mac/Linux, this needs the `zip` command installed — it usually already is; if not, the script tells you exactly how to install it for your system.)
-
-**On the other computer:**
-1. Copy `restaurant-app-export.zip` over however you'd normally move a file — USB drive, cloud storage upload, network share, email if it's small enough for your email provider.
-2. Unzip it anywhere (Desktop, Downloads, doesn't matter).
-3. Make sure Docker Desktop is installed and running on that computer.
-4. Double-click `run.cmd` (Windows) inside the unzipped folder, or open a terminal there and run `./run.sh` (Mac/Linux).
-5. Wait about 10–20 seconds, then open `http://localhost:3000` in a browser.
-
-That's it — no `npm install`, no `.env.local` file to set up, nothing else to configure. The one thing to know: this always starts the other computer with an **empty database** — none of your existing restaurants/orders come along. If you need to bring existing data along too, that's a different, more involved task — ask for help with that specifically if you need it.
-
-You can re-run `.\export` anytime (e.g. after making code changes) — it always rebuilds fresh and overwrites the old zip file.
-
-### Option B: clone the GitHub repo
-
-This gets them the actual editable source code (Option A only gives a running app, not the code behind it), and — unlike Option A — there's no file for you to export/hand off/re-send; they just pull whatever's currently pushed to GitHub. Use this if the other person needs to actually edit/develop the app, is comfortable with a terminal, or if you expect more than one person to set this up over time.
-
-**Prerequisite on your end**: make sure your latest work is actually pushed to GitHub (`git push`) before they clone — they'll get exactly what's there, nothing more. This repo is public, so anyone with the link can clone it without needing a GitHub account or you granting them access — if you ever make the repo private instead, they'd need to be added as a collaborator first.
-
-**On the other computer:**
-1. **Install Node.js** — go to [nodejs.org](https://nodejs.org), download the "LTS" version, install it like any normal program.
-2. **Install Docker Desktop** — go to [docker.com](https://www.docker.com/products/docker-desktop/), download, install, then **open it once** and leave it running.
-3. **Install Git** if they don't have it — go to [git-scm.com](https://git-scm.com), install like any normal program.
-4. **Open a terminal** (Windows: search for "PowerShell" in the Start menu; Mac: search for "Terminal").
-5. **Clone the repo** — navigate to wherever they want the project (e.g. their Desktop) and run:
-   ```bash
-   git clone https://github.com/talkwitharnav-web/Order-Tracker.git
-   cd Order-Tracker
-   ```
-6. **Run `startup`** — Windows: `.\startup` (or `.\startup.cmd` if that doesn't work); Mac/Linux: `./startup.sh`
-   This checks Node/npm/Docker are all working, creates the `.env.local` file automatically (with a freshly generated `SESSION_SECRET` — each computer should have its own, never share this file between machines), installs dependencies, and starts everything — database and website both.
-7. **Open a browser** and go to `http://localhost:3000`.
-
-That's the whole process — steps 1–3 are one-time software installs, step 5 takes a minute, step 6 takes a couple more the first time (installing dependencies) and is instant after that.
-
-**If they ever want to update to your latest changes later**, they just run `git pull` inside the `Order-Tracker` folder, then `startup` again (`.\startup` or `./startup.sh`) — no need to redo any of the install steps.
-
----
-
-## 6. Where to Find Things
-
-**Track an order as a customer**
-  `http://localhost:3000/customer`
-
-**Log in as a restaurant / kitchen**
-  `http://localhost:3000/restaurant/home` (choose Log In or Register from there)
-
-**Register a new restaurant account directly**
-  `http://localhost:3000/restaurant/signup`
-
-**Access the admin panel**
-  `http://localhost:3000/` (then log in, redirects to `/admin/db`)
-
-**Admin login** (hardcoded for local dev — not meant for real production use):
 - Username: `darkglory`
 - Password: `Re$t@ur@nt@dm!n`
 
----
+Kitchen Remember Me resumes directly into the dashboard while valid. Admin and kitchen logins can coexist in the same browser.
 
-## 6a. Accessibility & Display Options
+## Kitchen Workflow
 
-Every page has a small toolbar in the top-right corner with a few independent display controls. They're all optional and remembered per-browser (each one is a separate on/off switch, not a bundled "accessibility mode"):
+1. Choose a naming style: sequential, letter + number, customer name, table/pager, or freeform.
+2. Add an order.
+3. Move it through **Received → Preparing → Complete**.
+4. After a status tap, **Undo** is available for 8 seconds. It only reverses the latest step and cannot move a picked-up order backward.
+5. Kitchen delete hides an order but keeps it restorable by admin.
 
-- **S / M / B** — Small / Medium / Big. Scales the whole interface's text and buttons up or down. Useful on a shared kitchen tablet during a rush, or if the default text is too small/large for you.
-- **Accessibility icon (wheelchair symbol)** — opens a dropdown with:
-  - **High Contrast** — much stronger text/border contrast, for low vision.
-  - **Reduce Motion** — turns off animations and transitions.
-  - **Enhanced Focus Outline** — a bold, obvious ring around whatever's focused when navigating by keyboard.
-  - **Colorblind-Friendly Palette** — a picker (not a simple on/off) with options for Deuteranopia, Protanopia, and Tritanopia. Pick whichever matches your actual color vision; each swaps the app's status/brand colors for a palette specifically checked to stay distinguishable for that type. Order status is also always shown with an icon and text label, never color alone, so the app stays usable even without picking any of these.
-- **Sun/moon icon** — switches between light and dark theme.
+The dashboard shows order age, status counts, and oldest orders first in Received/Preparing. Important mobile controls are about 40px high; the mobile menu sits inside the settings pill.
 
-None of these require an account or affect other users — they're a personal preference stored in your browser.
+### Order labels
 
----
+Labels stay readable exactly as entered. Lookup/search ignore harmless case, spaces, punctuation, and a leading `#`: `Pager 14`, `pager-14`, and `#PAGER14` find the same order. Two active labels that resolve to the same value are not allowed.
 
-## 6b. Deleting Things: Kitchen Delete Is Recoverable, Admin Delete Is Permanent
+### Pickup timer
 
-**From the Kitchen Dashboard**, deleting an order doesn't actually erase it — it just hides it from normal view. The record is kept and can be brought back by an admin.
+Admin timing shows time spent in each stage. Received/Preparing have no cap. Complete stops when:
 
-**From Admin → Access DB**, deleting a restaurant or an order is immediate and permanent — it's really gone, same as Purge, just scoped to one row instead of everything.
+- the customer clicks **Order Picked Up**, or
+- the kitchen’s 1/6/12/24-hour fallback is reached.
 
-- **In Admin → Access DB**, click the **"Deleted"** button near the top to reveal a "Deleted Restaurants" section and see kitchen-deleted orders mixed into the main Orders table (shown greyed-out with a "Deleted" tag). Each has a restore (circular arrow) button — this only ever shows things a kitchen deleted, never something an admin deleted, since those are already gone for good.
-- **Restoring a restaurant** (only ever a kitchen-side soft-delete from before this behavior existed) brings its orders back too. If its original name has since been taken by someone else, it comes back as `OriginalName-restored` (or `-restored2`, etc. if that's also taken).
-- **"Purge Database"** in Admin → Access DB still wipes everything at once, irreversibly, same as before.
-- **"Seed Database"** is also destructive, not additive — it clears existing data first, then loads sample data. It's not a safe way to "add some test data alongside what's already there."
-- Renaming a kitchen (pencil-icon button next to Reset Password in Access DB) also updates all of that kitchen's existing orders to match. If that kitchen was logged in somewhere at the time, that device will need to log back in with the new name — the old login session won't carry over automatically.
+Changing this setting does not remove orders; it controls the Complete-duration fallback.
 
-**Automatic backups**: since Seed/Purge are both instant and irreversible, the dev server now takes a full database snapshot every 3 hours in the background and keeps the 3 most recent (so up to ~9 hours of history at a time) in a `backups/` folder at the repo root, as plain `.sql` files. This is a small safety net for exactly the "oops, wrong button" scenario above, not a substitute for a real backup strategy — if you ever need to restore one, ask whoever's helping you code (or run `docker exec restaurant-postgres-1 psql -U restaurant -d restaurant < backups/<filename>.sql` after stopping the app, if you're comfortable with the terminal).
+## Customer Tracker Sign
 
-## 6c. Order Timing & Pickup Window
+The kitchen Home tab has a reusable **Customer Tracker** card:
 
-Admin → Access DB's Orders table now shows how long each order spent in Received, Preparing, and Complete. Received/Preparing count up with no limit. Complete counts up until either:
-- The customer clicks **"Order Picked Up"** on their tracking page, or
-- A configurable time limit passes (see below) — whichever happens first.
+- offline QR code
+- copyable link
+- Open tracker
+- Print sign
 
-Each kitchen can set its own pickup-window limit from its own Dashboard's Home tab ("Order Pickup Window" card — 1/6/12/24 hour presets). Defaults to 12 hours if never changed.
+Print it once and leave it at the counter. Customers scan the same restaurant QR, then enter their own order label. The QR never contains a specific order.
 
----
+When the dashboard is opened through localhost, the printed link automatically uses the computer’s reachable LAN address (for example `.141`) instead of unusable customer-side localhost. Phone and server must be on the same Wi-Fi until public hosting exists.
 
-## 7. Common Problems
+Customer tracking survives refresh, tab suspension, reconnects, and temporary connection failures. It clears after pickup or when the order truly no longer exists.
 
-**"Docker Desktop is manually paused" or the database won't start**
-Open the Docker Desktop app on your computer and make sure it's running (not paused, not closed). Then try `npm run start:all` again (or `startup`, which will tell you clearly if Docker isn't running instead of just failing).
+## Accessibility and Display
 
-**"Port 3000 already in use" or "Port 5432 already in use"**
-Something else on your computer is already using that port. Usually this means the app or database is already running from a previous session — check if you have another terminal window open with it running.
+The top-right settings pill stores preferences in that browser:
 
-**The app starts but the customer/kitchen pages show no data**
-The database might be empty. Go to the Admin Panel (see Section 6) and use the "Seed Database" button to load some sample test data.
+- **S / M / B** interface size (hidden from the narrow toolbar where space is limited)
+- High Contrast
+- Reduce Motion
+- Enhanced Focus Outline
+- Deuteranopia, Protanopia, and Tritanopia palettes
+- Light/dark theme
+- 2D/3D chef toggle only where a mascot is present
+- Fullscreen on supported mobile browsers
 
-**`.\startup` or `.\export` won't run on Windows / says something about execution policies**
-Use the `.cmd` version instead — `.\startup.cmd` or `.\export.cmd` — which works even if Windows is blocking `.ps1` scripts from running. Both do exactly the same thing.
+Status always includes text/icon meaning, not color alone.
 
-**`./startup.sh` or `./export.sh` won't run on Mac/Linux / says "permission denied"**
-Run `chmod +x startup.sh export.sh unpack.sh` once in that folder to mark them as runnable, then try again. This can happen if the files lost their "executable" flag when copied/downloaded some other way than `git clone`.
+## Delete, Restore, Seed, and Purge
 
-**After running `.\export` on the OTHER computer, `run.cmd`/`run.sh` fails to generate a secret**
-This would mean that computer doesn't have a working way to generate random values (very rare — every supported Windows/Mac/Linux system has one). The script is designed to stop and tell you clearly rather than silently create a weak/predictable secret, so if you see this, something unusual is going on with that computer's setup — it's not something to just retry past.
+- Kitchen order delete: **recoverable** soft delete.
+- Admin order delete: permanent.
+- Admin restaurant delete: permanent and also deletes that kitchen’s orders.
+- Admin Deleted view: shows kitchen-deleted orders and lets admin restore them. Restore returns 409 if a live order now uses the same canonical label.
+- Kitchen rename updates its orders; currently logged-in kitchen devices must log in again with the new name.
 
-**I changed a `.env.local` value and nothing happened**
-Restart the app (Ctrl+C, then `npm run start:all` again) — environment variable files are only read when the app starts up.
+### Destructive actions
 
----
+- **Seed Database** erases everything, then creates samples. Type `SEED DATABASE` to enable Confirm.
+- **Purge Database** erases everything and leaves the DB empty. Type `PURGE DATABASE` to enable Confirm.
 
-## 8. A Note on This Being a Local Dev Setup
+Never use Seed to “add” sample data. The API also rejects missing/wrong phrases.
 
-Everything above is for running this project **on your own computer (or home network) for testing/development**. It has real security protections in place (rate limiting, input validation, standard security headers, etc. — see `SECURITY_ATTACK_LOG.md` for the full list of what's been tested), but it is still not ready for real customers to use over the open internet: the admin password is hardcoded in the code (fine on a private network only you can reach, not fine once anyone on the internet could try it), and the database only exists on your machine with no offsite backup. If you ever want to make this a real, live product other people can use, that's a separate (and much bigger) conversation about hosting, a real admin password, and backup strategy.
+The server takes a full SQL snapshot every 3 hours and keeps the latest three in `backups/`. These are local emergency snapshots, not offsite backup. Ask for help before restoring; safe restoration validates a dump in a temporary DB before swapping it live.
+
+At the current update, the live DB is intentionally empty because the user chose to purge it.
+
+## Sharing With Another Computer
+
+### Offline Docker bundle
+
+Run `export`/`export.sh`. It creates `restaurant-app-export.zip` containing the app image, PostgreSQL image, compose file, and launchers. The destination needs Docker Desktop but not Node, source code, a registry account, or internet access.
+
+On the destination, unzip and run `run.cmd` or `./run.sh`. The bundle starts with an empty DB. Use `unpack`/`unpack.sh` in this repo to test a bundle locally; add `-Start`/`--start` to launch it.
+
+### Editable source copy
+
+Clone/copy the repo, install Node + Docker (+ Git when cloning), then run `startup`. A clone receives only what was actually pushed; uncommitted files on another machine are not included.
+
+## Common Problems
+
+**Docker is paused/not running**  
+Open Docker Desktop, wait until ready, then run `startup` again.
+
+**Port 3000 or 5432 is in use**  
+The app/database is probably already running in another terminal/container. Check before stopping anything.
+
+**App starts but shows no data**  
+The DB may simply be empty. That is currently intentional. Only Seed if you truly want to erase anything present and replace it with samples.
+
+**LAN page stays on Loading or shows stale routes/styles**  
+Confirm the current LAN IP is listed in `app/next.config.ts`. If source is correct but dev behavior is stale, stop the exact app server, delete only `app/.next`, and restart with `startup`.
+
+**Environment change did nothing**  
+Restart the app; `.env.local` is read at startup.
+
+**QR does not open on a phone**  
+Confirm app server is running, phone is on the same Wi-Fi, and Windows Firewall allows private-network port 3000. Physical-phone scanning still needs real-device verification.
+
+**Health says unavailable**  
+Health requires a valid admin or kitchen session. Reload/login first; then check server and DB if it persists.
+
+## Public Deployment Status
+
+The app has meaningful validation, rate limiting, scoped WebSockets, and security headers, but it is still a LAN/dev setup. Before open-internet use:
+
+- move hardcoded admin credentials into environment secrets
+- add real HTTPS and enable Secure cookies
+- add offsite backups
+- review proxy/IP behavior for rate limits and WebSockets
+- physically test common phone browsers
+
+Cloudflare Tunnel + Caddy is the planned direction; no public infrastructure is active yet.

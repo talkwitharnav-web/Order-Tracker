@@ -262,10 +262,34 @@ if (-not (Test-Path $composeFile)) {
     Write-Err "docker-compose.yml not found at $composeFile"
     exit 1
 }
-docker compose -f $composeFile up -d
-if ($LASTEXITCODE -ne 0) {
-    Write-Err "docker compose up failed. See output above."
-    exit 1
+$postgresContainerName = "restaurant-postgres-1"
+$existingContainer = (docker ps -a --filter "name=^/$postgresContainerName$" --format "{{.Names}}" 2>$null).Trim()
+
+if ($existingContainer -eq $postgresContainerName) {
+    $existingImage = (docker inspect $postgresContainerName --format "{{.Config.Image}}" 2>$null).Trim()
+    if ($existingImage -ne "postgres:16") {
+        Write-Err "A container named $postgresContainerName already exists but uses image '$existingImage', not postgres:16."
+        Write-Info "Rename or remove that unrelated container, then run startup again."
+        exit 1
+    }
+
+    $containerRunning = (docker inspect $postgresContainerName --format "{{.State.Running}}" 2>$null).Trim()
+    if ($containerRunning -ne "true") {
+        Write-Info "Found the existing Postgres container from another checkout; starting it now..."
+        docker start $postgresContainerName | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Could not start the existing $postgresContainerName container."
+            exit 1
+        }
+    } else {
+        Write-Info "Found the existing Postgres container from another checkout; reusing it."
+    }
+} else {
+    docker compose -f $composeFile up -d
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "docker compose up failed. See output above."
+        exit 1
+    }
 }
 Write-Ok "Postgres container is up (or was already running)."
 
@@ -274,8 +298,8 @@ $maxWaitSeconds = 30
 $waited = 0
 $healthy = $false
 while ($waited -lt $maxWaitSeconds) {
-    $status = docker compose -f $composeFile ps --format json 2>$null
-    if ($status -match '"Health":"healthy"') {
+    $status = (docker inspect $postgresContainerName --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" 2>$null).Trim()
+    if ($status -eq "healthy" -or $status -eq "running") {
         $healthy = $true
         break
     }

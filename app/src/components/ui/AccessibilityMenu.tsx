@@ -82,7 +82,7 @@ export const AccessibilityMenu: FC = () => {
 
   return (
     <div ref={containerRef} className="relative">
-      <ThemedTooltip label="Accessibility">
+      <ThemedTooltip label="Accessibility" disabled={open}>
         <button
           onClick={() => setOpen((o) => !o)}
           aria-label="Accessibility options"
@@ -90,7 +90,7 @@ export const AccessibilityMenu: FC = () => {
           aria-haspopup="true"
           className={`w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${
             open
-              ? "bg-[var(--color-brand)] text-white"
+              ? "bg-[var(--color-brand)] text-[var(--color-on-brand)]"
               : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
           }`}
         >
@@ -102,7 +102,7 @@ export const AccessibilityMenu: FC = () => {
         <div
           role="menu"
           aria-label="Accessibility options"
-          className={`${menuAnimationClass} absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg overflow-hidden z-40`}
+          className={`${menuAnimationClass} fixed left-2 right-2 top-[calc(1rem+var(--reserved-top-right-h)+0.5rem)] max-h-[calc(100dvh-var(--reserved-top-right-h)-2rem)] overflow-x-hidden overflow-y-auto sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72 sm:max-w-[calc(100vw-2rem)] sm:max-h-[calc(100dvh-5rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg z-40`}
         >
           <div className="px-4 py-3 border-b border-[var(--color-border)]">
             <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Accessibility</h3>
@@ -126,8 +126,10 @@ export const AccessibilityMenu: FC = () => {
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 w-4 h-4 rounded-[var(--radius-full)] bg-white shadow transition-transform ${
-                        prefs[key] ? "translate-x-[18px]" : "translate-x-0.5"
+                      className={`absolute top-0.5 w-4 h-4 rounded-[var(--radius-full)] shadow transition-transform ${
+                        prefs[key]
+                          ? "translate-x-[18px] bg-[var(--color-on-brand)]"
+                          : "translate-x-0.5 bg-white"
                       }`}
                     />
                   </span>
@@ -151,16 +153,16 @@ export const AccessibilityMenu: FC = () => {
                   onClick={() => chooseCvdMode(key)}
                   className={`w-full text-left px-2.5 py-2 rounded-[var(--radius-sm)] text-sm flex items-center gap-2 transition-colors ${
                     cvdMode === key
-                      ? "bg-[var(--color-brand)] text-white"
+                      ? "bg-[var(--color-brand)] text-[var(--color-on-brand)]"
                       : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
                   }`}
                 >
                   <span
                     className={`shrink-0 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${
-                      cvdMode === key ? "border-white" : "border-[var(--color-border-strong)]"
+                      cvdMode === key ? "border-[var(--color-on-brand)]" : "border-[var(--color-border-strong)]"
                     }`}
                   >
-                    {cvdMode === key && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    {cvdMode === key && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-on-brand)]" />}
                   </span>
                   {label}
                 </button>

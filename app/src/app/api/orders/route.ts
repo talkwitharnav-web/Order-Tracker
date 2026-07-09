@@ -5,6 +5,7 @@ import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { normalizeOrderLookupKey } from "@/lib/order-naming";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
@@ -26,8 +27,9 @@ export async function POST(request: Request) {
     // would still execute in any non-React consumer of this data).
     const restaurant_name = requireSafeName(rawRestaurantName);
     const order_number = requireSafeName(rawOrderNumber);
+    const order_lookup_key = order_number ? normalizeOrderLookupKey(order_number) : "";
 
-    if (!restaurant_name || !order_number) {
+    if (!restaurant_name || !order_number || !order_lookup_key) {
       logger.warn("POST /api/orders - validation error", {
         restaurant_name: rawRestaurantName,
         order_number: rawOrderNumber,
@@ -54,13 +56,24 @@ export async function POST(request: Request) {
       );
     }
 
-    let id: number;
+    let order: {
+      id: number;
+      restaurant_name: string;
+      order_number: string;
+      status: "Received";
+      received_at: string;
+      preparing_at: string | null;
+      complete_at: string | null;
+      acknowledged_at: string | null;
+    };
     try {
       const result = await query(
-        "INSERT INTO orders (restaurant_name, order_number) VALUES ($1, $2) RETURNING id",
+        `INSERT INTO orders (restaurant_name, order_number)
+         VALUES ($1, $2)
+         RETURNING id, restaurant_name, order_number, status, received_at, preparing_at, complete_at, acknowledged_at`,
         [restaurant_name, order_number],
       );
-      id = result.rows[0].id;
+      order = result.rows[0] as typeof order;
     } catch (insertErr) {
       if (
         insertErr instanceof Error &&
@@ -80,15 +93,8 @@ export async function POST(request: Request) {
     }
 
     logger.info("POST /api/orders - order created successfully", {
-      orderId: id,
+      orderId: order.id,
     });
-
-    const order = {
-      id,
-      restaurant_name,
-      order_number,
-      status: "Received",
-    };
 
     broadcast({ type: "order_updated", payload: order });
 
@@ -117,13 +123,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const restaurant_name = requireString(searchParams.get("restaurant_name"));
     const order_number = requireString(searchParams.get("order_number"));
+    const order_lookup_key = order_number ? normalizeOrderLookupKey(order_number) : "";
 
     logger.info("GET /api/orders - tracking order", {
       restaurant_name,
       order_number,
     });
 
-    if (!restaurant_name || !order_number) {
+    if (!restaurant_name || !order_number || !order_lookup_key) {
       logger.warn("GET /api/orders - validation error", {
         restaurant_name,
         order_number,
@@ -141,8 +148,8 @@ export async function GET(request: Request) {
     // later (e.g. internal timing columns have no reason to reach an
     // anonymous caller).
     const result = await query(
-      "SELECT id, order_number, restaurant_name, status, updated_at, acknowledged_at FROM orders WHERE restaurant_name ILIKE $1 AND order_number ILIKE $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
-      [escapeLikePattern(restaurant_name), escapeLikePattern(order_number)],
+      "SELECT id, order_number, restaurant_name, status, updated_at, acknowledged_at FROM orders WHERE restaurant_name ILIKE $1 AND order_lookup_key = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+      [escapeLikePattern(restaurant_name), order_lookup_key],
     );
     const order = result.rows[0];
 

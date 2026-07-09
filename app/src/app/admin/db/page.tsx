@@ -84,6 +84,7 @@ interface ConfirmState {
   message: string;
   danger: boolean;
   onConfirm: () => void;
+  confirmationPhrase?: string;
 }
 
 const EMPTY_CONFIRM: ConfirmState = {
@@ -108,6 +109,7 @@ function AdminDbContent() {
   const [orderSort, setOrderSort] = useState<{ key: OrderSortKey; direction: SortDirection } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmState, setConfirmState] = useState<ConfirmState>(EMPTY_CONFIRM);
+  const [confirmationInput, setConfirmationInput] = useState("");
   // Order rows mid-slide-out-to-delete -- see deleteNow below. Restaurants
   // aren't included here: this table's rows aren't individually
   // slide-animated today and the request was specifically about orders.
@@ -162,7 +164,10 @@ function AdminDbContent() {
     router.push("/");
   };
 
-  const closeConfirm = () => setConfirmState(EMPTY_CONFIRM);
+  const closeConfirm = () => {
+    setConfirmState(EMPTY_CONFIRM);
+    setConfirmationInput("");
+  };
 
   const performAction = async (action: () => ReturnType<typeof fetchWithRetry>, successMessage: string) => {
     closeConfirm();
@@ -185,8 +190,16 @@ function AdminDbContent() {
       title: "Seed Database",
       message: "Are you sure you want to seed the database? This will clear existing data.",
       danger: false,
+      confirmationPhrase: "SEED DATABASE",
       onConfirm: () =>
-        performAction(() => fetchWithRetry("/api/dev/seed", { method: "POST" }), "Database seeded successfully!"),
+        performAction(
+          () => fetchWithRetry("/api/dev/seed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirmation: "SEED DATABASE" }),
+          }),
+          "Database seeded successfully!",
+        ),
     });
   };
 
@@ -196,8 +209,16 @@ function AdminDbContent() {
       title: "Purge Database",
       message: "Are you sure you want to purge the database? THIS ACTION IS IRREVERSIBLE.",
       danger: true,
+      confirmationPhrase: "PURGE DATABASE",
       onConfirm: () =>
-        performAction(() => fetchWithRetry("/api/dev/db", { method: "DELETE" }), "Database purged successfully!"),
+        performAction(
+          () => fetchWithRetry("/api/dev/db", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirmation: "PURGE DATABASE" }),
+          }),
+          "Database purged successfully!",
+        ),
     });
   };
 
@@ -370,11 +391,28 @@ function AdminDbContent() {
       <BackgroundArt />
       <Modal isOpen={confirmState.isOpen} title={confirmState.title} onClose={closeConfirm} danger={confirmState.danger}>
         <p className="text-[var(--color-text-secondary)] mb-6">{confirmState.message}</p>
+        {confirmState.confirmationPhrase && (
+          <div className="mb-2">
+            <label htmlFor="destructive-confirmation" className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+              Type <strong>{confirmState.confirmationPhrase}</strong> to continue
+            </label>
+            <Input
+              id="destructive-confirmation"
+              type="text"
+              value={confirmationInput}
+              onChange={(event) => setConfirmationInput(event.target.value)}
+              autoComplete="off"
+            />
+          </div>
+        )}
         <ModalActions
           onCancel={closeConfirm}
           onConfirm={confirmState.onConfirm}
           danger={confirmState.danger}
           confirmLabel="Confirm"
+          confirmDisabled={
+            !!confirmState.confirmationPhrase && confirmationInput !== confirmState.confirmationPhrase
+          }
         />
       </Modal>
 
@@ -533,7 +571,7 @@ function AdminDbContent() {
                         <button
                           onClick={() => setPasswordResetTarget(r.id)}
                           aria-label={`Reset password for ${r.name}`}
-                          className="p-2 bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white rounded-[var(--radius-sm)] transition-colors"
+                          className="p-2 bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-[var(--color-on-brand)] rounded-[var(--radius-sm)] transition-colors"
                         >
                           <Key size={16} />
                         </button>

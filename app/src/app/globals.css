@@ -24,9 +24,10 @@
   --color-text-muted: #94826d; /* lighter warm taupe */
 
   /* Brand (terracotta accent) */
-  --color-brand: #c1602f;
+  --color-brand: #ba592c;
   --color-brand-hover: #a34e23;
   --color-brand-text: #a34e23; /* text-on-light use */
+  --color-on-brand: #ffffff;
 
   /* Secondary accent (olive) — used sparingly for variety/whimsy touches */
   --color-accent-olive: #6b7a4f;
@@ -76,6 +77,7 @@
   --color-brand: #e07a45;
   --color-brand-hover: #ec9463;
   --color-brand-text: #f0a276;
+  --color-on-brand: #1a1512;
 
   --color-accent-olive: #9caf7a;
   --color-accent-olive-text: #b3c493;
@@ -141,6 +143,7 @@
   --color-brand: #6b3410;
   --color-brand-hover: #4f2508;
   --color-brand-text: #6b3410;
+  --color-on-brand: #ffffff;
 
   --color-accent-olive: #2f3a1f;
   --color-accent-olive-text: #2f3a1f;
@@ -179,6 +182,7 @@
   --color-brand: #ffb27a;
   --color-brand-hover: #ffc79a;
   --color-brand-text: #ffb27a;
+  --color-on-brand: #1a1512;
 
   --color-accent-olive: #cfe0ad;
   --color-accent-olive-text: #cfe0ad;
@@ -461,6 +465,7 @@
   --color-brand: #0072B2;
   --color-brand-hover: #005a8c;
   --color-brand-text: #005a8c;
+  --color-on-brand: #ffffff;
   --color-accent-olive: #CC79A7;
   --color-accent-olive-text: #a85a85;
   --color-status-received-bg: rgba(0, 114, 178, 0.1);
@@ -483,6 +488,7 @@
   --color-brand: #56B4E9;
   --color-brand-hover: #7cc4ee;
   --color-brand-text: #56B4E9;
+  --color-on-brand: #1a1512;
   --color-accent-olive: #e0a8c8;
   --color-accent-olive-text: #e0a8c8;
   --color-status-received-bg: rgba(86, 180, 233, 0.14);
@@ -506,6 +512,7 @@
   --color-brand: #0072B2;
   --color-brand-hover: #005a8c;
   --color-brand-text: #005a8c;
+  --color-on-brand: #ffffff;
   --color-accent-olive: #56B4E9;
   --color-accent-olive-text: #005a8c;
   --color-status-received-bg: rgba(0, 114, 178, 0.1);
@@ -528,6 +535,7 @@
   --color-brand: #56B4E9;
   --color-brand-hover: #7cc4ee;
   --color-brand-text: #56B4E9;
+  --color-on-brand: #1a1512;
   --color-accent-olive: #9fd6f5;
   --color-accent-olive-text: #9fd6f5;
   --color-status-received-bg: rgba(86, 180, 233, 0.14);
@@ -549,8 +557,9 @@
 
 [data-cvd="tritanopia"] {
   --color-brand: #CC79A7;
-  --color-brand-hover: #a85a85;
+  --color-brand-hover: #d58bb4;
   --color-brand-text: #a85a85;
+  --color-on-brand: #1a1512;
   --color-accent-olive: #5A9E3A;
   --color-accent-olive-text: #3f7027;
   --color-status-received-bg: rgba(204, 121, 167, 0.1);
@@ -573,6 +582,7 @@
   --color-brand: #e0a8c8;
   --color-brand-hover: #eac0d8;
   --color-brand-text: #e0a8c8;
+  --color-on-brand: #1a1512;
   --color-accent-olive: #8fcf6e;
   --color-accent-olive-text: #8fcf6e;
   --color-status-received-bg: rgba(224, 168, 200, 0.14);
@@ -652,6 +662,7 @@
   --color-brand: var(--color-brand);
   --color-brand-hover: var(--color-brand-hover);
   --color-brand-text: var(--color-brand-text);
+  --color-on-brand: var(--color-on-brand);
 
   --color-accent-olive: var(--color-accent-olive);
   --color-accent-olive-text: var(--color-accent-olive-text);
@@ -667,6 +678,93 @@
   --font-sans: var(--font-nunito-sans);
   --font-display: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
+}
+
+.customer-handoff-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9rem;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.customer-handoff-qr {
+  width: 9rem;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+}
+
+.customer-handoff-print-url {
+  display: none;
+}
+
+@media (max-width: 420px) {
+  .customer-handoff-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-handoff-qr {
+    width: min(11rem, 100%);
+    justify-self: center;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0.5in;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  [data-print-customer-sign],
+  [data-print-customer-sign] * {
+    visibility: visible !important;
+  }
+
+  [data-print-customer-sign] {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    min-height: 100% !important;
+    padding: 0.4in !important;
+    border: 2px solid #1a1512 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #1a1512 !important;
+    print-color-adjust: exact;
+  }
+
+  [data-print-customer-sign] [data-no-print] {
+    display: none !important;
+  }
+
+  [data-print-customer-sign] .customer-handoff-layout {
+    grid-template-columns: minmax(0, 1fr) 2.8in !important;
+    gap: 0.35in !important;
+  }
+
+  [data-print-customer-sign] .customer-handoff-qr {
+    width: 2.8in !important;
+    border-color: #1a1512 !important;
+  }
+
+  [data-print-customer-sign] .customer-handoff-print-url {
+    display: block !important;
+    color: #1a1512 !important;
+    font-size: 10pt !important;
+  }
 }
 
 /*

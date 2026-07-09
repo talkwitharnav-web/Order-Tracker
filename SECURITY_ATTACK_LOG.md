@@ -1,48 +1,111 @@
 # Security Attack Log
 
-Running record of adversarial security testing against this app and the fixes applied in response. Two earlier rounds of this (commits `a0f46d6`, `6a19643`) predate this file's current version — see `git log --all -- SECURITY_ATTACK_LOG.md` for that history if needed; this file was regenerated fresh starting with the entry below rather than reconstructed, since the prior content wasn't preserved in the working tree.
+Condensed record of adversarial testing, decisions, and verification. Current architecture is in `SYSTEM_MEMORY.md`. Earlier rounds predate this regenerated log; commits `a0f46d6` and `6a19643` contain their historical changes if history is available.
 
----
+## Security Posture Summary
 
-## Round 3 — External audit via a separate Claude (Opus) instance attacking over LAN (2026-07-08)
+Three audit rounds were completed and verified:
 
-**Context**: the user pointed a second, independent Claude instance (Opus, max reasoning) at the running app (`http://192.168.12.140:3000`) to do black-box adversarial testing from a different machine on the same LAN. It found 16 issues via curl/Python/headless-Chrome black-box testing and produced a full report (reproduced in the conversation this fix pass responds to). All 16 were triaged and acted on same-day.
+- Round 1: 11 auth/input/WebSocket findings
+- Round 2: 6 broad route/operational findings
+- Round 3: 16 external black-box findings over LAN
 
-### Fixed
+Current protections include server-side authorization, restaurant-scoped WebSockets, signed split-role cookies, strict input validation, SQL parameters, rate limits, body/depth limits, security headers, exact destructive-action phrases, canonical order identity, and server-authorized status Undo.
 
-**1. CRITICAL — Unauthenticated restaurant-name enumeration via `/api/restaurants/suggest`.** A single-character query (`?q=a`) returned every restaurant name containing that letter — sweeping a-z/0-9 enumerated the entire table in ~36 requests, no auth required. Fixed three ways, not one: (a) added `MIN_QUERY_LENGTH = 3` — a 1-2 character query now returns `{ suggestions: [] }` without ever touching the DB, which doesn't break the real autocomplete feature (nobody meaningfully searches by one letter) but makes a sweep combinatorially far more expensive; (b) tightened the rate limit from 120/min to 30/min per IP; (c) added `isSafeName()` filtering on the response itself, so any row that predates the new registration validation (see #3 below) — including every garbage/injection-payload name this exact audit created — can never be suggested/leaked again, regardless of query length or rate limit. Full removal of the endpoint was considered and rejected: the customer tracker's whole "find your restaurant" flow depends on it being public and unauthenticated by design.
+## Round 3 — External LAN Audit (2026-07-08)
 
-**2. CRITICAL — Unauthenticated order IDOR (`GET /api/orders`) leaking internal DB `id`.** Assessed and deliberately NOT changed: the customer tracker's real "Order Picked Up" feature (`POST /api/orders/[id]/acknowledge`) requires the client to already have `id` from a prior lookup — removing it from the response would break that feature outright, not just reduce information disclosure. The report's actual underlying risk (any anonymous caller can look up `restaurant_name` + `order_number` with no auth) is by design — this is the customer order tracker, which explicitly has no login (see `SYSTEM_MEMORY.md`/`CLAUDE.md` history, repeated user intent). The mitigations that *were* already in place and remain load-bearing: both this lookup and `/api/orders/search` are rate-limited (120/min/IP), and neither can be used to modify anything — only to view a status string and, via acknowledge, silence one countdown early.
+A separate Claude Opus instance attacked `http://192.168.12.140:3000` with curl, Python, and a real browser. All findings were assessed rather than blindly accepted.
 
-**3. HIGH — Stored XSS: server accepted raw HTML/script payloads the client-side UI merely stripped, not rejected.** Real gap — client-side sanitization is not a security boundary, and any non-React consumer (a future admin export, email/receipt template, log viewer) would have executed a stored `<img onerror=...>`/`<svg onload=...>` payload verbatim. Added `requireSafeName()` (`src/lib/validate.ts`) — a whitelist (`^[A-Za-z0-9 '.,#_-]+$`) applied at every point a restaurant name or order number gets **stored**: `POST /api/restaurants/register`, `POST /api/orders`, `PUT /api/restaurants/[id]/rename`. Deliberately NOT applied to passwords or search-query parameters, which have no rendering risk and legitimately need a wider character set.
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | Public restaurant autocomplete could enumerate names with 1-character sweeps | Fixed: minimum 3 characters, 30/min/IP, response filtered through `isSafeName()`. Endpoint remains public because customer autocomplete needs it. |
+| 2 | Public order lookup exposes DB `id` | Deliberately retained: pickup acknowledgement requires the ID after a valid restaurant/order lookup. Search is rate-limited and exposes only narrow status data. |
+| 3 | Stored HTML/script payloads accepted by server | Fixed: `requireSafeName()` whitelist applied to stored restaurant/order labels and rename. Client formatting remains UX only. |
+| 4 | One-character kitchen passwords accepted | Fixed: 8–200 characters server-side and mirrored in signup UI. |
+| 5 | Null bytes caused Postgres 500s | Fixed: controls/null stripped or rejected before DB use, including password/reset paths. |
+| 6 | Registration throttling too loose for a write that creates permanent rows | Fixed: dedicated 5/min/IP registration limit. |
+| 7 | Missing browser security headers | Fixed: CSP, frame denial, nosniff, referrer policy, permissions policy. Dev CSP alone permits `unsafe-eval`; no HSTS until real HTTPS. |
+| 8 | Cookie Secure behavior tied to `NODE_ENV` rather than transport | Fixed: explicit `FORCE_SECURE_COOKIES`; default false for plain-HTTP LAN, enable only behind HTTPS. |
+| 9 | Health endpoint exposed DB size/pool/WS counts to any kitchen | Fixed: kitchens receive usability status/latency; infrastructure detail is admin-only. |
+| 10 | No request byte/depth limit | Fixed: custom server caps API bodies at 16KB, including chunked requests; `parseJsonBody()` rejects malformed or >5-level JSON. |
+| 11 | Tabs/CRLF/control characters accepted in names | Fixed by shared control-character handling and safe-name validation. |
+| 12 | Client/server validation mismatch | Fixed: server validators are authoritative; client formatting only improves entry UX. |
+| 13 | Registration 201 vs 409 reveals whether a name exists | Accepted: inherent to unique registration. The practical bulk-enumeration vector was finding #1. |
+| 14 | `X-Powered-By` fingerprinting | Fixed with `poweredByHeader: false`. |
+| 15 | Dev source maps visible | No production server existed; `productionBrowserSourceMaps: false` explicitly prevents future production exposure. |
+| 16 | No CSRF token | Accepted with current JSON APIs and `SameSite=Lax` cookies; reassess for a materially different public architecture. |
 
-**4. HIGH — No password policy (1-character passwords accepted).** Added an 8-character minimum in `POST /api/restaurants/register` (`MIN_PASSWORD_LENGTH`).
+## Earlier Audit Summary
 
-**5. HIGH — Null byte injection causing unhandled 500s.** Root cause: a null byte (`\x00`) reaching a Postgres `TEXT` column INSERT throws at the driver level (Postgres text columns cannot store `\0` at all), and this reached the DB unfiltered via the `raw_password`/name columns. Fixed at two layers: (a) `requireString`/`requireSafeName` (`validate.ts`) now strip all ASCII control characters (0x00-0x1F, 0x7F) including null bytes, tabs, and CRLF, before any value is used; (b) password fields (which intentionally bypass those whitelist validators, since passwords need a wide character set) get an explicit `!value.includes("\0")` check instead, in both `restaurants/register/route.ts` and `restaurants/[id]/password/route.ts` (the admin password-reset route had the identical unguarded `raw_password` insert).
+### Round 1 (11 findings)
 
-**6. MEDIUM — Registration rate-limiting "inconsistency."** Actually just the shared 10/min-per-IP default doing what it's supposed to (some of 15 rapid requests succeeded before the 11th hit 429 — expected, not a bug). Tightened anyway to a dedicated 5/min limit specific to registration, since each successful registration permanently creates a row (unlike a failed login, which costs nothing to retry) — see the comment in `restaurants/register/route.ts`.
+- Replaced forgeable/default session secret with a real generated `SESSION_SECRET`.
+- Added complete server auth guards and timing-safe login behavior.
+- Split admin/kitchen cookies and fixed dual-role session reporting.
+- Scoped WebSocket clients/broadcasts by restaurant; events without restaurant identity fail closed.
+- Overwrote spoofable forwarding headers at the custom server.
+- Standardized type/length validation, clean malformed JSON/ID responses, and duplicate 409s.
+- Enforced kitchen forward-only status transitions; admin retains override ability.
+- Escaped all user-controlled `ILIKE` patterns.
 
-**7. MEDIUM — Missing security headers.** Added via `next.config.ts`'s `headers()`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/mic/geolocation all denied), and a `Content-Security-Policy` (`default-src 'self'`, same-origin script/style with `'unsafe-inline'` since there's no per-request nonce infrastructure in this app, `connect-src` allowing `ws:`/`wss:` for the app's own WebSocket, `frame-ancestors 'none'`). `Strict-Transport-Security` deliberately NOT added — see the router/public-exposure comment in the same file for why (would be actively harmful on today's plain-HTTP LAN deployment). One real bug caught during verification: the initial CSP broke Next.js dev-mode's `eval()`-based debugging (confirmed via a real console error) — fixed by conditionally adding `'unsafe-eval'` to `script-src` only when `NODE_ENV !== "production"`; React itself never uses `eval()` in a production build, so this doesn't weaken anything that will actually ship.
+### Round 2 (6 findings)
 
-**8. MEDIUM — Session cookie missing `Secure` flag.** Root cause: all three cookie-setting routes used `secure: process.env.NODE_ENV === "production"` — the wrong signal, since `NODE_ENV` reflects build mode, not actual transport, and this app can run "production" while still being plain HTTP on a LAN (which is exactly how it runs today). Replaced with an explicit `SESSION_COOKIE_SECURE` export (`src/lib/session.ts`) gated on a new `FORCE_SECURE_COOKIES=true` env var — defaults to `false` so nothing breaks today, meant to be flipped on only once this app is genuinely served over HTTPS (e.g. behind the Cloudflare Tunnel + Caddy setup discussed for eventual public exposure). Flipping it on prematurely over plain HTTP would make the browser silently refuse to ever send the cookie back, breaking every login — this is why it's an explicit opt-in, not a blind `true`.
+- Fixed a status filter using the wrong vocabulary.
+- Added rate limiting to anonymous lookup routes.
+- Prevented one malformed legacy row from failing an entire admin response (later-obsolete encryption path was removed).
+- Added stale-entry sweeping to the in-memory rate limiter.
+- Stopped exposing raw DB errors to non-admin health callers.
+- Reverified authorization and response narrowing across the API surface.
 
-**9. MEDIUM — `/api/health` leaking DB size/pool/WS-client-count to any authenticated caller.** The endpoint's original design (see `SYSTEM_MEMORY.md` §15) intentionally allows any authenticated caller (admin or a self-registered kitchen) to see *aggregate health* — that's a real, wanted feature (a kitchen on bad wifi should see a degraded status pill). The report's actual point was that "any authenticated caller" is a much lower bar than intended once registration is nearly frictionless (see #4/#6 above narrowing that gap). Split the response: `tier`/`latencyMs`/`connected` (the actual "is this usable right now" signal `HealthPin` needs) stay visible to any authenticated caller; `db.sizeBytes`, `db.pool`, and `ws.connectedClients` (infrastructure internals with no bearing on a kitchen's own usability) are now `null` unless the caller is an admin. `HealthPin.tsx` updated to treat those fields as nullable and hide the corresponding tooltip rows instead of crashing on `null.idle`.
+## Later Safety Improvements
 
-**10. MEDIUM — No request body size limit (100KB+ accepted) / no JSON nesting-depth limit (50 levels accepted).** Fixed at two layers rather than per-route: (a) `server.js`'s HTTP handler now rejects any `/api/*` request whose `Content-Length` exceeds 16KB with a `413`, and separately counts bytes as they stream in (aborting the connection past 16KB) for the chunked-encoding case where no `Content-Length` is sent at all; (b) a new `parseJsonBody()` helper (`validate.ts`) replaces the old bare `await request.json()` pattern across all 8 routes that read a JSON body — it rejects (clean 400, not a crash) anything nested deeper than 5 levels, closing the gap where a small-but-deeply-nested body could slip under the byte-size cap. Every real request body in this app is a flat object with a handful of string/boolean fields, so neither cap affects any legitimate caller.
+These were added after the three formal rounds:
 
-**11. MEDIUM — Control characters (tabs, backspace, CRLF) accepted in names.** Closed as a side effect of #3/#5's `CONTROL_CHARS` stripping in `requireString`/`requireSafeName` — CRLF specifically was flagged as a header/log-injection vector if a name were ever echoed into a header or plain-text log line.
+- API requests for Seed/Purge require exact JSON phrases; UI requires typing the same phrase before Confirm enables.
+- Order labels use a generated canonical lookup key for punctuation/case-insensitive identity and live uniqueness.
+- Kitchen status Undo uses a one-time random server token, 8-second deadline, exact-current-state check, cross-tab protection, and pickup lockout.
+- WebSocket cap is 50/IP (raised from 5 after shared-Wi-Fi load testing exposed the old limit). Connections remain read-only and restaurant-scoped.
+- Public customer tracking persists per tab and refetches after visibility/reconnect without discarding a valid card on temporary failure.
+- Admin/kitchen health information remains authenticated; customer-origin resolution is authenticated.
 
-**12. MEDIUM — Client-server validation mismatch (client strips characters the server accepted raw).** This is the same underlying gap as #3, from a different angle — closed by the same `requireSafeName()` fix. The operating principle going forward: client-side formatting (e.g. `Dashboard.tsx`'s uppercase-and-strip order-name formatter) is a UX convenience only, never a validation boundary — the server-side whitelist is now the actual authority, matching what should have been true from the start.
+## Verification Evidence
 
-### Deliberately not changed (assessed and rejected as fixes)
+Fixes were tested against their original exploit, not only reviewed in source. Verified examples:
 
-- **#2's `id` field removal** — see above; would break the real acknowledge feature.
-- **#13 (restaurant-name enumeration via registration's 409-vs-201 distinction)** — inherent to any "check if taken" registration flow; the actual enumeration vector (the suggest endpoint) is fixed in #1, and a 201-vs-409 timing/response difference alone doesn't add meaningfully beyond that.
-- **#14/#15 (`X-Powered-By` header, exposed dev-mode source maps)** — `X-Powered-By` removed via `poweredByHeader: false`. Source maps: confirmed this app has never been run via a real `next build && next start` production bundle (`server.js` always calls `next({ dev: NODE_ENV !== "production" })`, and no production deployment exists yet) — `productionBrowserSourceMaps: false` was still set explicitly in `next.config.ts` so a future real production build doesn't accidentally ship them, but there was no live production instance to "fix" today.
-- **#16 (no CSRF token)** — assessed as already adequately mitigated by `SameSite=lax` on all session cookies (unchanged, correct per the report's own INFO-level severity).
+- 1–2 character suggestions return empty; legitimate 3-character suggestions still work.
+- Stored XSS, null bytes, malformed/deep JSON, oversized bodies, unsafe IDs/statuses, and wildcard patterns return clean errors.
+- Valid names with spaces/basic punctuation and 8+ character passwords still work.
+- Kitchen callers cannot see admin-only health details.
+- Wrong WebSocket origins/missing restaurant subscriptions are rejected; scoped listeners receive only their restaurant events.
+- Kitchen cannot skip/reverse statuses normally; valid short Undo works once and stale/expired/picked-up attempts return 409.
+- Bare/wrong-confirmation Seed/Purge requests return 400 without changing row counts.
+- Canonical duplicate labels return 409 while readable display labels survive lookup variants.
+- TypeScript remains clean; full ESLint’s current 27 findings are known project debt, not the security acceptance criterion. Focused changed-file lint must not add errors.
 
-### Verification discipline
+## Known Accepted Risks / Pre-Public Checklist
 
-Every fix was tested against the exact reported exploit, not just read from the diff: confirmed `?q=a` now returns empty and a 3-char query still returns real suggestions; confirmed an XSS payload is now rejected at order creation while a legitimate name with spaces/hyphens (`"Table 4-B"`) still succeeds; confirmed a 1-character password is rejected; confirmed a literal null byte in either a password or a name now returns a clean 400 (via a raw Node HTTP client, since curl can't reliably pass a literal `\x00`); confirmed a 100KB+ body returns 413 and a small-but-50-levels-deep body returns 400; confirmed a kitchen-account caller's `/api/health` response has `sizeBytes`/`pool`/`connectedClients` all `null` while an admin's does not, and drove the real Kitchen Dashboard via headless Chrome to confirm `HealthPin` renders "Healthy" with zero console errors for that restricted response shape (not just that the API contract changed); confirmed the CSP doesn't break real page rendering (headless-Chrome pass across the gateway, customer tracker, and kitchen portal pages, checking for CSP/eval console errors specifically, after first catching and fixing the eval-blocking regression during that same check). `tsc --noEmit` stayed clean and `npm run lint` held at the established 16-finding baseline throughout (one incidental new finding — an unused `eslint-disable` directive on a rule not actually enabled in this project's config — was caught and removed during this same pass).
+Current LAN/dev acceptance:
 
-**Test data was NOT cleaned up this round** — the attacking Opus instance is actively using its own registered test kitchen accounts for the ongoing assessment; the user explicitly asked to leave all of it (31 restaurant rows, ids 54-84, plus their orders) in place rather than risk disrupting that in-progress testing. Revisit cleanup once that testing pass concludes.
+- Hardcoded admin credentials
+- Intentional `raw_password` column
+- In-memory sessions/rate limits/WebSockets; no horizontal scaling
+- Plain HTTP and therefore non-Secure cookies
+- Public lookup by restaurant + order label and public pickup acknowledgement
+- Local-only rolling backups
+
+Before open-internet use:
+
+1. Move admin credentials to environment secrets.
+2. Put the app behind real HTTPS, enable Secure cookies, then consider HSTS.
+3. Add offsite encrypted backups and tested recovery policy.
+4. Reassess CSRF/session revocation, proxy-aware client IPs, distributed/global rate limits, and multi-instance WebSocket delivery.
+5. Remove `raw_password` and reset affected credentials.
+6. Run a new external security review against the actual public architecture.
+
+## Data State
+
+The audit’s old temporary accounts are no longer intentionally retained. As of 2026-07-09, the user chose to purge the live DB; it is intentionally empty. Do not restore historical snapshots or create audit rows unless asked.
+
+## Update Discipline
+
+Add only materially new security findings, accepted-risk decisions, or verification evidence. Keep exploit proof concise and point implementation details to `SYSTEM_MEMORY.md`/source comments.

@@ -1,31 +1,53 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, FormEvent, FC } from "react";
-import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search } from "lucide-react";
+import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search, SearchX, Clock3 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChefMascot } from "@/components/ui/ChefMascot";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalActions } from "@/components/ui/Modal";
-import { ToastProvider, useToast } from "@/components/ui/Toast";
+import { ToastProvider, useActionToast, useToast } from "@/components/ui/Toast";
 import { StatusStepper } from "@/components/ui/StatusStepper";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { Select } from "@/components/ui/Select";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
 import { fetchJson } from "@/lib/api-client";
-import { NAMING_STYLES, suggestNextOrderName, type NamingStyle } from "@/lib/order-naming";
+import {
+  formatOrderDisplayInput,
+  NAMING_STYLES,
+  normalizeOrderLookupKey,
+  suggestNextOrderName,
+  type NamingStyle,
+} from "@/lib/order-naming";
 import { useDropdownReveal } from "@/lib/useDropdownReveal";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useSideBySideFit, useAutoFitText, useUiSelfCheck } from "@/lib/ui-awareness";
+import { computeStatusDurationMs, formatOrderAge } from "@/lib/order-duration";
+import { CustomerHandoffCard } from "@/components/ui/CustomerHandoffCard";
 
 export type OrderStatus = ApiOrderStatus;
 export type Order = {
   id: number;
   order_number: string;
   status: OrderStatus;
+  received_at: string;
+  preparing_at: string | null;
+  complete_at: string | null;
+  acknowledged_at: string | null;
 };
 type Tab = "Home" | "Received" | "Preparing" | "Complete";
+type StatusCounts = Record<Exclude<Tab, "Home">, number>;
+type StatusUpdateResult = {
+  order: Order;
+  undo?: {
+    token: string;
+    previousStatus: OrderStatus;
+    expiresInMs: number;
+  } | null;
+  undone?: boolean;
+};
 
 const TAB_ITEMS: { tab: Tab; Icon: typeof Home }[] = [
   { tab: "Home", Icon: Home },
@@ -55,11 +77,11 @@ const api = {
       body: JSON.stringify({ restaurant_name: restName, order_number: orderNum }),
     }, { retries: 0 });
   },
-  async updateOrderStatus(id: number, status: OrderStatus) {
-    return fetchJson(`/api/orders/${id}`, {
+  async updateOrderStatus(id: number, status: OrderStatus, undoToken?: string): Promise<StatusUpdateResult> {
+    return fetchJson<StatusUpdateResult>(`/api/orders/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...(undoToken ? { undoToken } : {}) }),
     });
   },
   async deleteOrder(id: number) {
@@ -73,7 +95,8 @@ const Nav: FC<{
   setActiveTab: (tab: Tab) => void;
   onLogout: () => void;
   restaurantName: string;
-}> = ({ activeTab, setActiveTab, onLogout, restaurantName }) => {
+  statusCounts: StatusCounts;
+}> = ({ activeTab, setActiveTab, onLogout, restaurantName, statusCounts }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   // Guarantees a hover tooltip (and dev logging) whenever the kitchen name is
   // too long for the fixed-width sidebar and gets truncated.
@@ -93,37 +116,57 @@ const Nav: FC<{
           tab === "Home" ? "justify-center md:justify-start" : ""
         } ${
           activeTab === tab
-            ? "bg-[var(--color-brand)] text-white nav-active-accent"
+            ? "bg-[var(--color-brand)] text-[var(--color-on-brand)] nav-active-accent"
             : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-white"
         }`}
       >
         <Icon className="w-5 h-5 shrink-0" />
         <span>{tab}</span>
+        {tab !== "Home" && (
+          <span className="ml-auto min-w-6 px-1.5 py-0.5 rounded-[var(--radius-full)] bg-[var(--color-surface-0)] text-[var(--color-text-secondary)] text-xs text-center">
+            <span aria-hidden="true">{statusCounts[tab]}</span>
+            <span className="sr-only">
+              {statusCounts[tab]} {statusCounts[tab] === 1 ? "order" : "orders"}
+            </span>
+          </span>
+        )}
       </button>
     ));
 
   return (
     <>
-      <SettingsToggles health={<HealthPin />} />
+      <SettingsToggles
+        health={<HealthPin />}
+        mobileNavigation={
+          <button
+            type="button"
+            onClick={() => setMobileOpen((open) => !open)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            aria-controls="kitchen-mobile-menu"
+            className={`w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] transition-colors ${
+              mobileOpen
+                ? "bg-[var(--color-brand)] text-[var(--color-on-brand)]"
+                : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)]"
+            }`}
+          >
+            {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
+        }
+      />
 
       {/* Mobile top bar */}
-      <div className="md:hidden clear-top-right flex items-center justify-between p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] shrink-0">
+      <div className="md:hidden clear-top-right flex items-center p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] shrink-0">
         <div className="min-w-0">
           <h2 className="text-base font-bold text-[var(--color-text-primary)] truncate" title={restaurantName}>
             {restaurantName}
           </h2>
           <span className="text-xs font-medium text-[var(--color-brand-text)]">Kitchen Dashboard</span>
         </div>
-        <button
-          onClick={() => setMobileOpen((o) => !o)}
-          aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          className="p-2 text-[var(--color-text-secondary)]"
-        >
-          {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
       </div>
       {showMobileMenu && (
         <div
+          id="kitchen-mobile-menu"
           className={`md:hidden flex flex-col gap-1 p-3 border-b border-[var(--color-border)] bg-[var(--color-surface-1)] shrink-0 ${mobileMenuAnimationClass}`}
         >
           {navButtons((tab) => {
@@ -163,6 +206,28 @@ const Nav: FC<{
   );
 };
 
+const OrderAge: FC<{ receivedAt: string }> = ({ receivedAt }) => {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const ageMs = computeStatusDurationMs(receivedAt, null, nowMs);
+  if (ageMs === null) return null;
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-text-muted)] whitespace-nowrap"
+      title="Time since this order was received"
+    >
+      <Clock3 className="w-3.5 h-3.5" aria-hidden="true" />
+      {formatOrderAge(ageMs)}
+    </span>
+  );
+};
+
 const OrderCard: FC<{
   order: Order;
   justUpdated: boolean;
@@ -173,9 +238,12 @@ const OrderCard: FC<{
   <Card
     className={`flex flex-col p-4 sm:p-5 transition-all duration-200 ${isExiting ? "animate-order-exit" : "animate-order-enter"} ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
   >
-    <p className="font-bold text-lg sm:text-xl text-[var(--color-text-primary)] mb-3 sm:mb-4 break-all" title={order.order_number}>
-      #{order.order_number}
-    </p>
+    <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4">
+      <p className="font-bold text-lg sm:text-xl text-[var(--color-text-primary)] break-all" title={order.order_number}>
+        #{order.order_number}
+      </p>
+      <OrderAge receivedAt={order.received_at} />
+    </div>
     <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
     <button
       onClick={(e) => onDelete(order.id, e.shiftKey)}
@@ -213,12 +281,11 @@ const HomeOrderRow: FC<{
         justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""
       }`}
     >
-      <span
-        ref={aRef}
-        className="font-bold text-base sm:text-lg text-[var(--color-text-primary)] truncate min-w-0"
-        title={order.order_number}
-      >
-        #{order.order_number}
+      <span ref={aRef} className="flex flex-col min-w-0" title={order.order_number}>
+        <span className="font-bold text-base sm:text-lg text-[var(--color-text-primary)] truncate">
+          #{order.order_number}
+        </span>
+        <OrderAge receivedAt={order.received_at} />
       </span>
       <div ref={bRef} className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="flex-1 min-w-0">
@@ -228,7 +295,7 @@ const HomeOrderRow: FC<{
           onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
           title="Hold Shift to skip the confirmation"
           aria-label={`Delete order ${order.order_number}`}
-          className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1.5 sm:p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
+          className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] min-w-10 min-h-10 sm:min-w-0 sm:min-h-0 p-0 sm:p-2 flex items-center justify-center rounded-[var(--radius-full)] transition-colors shrink-0"
         >
           <TrashIcon className="w-4 h-4" />
         </button>
@@ -315,7 +382,8 @@ const HomeTab: FC<{
       // restriction used for code-based styles.
       setOrderNumber(value.replace(/[^a-zA-Z\s'_-]/g, "").slice(0, 60));
     } else {
-      setOrderNumber(value.toUpperCase().replace(/[^A-Z0-9_-]/g, ""));
+      const uppercase = namingStyle === "sequential" || namingStyle === "letter-number";
+      setOrderNumber(formatOrderDisplayInput(value, uppercase));
     }
   };
 
@@ -325,7 +393,15 @@ const HomeTab: FC<{
   // "no matches" empty state below -- previously this filter ran twice per
   // render (identical predicate, only to check .length the second time).
   const filteredOrders = useMemo(
-    () => orders.filter((order) => order.order_number.toLowerCase().includes(searchQuery.trim().toLowerCase())),
+    () => {
+      const displayQuery = searchQuery.trim().toLowerCase();
+      const lookupQuery = normalizeOrderLookupKey(searchQuery);
+      return orders.filter((order) => {
+        const displayMatch = order.order_number.toLowerCase().includes(displayQuery);
+        const lookupMatch = lookupQuery.length > 0 && normalizeOrderLookupKey(order.order_number).includes(lookupQuery);
+        return displayMatch || lookupMatch;
+      });
+    },
     [orders, searchQuery],
   );
 
@@ -402,12 +478,19 @@ const HomeTab: FC<{
             </div>
           )}
           {orders.length > 0 && filteredOrders.length === 0 && (
-            <p className="text-[var(--color-text-muted)]">No orders matching &ldquo;{searchQuery}&rdquo;. Try a different search?</p>
+            <div role="status" className="flex flex-col items-center justify-center px-4 py-8 text-center">
+              <SearchX className="w-7 h-7 text-[var(--color-text-muted)] mb-2" aria-hidden="true" />
+              <p className="font-medium text-[var(--color-text-secondary)]">
+                No orders match &ldquo;{searchQuery}&rdquo;
+              </p>
+              <p className="mt-1 text-sm text-[var(--color-text-muted)]">Try a different order name.</p>
+            </div>
           )}
         </div>
       </Card>
 
       <CompleteCapSettingCard restaurantName={restaurantName} onError={onError} />
+      <CustomerHandoffCard restaurantName={restaurantName} />
     </div>
   );
 };
@@ -473,9 +556,10 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
             key={preset.hours}
             onClick={() => handleChange(preset.hours)}
             disabled={saving}
-            className={`px-4 py-2 rounded-[var(--radius-sm)] text-sm font-medium border transition-colors disabled:opacity-60 ${
+            aria-pressed={hours === preset.hours}
+            className={`min-h-10 px-4 py-2 rounded-[var(--radius-sm)] text-sm font-medium border transition-colors disabled:opacity-60 ${
               hours === preset.hours
-                ? "bg-[var(--color-brand)] border-[var(--color-brand)] text-white"
+                ? "bg-[var(--color-brand)] border-[var(--color-brand)] text-[var(--color-on-brand)]"
                 : "bg-[var(--color-surface-2)] border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
             }`}
           >
@@ -526,6 +610,7 @@ function KitchenDashboardContent({
   onLogout: () => void;
 }) {
   const showToast = useToast();
+  const showActionToast = useActionToast();
   const [activeTab, setActiveTab] = useState<Tab>("Home");
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -539,6 +624,16 @@ function KitchenDashboardContent({
   // `orders`, see deleteOrder below.
   const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusCounts = useMemo<StatusCounts>(() => {
+    const counts: StatusCounts = { Received: 0, Preparing: 0, Complete: 0 };
+    for (const order of orders) {
+      const status = normalizeStatus(order.status);
+      if (status === "received") counts.Received += 1;
+      if (status === "preparing") counts.Preparing += 1;
+      if (status === "complete") counts.Complete += 1;
+    }
+    return counts;
+  }, [orders]);
 
   const flash = (id: number) => {
     setRecentlyUpdatedId(id);
@@ -577,15 +672,57 @@ function KitchenDashboardContent({
     return () => clearInterval(interval);
   }, [restaurantName]);
 
+  const handleUndoStatus = async (
+    id: number,
+    mistakenStatus: OrderStatus,
+    previousStatus: OrderStatus,
+    undoToken: string,
+  ) => {
+    setOrders((prev) => prev.map((order) => {
+      if (order.id !== id) return order;
+      if (mistakenStatus === "Preparing") {
+        return { ...order, status: previousStatus, preparing_at: null };
+      }
+      return { ...order, status: previousStatus, complete_at: null };
+    }));
+    flash(id);
+
+    try {
+      const response = await api.updateOrderStatus(id, previousStatus, undoToken);
+      setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...response.order } : order)));
+      showToast("Status change undone", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not undo status change", "error");
+      void fetchOrders();
+    }
+  };
+
   const handleAdvanceStatus = async (id: number, status: OrderStatus) => {
+    const previousOrder = orders.find((order) => order.id === id);
+    if (!previousOrder) return;
+
     try {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
       flash(id);
-      await api.updateOrderStatus(id, status);
+      const response = await api.updateOrderStatus(id, status);
+      setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...response.order } : order)));
+
+      if (response.undo) {
+        const undo = response.undo;
+        showActionToast(
+          `Order #${previousOrder.order_number} moved to ${status}`,
+          "success",
+          {
+            label: "Undo",
+            durationMs: undo.expiresInMs,
+            onClick: () => handleUndoStatus(id, status, undo.previousStatus, undo.token),
+          },
+        );
+      }
     } catch (error) {
       console.error("Failed to update status", error);
-      showToast("Failed to update status", "error");
-      fetchOrders();
+      showToast(error instanceof Error ? error.message : "Failed to update status", "error");
+      void fetchOrders();
     }
   };
 
@@ -651,8 +788,17 @@ function KitchenDashboardContent({
   const renderContent = () => {
     if (isLoading) return <p className="text-[var(--color-text-muted)]">Setting up the kitchen...</p>;
 
-    const displayedOrders =
+    let displayedOrders =
       activeTab === "Home" ? orders : orders.filter((o) => normalizeStatus(o.status) === normalizeStatus(activeTab));
+
+    if (activeTab === "Received" || activeTab === "Preparing") {
+      displayedOrders = [...displayedOrders].sort((left, right) => {
+        const leftTime = new Date(left.received_at).getTime();
+        const rightTime = new Date(right.received_at).getTime();
+        if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return left.id - right.id;
+        return leftTime - rightTime || left.id - right.id;
+      });
+    }
 
     if (activeTab === "Home") {
       return (
@@ -682,7 +828,13 @@ function KitchenDashboardContent({
 
   return (
     <div className="h-dvh flex flex-col md:flex-row overflow-hidden">
-      <Nav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={onLogout} restaurantName={restaurantName} />
+      <Nav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onLogout={onLogout}
+        restaurantName={restaurantName}
+        statusCounts={statusCounts}
+      />
       <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto">
         <h1 className="font-display text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)] mb-6 shrink-0">{activeTab}</h1>
         <div key={activeTab} className="tab-content-enter">

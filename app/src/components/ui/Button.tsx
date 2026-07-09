@@ -7,7 +7,7 @@ type Size = "md" | "lg";
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-hover)] disabled:bg-[var(--color-surface-2)] disabled:text-[var(--color-text-muted)]",
+    "bg-[var(--color-brand)] text-[var(--color-on-brand)] hover:bg-[var(--color-brand-hover)] disabled:bg-[var(--color-surface-2)] disabled:text-[var(--color-text-muted)]",
   secondary:
     "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-border-strong)] hover:text-white disabled:opacity-50",
   danger:

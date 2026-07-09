@@ -49,7 +49,7 @@ export const StatusFilterDropdown: FC<{
         aria-expanded={open}
         className={`flex items-center gap-2 px-3 py-2 text-sm rounded-[var(--radius-sm)] border transition-colors max-w-[160px] ${
           selected.length > 0
-            ? "bg-[var(--color-brand)] border-[var(--color-brand)] text-white"
+            ? "bg-[var(--color-brand)] border-[var(--color-brand)] text-[var(--color-on-brand)]"
             : "bg-[var(--color-surface-0)] border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
         }`}
       >
@@ -87,7 +87,7 @@ export const StatusFilterDropdown: FC<{
                         : "border-[var(--color-border-strong)]"
                     }`}
                   >
-                    {selected.includes(status) && <span className="w-2 h-2 rounded-full bg-white" />}
+                    {selected.includes(status) && <span className="w-2 h-2 rounded-full bg-[var(--color-on-brand)]" />}
                   </span>
                   <span className="text-[var(--color-text-primary)]">{status}</span>
                 </button>

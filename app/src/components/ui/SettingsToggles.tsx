@@ -24,7 +24,11 @@ import { useHasMascot } from "@/lib/mascot-style";
  * toolbar doesn't grow a new icon every time another accessibility option
  * is added.
  */
-export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = ({ className, health }) => {
+export const SettingsToggles: FC<{
+  className?: string;
+  health?: ReactNode;
+  mobileNavigation?: ReactNode;
+}> = ({ className, health, mobileNavigation }) => {
   const ref = useRef<HTMLDivElement>(null);
   useReservedTopRight(ref);
   // The 2D/3D chef toggle only makes sense where a chef is actually rendered.
@@ -35,6 +39,12 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
     ref={ref}
     className={`fixed top-4 right-4 z-40 flex items-center gap-1 px-1.5 h-10 rounded-[var(--radius-full)] border border-[var(--color-border-strong)] bg-[var(--color-surface-1)] ${className ?? ""}`}
   >
+    {mobileNavigation && (
+      <>
+        <span className="md:hidden inline-flex">{mobileNavigation}</span>
+        <span className="md:hidden w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
+      </>
+    )}
     {health && (
       <>
         {health}

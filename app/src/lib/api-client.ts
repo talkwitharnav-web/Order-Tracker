@@ -12,6 +12,16 @@ const DEFAULT_TIMEOUT_MS = 8000;
 const RETRY_DELAYS_MS = [300, 800];
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -84,7 +94,7 @@ export async function fetchJson<T = unknown>(
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}) as { error?: string });
-    throw new Error(body.error || `Request failed (status ${response.status})`);
+    throw new ApiError(response.status, body.error || `Request failed (status ${response.status})`);
   }
 
   return response.json();

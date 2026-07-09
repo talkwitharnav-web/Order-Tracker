@@ -2,17 +2,26 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/validate";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
 
-export async function POST() {
+export async function POST(request: Request) {
   logger.info("POST /api/dev/seed - request received");
 
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
 
   try {
+    const body = await parseJsonBody(request);
+    const confirmation = body && typeof body === "object"
+      ? (body as { confirmation?: unknown }).confirmation
+      : undefined;
+    if (confirmation !== "SEED DATABASE") {
+      return NextResponse.json({ error: "Type SEED DATABASE to confirm" }, { status: 400 });
+    }
+
     await initDb();
 
     logger.info("POST /api/dev/seed - clearing tables...");
