@@ -12,8 +12,9 @@ const nextConfig: NextConfig = {
   // unused in a production build. If your PC's LAN IP changes (DHCP lease
   // renewal, different network), update this to match -- run `node server.js`
   // and check its "Also reachable on your network at ..." log line for the
-  // current address.
-  allowedDevOrigins: ["192.168.12.140"],
+  // current address. Both machines this project moves between are listed:
+  // .140 is the main host, .141 is the Windows auditing box.
+  allowedDevOrigins: ["192.168.12.140", "192.168.12.141"],
   // Turns off the floating dev-mode corner badge (route/build indicator) --
   // purely a dev-UI preference, no effect on production builds either way.
   devIndicators: false,

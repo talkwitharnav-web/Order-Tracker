@@ -7,7 +7,7 @@ import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
-import { ChefSprite } from "@/components/ui/ChefSprite";
+import { ChefMascot } from "@/components/ui/ChefMascot";
 import { GatewaySidebar, GatewayMobileNav } from "@/components/ui/GatewaySidebar";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
@@ -100,7 +100,7 @@ export default function GatewayCommandCenter() {
                 specificity with Tailwind's .hidden/.md\:block (same
                 pattern as KitchenPortalLanding/SessionWelcomeBack). */}
             <div className="hidden md:block">
-              <ChefSprite className={loggingOut ? "chef-sprite-out" : ""} />
+              <ChefMascot className={loggingOut ? "chef-sprite-out" : ""} />
             </div>
             <div className="md:hidden flex flex-col items-center gap-2 w-full max-w-xs">
               <button

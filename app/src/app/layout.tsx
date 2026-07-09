@@ -52,6 +52,8 @@ const themeInitScript = `
     if (cvd === "deuteranopia" || cvd === "protanopia" || cvd === "tritanopia") {
       document.documentElement.setAttribute("data-cvd", cvd);
     }
+    var mascot = localStorage.getItem("mascotStyle");
+    document.documentElement.setAttribute("data-mascot", mascot === "2d" ? "2d" : "3d");
   } catch (e) {}
 })();
 `;

@@ -4,9 +4,11 @@ import { FC, ReactNode, useRef } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { AccessibilityMenu } from "@/components/ui/AccessibilityMenu";
 import { UiSizeToggle } from "@/components/ui/UiSizeToggle";
+import { MascotStyleToggle } from "@/components/ui/MascotStyleToggle";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
 import { FullscreenToggle } from "@/components/ui/FullscreenToggle";
 import { useReservedTopRight } from "@/lib/useReservedTopRight";
+import { useHasMascot } from "@/lib/mascot-style";
 
 /**
  * One unified top-right toolbar for every display-preference control (UI
@@ -25,6 +27,8 @@ import { useReservedTopRight } from "@/lib/useReservedTopRight";
 export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = ({ className, health }) => {
   const ref = useRef<HTMLDivElement>(null);
   useReservedTopRight(ref);
+  // The 2D/3D chef toggle only makes sense where a chef is actually rendered.
+  const hasMascot = useHasMascot();
 
   return (
   <div
@@ -44,6 +48,11 @@ export const SettingsToggles: FC<{ className?: string; health?: ReactNode }> = (
     </ThemedTooltip>
     <span className="hidden sm:block w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
     <AccessibilityMenu />
+    {hasMascot && (
+      <ThemedTooltip label="2D / 3D chef">
+        <MascotStyleToggle />
+      </ThemedTooltip>
+    )}
     <ThemedTooltip label="Fullscreen" align="right" className="sm:hidden">
       <FullscreenToggle />
     </ThemedTooltip>

@@ -39,6 +39,14 @@ const ACTIONS = [
   "chef-anim-bobblehead",
   "chef-anim-shimmy",
   "chef-anim-suspicious",
+  "chef-anim-boing",
+  "chef-anim-swivel",
+  "chef-anim-shiver",
+  "chef-anim-pulse",
+  "chef-anim-leanback",
+  "chef-anim-doze",
+  "chef-anim-curious",
+  "chef-anim-excited",
 ] as const;
 
 const DEFAULT_LINES = [
@@ -77,7 +85,12 @@ const DEFAULT_LINES = [
 /** How far a pupil can drift from its socket's center, in SVG viewBox units. */
 const PUPIL_RANGE = 1.8;
 
-export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: number }> = ({ className, lines, size = 140 }) => {
+export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: number; minSize?: number }> = ({
+  className,
+  lines,
+  size = 140,
+  minSize = 56,
+}) => {
   // SVG element IDs (the hat's gradient, below) must be unique per document
   // -- fine when only one ChefSprite ever mounted on a page at once, but
   // some callers now mount two simultaneously (one hidden via CSS per
@@ -94,6 +107,11 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
   const [isTracking, setIsTracking] = useState(false);
   const [pupilOffset, setPupilOffset] = useState({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // Actual on-screen size, derived from how much room the container gives
+  // us (see the self-aware sizing effect below). Starts at the requested
+  // `size` and only ever shrinks to fit -- it never overflows its box.
+  const [renderSize, setRenderSize] = useState(size);
 
   useEffect(() => {
     if (!isTracking) return;
@@ -117,6 +135,30 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, [isTracking]);
 
+  // Self-aware sizing: the caller's `size` is the IDEAL (max) size. Measure
+  // how wide the sprite's container actually is and shrink to fit when that's
+  // narrower than `size`, clamped down to `minSize`. Also publishes the
+  // usable bubble width (--chef-bubble-max) so the speech bubble can never
+  // spill past the container it lives in. This is what lets one instance
+  // adapt to any viewport, replacing the old hacks of mounting two
+  // fixed-size sprites per breakpoint and hiding the mascot on mobile.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const parent = wrap?.parentElement;
+    if (!wrap || !parent) return;
+    const measure = () => {
+      const avail = parent.clientWidth;
+      if (!avail) return; // hidden (display:none) -> nothing to measure
+      setRenderSize(Math.max(minSize, Math.min(size, avail)));
+      const bubbleMax = Math.max(120, Math.min(avail - 12, 260));
+      wrap.style.setProperty("--chef-bubble-max", `${bubbleMax}px`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, [size, minSize]);
+
   const handleClick = () => {
     if (!isTracking) {
       setIsTracking(true);
@@ -127,12 +169,18 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
   };
 
   return (
-    <div className={`chef-sprite-wrap ${className ?? ""}`}>
+    <div ref={wrapRef} className={`chef-sprite-wrap ${className ?? ""}`}>
+      {/* Speech bubble is a normal flow sibling ABOVE the sprite (the wrap is
+          a centered flex column), so it centers over his head automatically
+          with plain CSS and its width is capped to the real container -- no
+          in-SVG foreignObject + counter-scale transform math, which is what
+          kept rendering it off-center and oversized on narrow screens. */}
+      <div className="chef-speech-bubble">{line}</div>
       <svg
         ref={svgRef}
         viewBox="0 0 100 118"
-        width={size}
-        height={Math.round(size * (118 / 100))}
+        width={renderSize}
+        height={Math.round(renderSize * (118 / 100))}
         shapeRendering="geometricPrecision"
         className={`chef-sprite ${action}`}
         role="img"
@@ -199,52 +247,6 @@ export const ChefSprite: FC<{ className?: string; lines?: string[]; size?: numbe
           <circle cx={56.8 + pupilOffset.x * 0.3} cy={44.2 + pupilOffset.y * 0.3} r="0.8" fill="white" opacity="0.9" />
         </g>
         <path d="M44 52 Q50 56 56 52" stroke="#8a5a3a" strokeWidth="2.25" fill="none" strokeLinecap="round" />
-
-        {/*
-          Speech bubble lives inside the SVG, anchored right above the mouth
-          (mouth center is 50,54 in this viewBox), so it inherits the exact
-          same transform as the rest of the sprite — the pointer arrow stays
-          aimed at the mouth even through animations that rotate/translate
-          the whole sprite (spin-full, wobble, jump, etc.), instead of a
-          separately-positioned bubble that would drift away during those.
-          The foreignObject box itself is sized/positioned in viewBox units
-          (SVG scales it like any other shape); a counter-scale on the content
-          div undoes that same scaling for the bubble's *content* so its
-          fixed-px padding/font-size render at their intended real size
-          instead of being stretched/shrunk by the viewBox-to-viewport ratio.
-        */}
-        <foreignObject x="49" y="10" width="1" height="1" style={{ overflow: "visible" }}>
-          <div
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              width: "max-content",
-              // The SVG's viewBox (100 units wide) is scaled to `size` real
-              // pixels — this counter-scale must track that same ratio, or
-              // the bubble renders at the wrong real-world size/position
-              // whenever `size` differs from the original hardcoded 140
-              // default (e.g. KitchenPortalLanding's size={168}), which is
-              // exactly what caused the bubble to drift off-screen there.
-              //
-              // `--chef-bubble-counter-scale` publishes that same factor as a
-              // CSS var so .chef-speech-bubble's max-width (globals.css) can
-              // divide by it: max-width is measured in this div's PRE-
-              // transform coordinate space, then the whole box gets visually
-              // multiplied by this scale() on top -- at every mobile call
-              // site (size 70/80/110/120, all < 100) that factor is > 1,
-              // so an unscaled `max-width: min(220px, 42vw)` rendered far
-              // larger on screen than intended (worst at size=70, ~1.43x),
-              // which is exactly the "humongous, doesn't fit the window"
-              // bubble reported on the Kitchen page's empty-order states.
-              ["--chef-bubble-counter-scale" as string]: 100 / size,
-              transform: `scale(${100 / size}) translateX(-50%)`,
-              transformOrigin: "bottom left",
-            }}
-          >
-            <div className="chef-speech-bubble">{line}</div>
-          </div>
-        </foreignObject>
 
         {/* chef's toque: pleated cylindrical poof + rope-braid cuff band, per reference photo */}
         <g className="chef-hat">

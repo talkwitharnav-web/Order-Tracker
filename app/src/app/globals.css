@@ -904,19 +904,17 @@ summary {
   border-radius: 12px;
   font-size: 0.8rem;
   font-weight: 600;
-  /* Random lines vary a lot in length (some are one word, some a full
-     sentence) — capping width and allowing wrap keeps a long line from
-     rendering at its full one-line width and overflowing a narrow phone
-     screen, which `white-space: nowrap` + no max-width used to allow.
-     Divided by --chef-bubble-counter-scale (set inline by ChefSprite.tsx,
-     defaults to 1 if unset so this rule is still sane standalone) because
-     this element lives inside a scale() transform that undoes the SVG's
-     own viewBox scaling -- without dividing here, the 220px/42vw targets
-     are measured BEFORE that transform and then get visually multiplied
-     by it, ballooning far past their intended on-screen size at every
-     `size` prop under 100 (every mobile call site: 70/80/110/120). */
+  /* Random lines vary a lot in length (one word up to a full sentence), so
+     cap the width and let long lines wrap. --chef-bubble-max is published by
+     ChefSprite.tsx from a live measurement of the sprite's actual container
+     width (minus a little breathing room), so the bubble can never spill past
+     whatever box it's dropped into -- card, sidebar, portal, anywhere. The
+     min(15rem, 85vw) fallback keeps it sane if the JS measurement hasn't run
+     yet (first paint) or is disabled. The bubble is now a normal flow sibling
+     above the sprite (see ChefSprite.tsx), so there's no scale() transform to
+     counteract anymore -- this is a plain, real-pixel width. */
   white-space: normal;
-  max-width: min(calc(220px / var(--chef-bubble-counter-scale, 1)), calc(42vw / var(--chef-bubble-counter-scale, 1)));
+  max-width: var(--chef-bubble-max, min(15rem, 85vw));
   text-align: center;
   animation: chef-bubble-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both 0.3s;
 }
@@ -935,11 +933,11 @@ summary {
 @keyframes chef-bubble-pop {
   0% {
     opacity: 0;
-    transform: translateX(-50%) scale(0.7);
+    transform: scale(0.7);
   }
   100% {
     opacity: 1;
-    transform: translateX(-50%) scale(1);
+    transform: scale(1);
   }
 }
 .chef-sprite {
@@ -1190,6 +1188,65 @@ summary {
 }
 .chef-anim-suspicious .chef-eyes { animation: chef-suspicious-kf 3s ease-in-out infinite; }
 
+/* --- More whole-body idle animations (no arm-only ones; see ACTIONS note in
+   ChefSprite.tsx). Covered by the blanket Reduce-Motion override above. --- */
+@keyframes chef-boing-kf {
+  0%, 100% { transform: translateY(0) scaleY(1) scaleX(1); }
+  22% { transform: translateY(4px) scaleY(0.82) scaleX(1.1); }
+  52% { transform: translateY(-12px) scaleY(1.12) scaleX(0.92); }
+  74% { transform: translateY(0) scaleY(1) scaleX(1); }
+}
+.chef-anim-boing { animation: chef-boing-kf 1.9s ease-in-out infinite; }
+
+@keyframes chef-swivel-kf {
+  0%, 100% { transform: scaleX(1) rotate(0deg); }
+  50% { transform: scaleX(0.7) rotate(3deg); }
+}
+.chef-anim-swivel { animation: chef-swivel-kf 2.2s ease-in-out infinite; }
+
+@keyframes chef-shiver-kf {
+  0%, 70%, 100% { transform: translateX(0); }
+  76%, 84%, 92% { transform: translateX(-1.5px); }
+  80%, 88%, 96% { transform: translateX(1.5px); }
+}
+.chef-anim-shiver { animation: chef-shiver-kf 3s ease-in-out infinite; }
+
+@keyframes chef-pulse-kf {
+  0%, 60%, 100% { transform: scale(1); }
+  75% { transform: scale(1.08); }
+}
+.chef-anim-pulse { animation: chef-pulse-kf 2s ease-in-out infinite; }
+
+@keyframes chef-leanback-kf {
+  0%, 55%, 100% { transform: rotate(0deg) translateY(0); }
+  75% { transform: rotate(-11deg) translateY(-2px); }
+}
+.chef-anim-leanback { animation: chef-leanback-kf 2.8s ease-in-out infinite; }
+
+@keyframes chef-doze-kf {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  40%, 55% { transform: translateY(4px) rotate(6deg); }
+  66% { transform: translateY(-2px) rotate(-2deg); }
+}
+.chef-anim-doze { animation: chef-doze-kf 3.6s ease-in-out infinite; }
+
+@keyframes chef-curious-kf {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-1.5px, -1px); }
+  45% { transform: translate(1.5px, -1px); }
+  70% { transform: translate(1.5px, 1px); }
+}
+.chef-anim-curious .chef-eyes { animation: chef-curious-kf 3s ease-in-out infinite; }
+
+@keyframes chef-excited-kf {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  20% { transform: translateY(-5px) rotate(-3deg); }
+  40% { transform: translateY(0) rotate(3deg); }
+  60% { transform: translateY(-5px) rotate(-3deg); }
+  80% { transform: translateY(0) rotate(3deg); }
+}
+.chef-anim-excited { animation: chef-excited-kf 1.4s ease-in-out infinite; }
+
 /* =====================================================
    VISUAL UPGRADE — Phase 2-7 Animations & Polish
    ===================================================== */
@@ -1393,5 +1450,614 @@ html, body {
 [data-motion="reduced"] .confetti-particle,
 [data-motion="reduced"] .live-ripple-ring,
 [data-motion="reduced"] .animate-health-pulse {
+  animation: none !important;
+}
+
+/* ============================================================
+   ChefSprite3D — CSS 3D mascot (components/ui/ChefSprite3D.tsx)
+   Same derpy character as the 2D SVG, built from layered HTML in a
+   `perspective` + `preserve-3d` stage. All sizes derive from --chef3d-s
+   (the live render size in px) via --u = size/100, so 1 unit maps to the
+   2D SVG's viewBox unit and the proportions match. No WebGL, no libs.
+   ============================================================ */
+.chef3d-stage {
+  --u: calc(var(--chef3d-s, 140px) / 100);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  perspective: calc(var(--chef3d-s, 140px) * 4);
+  perspective-origin: 50% 42%;
+}
+/* When pacing, left-align so the walk starts at the track's left edge and the
+   bubble is hidden (he's strolling, not talking). */
+.chef3d-walk-stage {
+  align-items: flex-start;
+}
+.chef3d-walk-stage .chef3d-bubble {
+  display: none;
+}
+
+.chef3d-walker {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: max-content;
+  transform-style: preserve-3d;
+}
+
+.chef3d {
+  position: relative;
+  width: calc(100 * var(--u));
+  height: calc(118 * var(--u));
+  transform-style: preserve-3d;
+  /* Base pose: a gentle look-up tilt so (with the stage perspective) his
+     depth reads. Idle/gait keyframes each restate this so it's preserved. */
+  transform: rotateX(-6deg);
+  cursor: pointer;
+}
+
+/* Ground shadow, laid flat on the floor for real ground contact. */
+.chef3d-shadow {
+  position: absolute;
+  left: 50%;
+  top: calc(112 * var(--u));
+  width: calc(46 * var(--u));
+  height: calc(13 * var(--u));
+  transform: translateX(-50%) rotateX(80deg);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0) 70%);
+}
+
+/* Torso — a real 4-face box (front/back/left/right) inside a preserve-3d
+   container, W32 × H34 × D16 (viewBox units). Front sits at +D/2, back at
+   -D/2, and the two side faces hinge them together so any turn reveals a
+   solid painted side instead of a flat edge. */
+.chef3d-body {
+  position: absolute;
+  left: calc(34 * var(--u));
+  top: calc(60 * var(--u));
+  width: calc(32 * var(--u));
+  height: calc(34 * var(--u));
+  transform-style: preserve-3d;
+}
+.chef3d-body-front,
+.chef3d-body-back {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(9 * var(--u)) calc(9 * var(--u)) calc(7 * var(--u)) calc(7 * var(--u));
+}
+.chef3d-body-front {
+  transform: translateZ(calc(8 * var(--u)));
+  background: linear-gradient(105deg, #d6d6d6 0%, #f4f4f4 48%, #e4e4e4 100%);
+  box-shadow: inset calc(-3 * var(--u)) 0 calc(6 * var(--u)) rgba(0, 0, 0, 0.08);
+}
+.chef3d-body-back {
+  transform: translateZ(calc(-8 * var(--u)));
+  background: #c1c1c1;
+}
+/* Side faces: a D-wide (16u) × full-height panel, centered then pushed out to
+   ±W/2 and rotated 90° into the depth plane. */
+.chef3d-body-side {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: calc(16 * var(--u));
+  height: 100%;
+  margin-left: calc(-8 * var(--u));
+  background: linear-gradient(180deg, #dedede 0%, #cbcbcb 100%);
+  border-radius: calc(5 * var(--u));
+}
+.chef3d-body-side-r { transform: translateX(calc(16 * var(--u))) rotateY(90deg); }
+.chef3d-body-side-l { transform: translateX(calc(-16 * var(--u))) rotateY(-90deg); }
+.chef3d-apron {
+  position: absolute;
+  left: 50%;
+  top: calc(6 * var(--u));
+  width: calc(17 * var(--u));
+  height: calc(26 * var(--u));
+  transform: translateX(-50%) translateZ(calc(0.6 * var(--u)));
+  background: #ffffff;
+  border-radius: calc(3 * var(--u)) calc(3 * var(--u)) calc(5 * var(--u)) calc(5 * var(--u));
+  box-shadow: inset 0 calc(2 * var(--u)) 0 rgba(0, 0, 0, 0.03);
+}
+.chef3d-bowtie {
+  position: absolute;
+  left: 50%;
+  top: calc(-2 * var(--u));
+  width: calc(16 * var(--u));
+  height: calc(8 * var(--u));
+  transform: translateX(-50%) translateZ(calc(6 * var(--u)));
+}
+.chef3d-bowtie span {
+  position: absolute;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-top: calc(4 * var(--u)) solid transparent;
+  border-bottom: calc(4 * var(--u)) solid transparent;
+  transform: translateY(-50%);
+}
+.chef3d-bowtie span:first-child {
+  left: 0;
+  border-right: calc(7 * var(--u)) solid #1a1512;
+}
+.chef3d-bowtie span:last-child {
+  right: 0;
+  border-left: calc(7 * var(--u)) solid #1a1512;
+}
+.chef3d-bowtie::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(3.4 * var(--u));
+  height: calc(4.4 * var(--u));
+  transform: translate(-50%, -50%);
+  background: #2b2320;
+  border-radius: calc(1.4 * var(--u));
+}
+
+/* Head — the focal point. Round face with a radial highlight for volume and a
+   darker back disc (::before at -Z) for thickness. Rotates toward the cursor
+   via --look-y/--look-x (set from JS). */
+.chef3d-head {
+  position: absolute;
+  left: calc(33 * var(--u));
+  top: calc(28 * var(--u));
+  width: calc(34 * var(--u));
+  height: calc(34 * var(--u));
+  border-radius: 50%;
+  transform-style: preserve-3d;
+  transform: translateZ(calc(7 * var(--u))) rotateY(var(--look-y, 0deg)) rotateX(var(--look-x, 0deg));
+  transition: transform 0.18s ease-out;
+  background: radial-gradient(circle at 38% 30%, #ffe0c2 0%, #f2c9a0 55%, #e0b083 100%);
+  box-shadow: inset calc(-3 * var(--u)) calc(-2 * var(--u)) calc(6 * var(--u)) rgba(0, 0, 0, 0.10);
+}
+/* Head volume: a few concentric discs stepped BACKWARD from the front disc
+   (this element's own painted face) as sphere cross-sections — each smaller
+   and a touch darker, so together they read as a smoothly rounded head with
+   real depth. Because every disc is PARALLEL to the face (never a perpendicular
+   plane), turning only reveals soft skin crescents, never a flat "paper strip"
+   beside the head. The front face (eyes, smile, blush, hat) is unchanged. */
+.chef3d-head-depth {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+}
+.chef3d-head-depth-1 {
+  width: calc(32 * var(--u));
+  height: calc(32 * var(--u));
+  margin-left: calc(-16 * var(--u));
+  margin-top: calc(-16 * var(--u));
+  background: #eec19a;
+  transform: translateZ(calc(-6 * var(--u)));
+}
+.chef3d-head-depth-2 {
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  margin-left: calc(-13 * var(--u));
+  margin-top: calc(-13 * var(--u));
+  background: #e3b488;
+  transform: translateZ(calc(-12 * var(--u)));
+}
+.chef3d-head-depth-3 {
+  width: calc(17 * var(--u));
+  height: calc(17 * var(--u));
+  margin-left: calc(-8.5 * var(--u));
+  margin-top: calc(-8.5 * var(--u));
+  background: #d5a276;
+  transform: translateZ(calc(-17 * var(--u)));
+}
+.chef3d-eye {
+  position: absolute;
+  top: calc(13 * var(--u));
+  width: calc(7 * var(--u));
+  height: calc(7.5 * var(--u));
+  background: #fff;
+  border-radius: 50%;
+  transform: translateZ(calc(6 * var(--u)));
+  box-shadow: inset 0 calc(-1 * var(--u)) calc(1 * var(--u)) rgba(0, 0, 0, 0.08);
+}
+.chef3d-eye-l {
+  left: calc(8 * var(--u));
+}
+.chef3d-eye-r {
+  right: calc(8 * var(--u));
+}
+.chef3d-pupil {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: calc(3.6 * var(--u));
+  height: calc(3.6 * var(--u));
+  transform: translate(-50%, -50%);
+  background: #2b2b2b;
+  border-radius: 50%;
+}
+.chef3d-pupil::after {
+  content: "";
+  position: absolute;
+  left: 20%;
+  top: 16%;
+  width: calc(1.2 * var(--u));
+  height: calc(1.2 * var(--u));
+  background: #fff;
+  border-radius: 50%;
+}
+.chef3d-blush {
+  position: absolute;
+  top: calc(19 * var(--u));
+  width: calc(6 * var(--u));
+  height: calc(4 * var(--u));
+  background: #f5a0a0;
+  opacity: 0.4;
+  border-radius: 50%;
+  transform: translateZ(calc(6 * var(--u)));
+}
+.chef3d-blush-l {
+  left: calc(3.5 * var(--u));
+}
+.chef3d-blush-r {
+  right: calc(3.5 * var(--u));
+}
+.chef3d-smile {
+  position: absolute;
+  left: 50%;
+  top: calc(20 * var(--u));
+  width: calc(12 * var(--u));
+  height: calc(6 * var(--u));
+  transform: translateX(-50%) translateZ(calc(6 * var(--u)));
+  border-bottom: calc(2.2 * var(--u)) solid #8a5a3a;
+  border-radius: 0 0 calc(10 * var(--u)) calc(10 * var(--u));
+}
+
+/* Toque — puffy poof + band, sat atop the head and pushed up/forward. */
+.chef3d-hat {
+  position: absolute;
+  left: 50%;
+  top: calc(-11 * var(--u));
+  width: calc(38 * var(--u));
+  height: calc(24 * var(--u));
+  transform: translateX(-50%) translateZ(calc(2 * var(--u)));
+  transform-style: preserve-3d;
+}
+.chef3d-hat-poof {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: calc(36 * var(--u));
+  height: calc(22 * var(--u));
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 38% 28%, #ffffff 0%, #f5f5f5 55%, #dcdcdc 100%);
+  border-radius: 50% 50% 44% 44%;
+  box-shadow: inset calc(-3 * var(--u)) 0 calc(5 * var(--u)) rgba(0, 0, 0, 0.06);
+}
+.chef3d-hat-band {
+  position: absolute;
+  left: 50%;
+  bottom: calc(-1 * var(--u));
+  width: calc(32 * var(--u));
+  height: calc(8 * var(--u));
+  transform: translateX(-50%);
+  background: linear-gradient(#ffffff, #e6e6e6);
+  border-radius: calc(3 * var(--u));
+  box-shadow: inset 0 calc(-2 * var(--u)) calc(2 * var(--u)) rgba(0, 0, 0, 0.05);
+}
+
+/* --- ARMS — SHOULDER-pivoted. transform-origin is the shoulder joint (top of
+   the arm), so the arm always rotates about the shoulder and can never
+   detach. Idle arms hang still (or a single deliberate wave); walking arms
+   swing fore/aft. Every arm motion is an intentional keyframe, never random
+   per-frame JS. --- */
+.chef3d-arm {
+  position: absolute;
+  top: calc(60 * var(--u));
+  width: calc(8 * var(--u));
+  height: calc(22 * var(--u));
+  border-radius: calc(4 * var(--u));
+  background: linear-gradient(90deg, #e6b78f, #f2c9a0 60%, #ecc196);
+  transform-origin: 50% calc(2 * var(--u));
+  transform: translateZ(calc(5 * var(--u)));
+}
+/* Arms tucked in so they meet the torso's shoulder corners (torso spans
+   34u–66u): a 2u overlap reads as "attached at the shoulder," not floating
+   beside the body. A small inward rest tilt lets the hands hang toward the
+   body like real relaxed arms. */
+.chef3d-arm-l {
+  left: calc(29 * var(--u));
+  transform: translateZ(calc(5 * var(--u))) rotate(7deg);
+}
+.chef3d-arm-r {
+  right: calc(29 * var(--u));
+  transform: translateZ(calc(5 * var(--u))) rotate(-7deg);
+}
+.chef3d-hand {
+  position: absolute;
+  left: 50%;
+  bottom: calc(-1 * var(--u));
+  width: calc(7 * var(--u));
+  height: calc(7 * var(--u));
+  transform: translateX(-50%);
+  background: #f2c9a0;
+  border-radius: 50%;
+}
+
+/* --- LEGS — HIP-pivoted (transform-origin at the top/hip). Alternate fore/aft
+   during the walk. --- */
+.chef3d-legs {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+.chef3d-leg {
+  position: absolute;
+  top: calc(90 * var(--u));
+  width: calc(7 * var(--u));
+  height: calc(14 * var(--u));
+  border-radius: calc(3.5 * var(--u));
+  background: linear-gradient(90deg, #e6b78f, #f2c9a0);
+  transform-origin: 50% calc(1 * var(--u));
+}
+.chef3d-leg-l {
+  left: calc(41 * var(--u));
+}
+.chef3d-leg-r {
+  left: calc(52 * var(--u));
+}
+.chef3d-shoe {
+  position: absolute;
+  left: 50%;
+  bottom: calc(-2 * var(--u));
+  width: calc(11 * var(--u));
+  height: calc(5 * var(--u));
+  transform: translateX(-50%);
+  background: #6b5c4d;
+  border-radius: calc(3 * var(--u)) calc(4 * var(--u)) calc(2 * var(--u)) calc(2 * var(--u));
+}
+
+/* ---------- Idle animations (whole-body, on .chef3d) ---------- */
+@keyframes chef3d-turn {
+  0%, 100% { transform: rotateX(-6deg) rotateY(-17deg); }
+  50% { transform: rotateX(-6deg) rotateY(17deg); }
+}
+.chef3d-idle-turn { animation: chef3d-turn 4.6s ease-in-out infinite; }
+
+@keyframes chef3d-bob {
+  0%, 100% { transform: rotateX(-6deg) translateY(0); }
+  50% { transform: rotateX(-6deg) translateY(calc(-4 * var(--u))); }
+}
+.chef3d-idle-bob { animation: chef3d-bob 2.3s ease-in-out infinite; }
+
+@keyframes chef3d-breathe {
+  0%, 100% { transform: rotateX(-6deg) scale(1); }
+  50% { transform: rotateX(-6deg) scale(1.035); }
+}
+.chef3d-idle-breathe { animation: chef3d-breathe 3s ease-in-out infinite; }
+
+@keyframes chef3d-sway {
+  0%, 100% { transform: rotateX(-6deg) rotateZ(-3.5deg); }
+  50% { transform: rotateX(-6deg) rotateZ(3.5deg); }
+}
+.chef3d-idle-sway { animation: chef3d-sway 3.4s ease-in-out infinite; }
+
+@keyframes chef3d-peek {
+  0%, 68%, 100% { transform: rotateX(-6deg) translateZ(0); }
+  84% { transform: rotateX(-1deg) translateZ(calc(7 * var(--u))); }
+}
+.chef3d-idle-peek { animation: chef3d-peek 4.2s ease-in-out infinite; }
+
+/* Pitch nod — tips the whole figure forward/back about the X axis. */
+@keyframes chef3d-nod {
+  0%, 100% { transform: rotateX(-6deg); }
+  50% { transform: rotateX(9deg); }
+}
+.chef3d-idle-nod { animation: chef3d-nod 2.6s ease-in-out infinite; }
+
+/* Wobble — a playful side-to-side rock (rotateZ), wider and slower than sway. */
+@keyframes chef3d-wobble {
+  0%, 100% { transform: rotateX(-6deg) rotateZ(0deg); }
+  30% { transform: rotateX(-6deg) rotateZ(-6deg); }
+  70% { transform: rotateX(-6deg) rotateZ(6deg); }
+}
+.chef3d-idle-wobble { animation: chef3d-wobble 2.2s ease-in-out infinite; }
+
+/* Hop — a little jump every few seconds (whole body up and back down). */
+@keyframes chef3d-hop {
+  0%, 68%, 100% { transform: rotateX(-6deg) translateY(0); }
+  80% { transform: rotateX(-6deg) translateY(calc(-8 * var(--u))); }
+}
+.chef3d-idle-hop { animation: chef3d-hop 3s ease-in-out infinite; }
+
+/* Tiptoe — rises up with a slight vertical stretch, like standing on toes. */
+@keyframes chef3d-tiptoe {
+  0%, 100% { transform: rotateX(-6deg) translateY(0) scaleY(1); }
+  50% { transform: rotateX(-6deg) translateY(calc(-3 * var(--u))) scaleY(1.04); }
+}
+.chef3d-idle-tiptoe { animation: chef3d-tiptoe 1.9s ease-in-out infinite; }
+
+/* Look about — sweeps his gaze around: turn left, dip, turn right. */
+@keyframes chef3d-lookabout {
+  0%, 100% { transform: rotateX(-6deg) rotateY(0deg); }
+  25% { transform: rotateX(-6deg) rotateY(-19deg); }
+  50% { transform: rotateX(-11deg) rotateY(0deg); }
+  75% { transform: rotateX(-6deg) rotateY(19deg); }
+}
+.chef3d-idle-lookabout { animation: chef3d-lookabout 5s ease-in-out infinite; }
+
+/* Shimmy — a quick happy side-to-side with a little counter-rotation. */
+@keyframes chef3d-shimmy {
+  0%, 100% { transform: rotateX(-6deg) rotateY(0deg) translateX(0); }
+  25% { transform: rotateX(-6deg) rotateY(-9deg) translateX(calc(-1.5 * var(--u))); }
+  75% { transform: rotateX(-6deg) rotateY(9deg) translateX(calc(1.5 * var(--u))); }
+}
+.chef3d-idle-shimmy { animation: chef3d-shimmy 0.9s ease-in-out infinite; }
+
+/* While actively tracking the cursor (after a click) he holds his pose but
+   keeps a gentle breath so he reads as alert-and-watching, not frozen — the
+   head does the looking via --look-x/--look-y. */
+.chef3d-tracking {
+  animation: chef3d-breathe 3.2s ease-in-out infinite;
+}
+
+/* ---------- Walk cycle ---------- */
+/* Body: bobs up on each step and sways gently side to side. */
+@keyframes chef3d-gait-body {
+  0%, 100% { transform: rotateX(-6deg) translateY(0) rotateZ(-1.5deg); }
+  25% { transform: rotateX(-6deg) translateY(calc(-2.5 * var(--u))) rotateZ(0deg); }
+  50% { transform: rotateX(-6deg) translateY(0) rotateZ(1.5deg); }
+  75% { transform: rotateX(-6deg) translateY(calc(-2.5 * var(--u))) rotateZ(0deg); }
+}
+.chef3d-gait { animation: chef3d-gait-body 0.9s ease-in-out infinite; }
+
+/* Legs alternate: left leg forward at 0%, right leg forward at 50%. */
+@keyframes chef3d-step-l {
+  0%, 100% { transform: rotateX(30deg); }
+  50% { transform: rotateX(-30deg); }
+}
+@keyframes chef3d-step-r {
+  0%, 100% { transform: rotateX(-30deg); }
+  50% { transform: rotateX(30deg); }
+}
+.chef3d-gait .chef3d-leg-l { animation: chef3d-step-l 0.9s ease-in-out infinite; }
+.chef3d-gait .chef3d-leg-r { animation: chef3d-step-r 0.9s ease-in-out infinite; }
+
+/* Arms swing CONTRALATERALLY — each arm moves with the OPPOSITE leg (real
+   human gait). Left leg is forward at 0%, so the RIGHT arm is forward at 0%
+   (chef3d-swing-fwd); the LEFT arm is forward at 50% with the right leg
+   (chef3d-swing-back). This also makes each arm exactly anti-phase to its
+   same-side leg, which is what stops the "weird" look. rotateX about the
+   shoulder swings them fore/aft, matching the legs' axis. */
+@keyframes chef3d-swing-fwd {
+  0%, 100% { transform: translateZ(calc(5 * var(--u))) rotateX(26deg); }
+  50% { transform: translateZ(calc(5 * var(--u))) rotateX(-26deg); }
+}
+@keyframes chef3d-swing-back {
+  0%, 100% { transform: translateZ(calc(5 * var(--u))) rotateX(-26deg); }
+  50% { transform: translateZ(calc(5 * var(--u))) rotateX(26deg); }
+}
+.chef3d-gait .chef3d-arm-r { animation: chef3d-swing-fwd 0.9s ease-in-out infinite; }
+.chef3d-gait .chef3d-arm-l { animation: chef3d-swing-back 0.9s ease-in-out infinite; }
+
+/* Pace: the walker carries him from the track's left edge to the right (the
+   distance --chef3d-pace is measured live in JS), pausing to turn around (a
+   real 3D rotateY flip) at each wall. Confined to its own track, so it never
+   wanders over other UI. */
+@keyframes chef3d-pace {
+  0% { transform: translateX(0) rotateY(0deg); }
+  46% { transform: translateX(var(--chef3d-pace, 0px)) rotateY(0deg); }
+  54% { transform: translateX(var(--chef3d-pace, 0px)) rotateY(180deg); }
+  96% { transform: translateX(0) rotateY(180deg); }
+  100% { transform: translateX(0) rotateY(360deg); }
+}
+.chef3d-walking {
+  animation: chef3d-pace 8s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+/* Reduce motion: freeze every 3D animation (idle, gait, pace, head-follow
+   transition) — the figure still renders, just still. */
+@media (prefers-reduced-motion: reduce) {
+  .chef3d,
+  .chef3d *,
+  .chef3d-walking {
+    animation: none !important;
+  }
+  .chef3d-head { transition: none !important; }
+}
+[data-motion="reduced"] .chef3d,
+[data-motion="reduced"] .chef3d *,
+[data-motion="reduced"] .chef3d-walking {
+  animation: none !important;
+}
+[data-motion="reduced"] .chef3d-head {
+  transition: none !important;
+}
+
+/* ---------- 2D ⟷ 3D swap transition (ChefMascot orchestrates) ----------
+   The outgoing mascot exits, then the incoming one enters. The 3D chef turns
+   toward profile and walks off/on (his legs run the gait cycle, and his DEPTH
+   FINS keep him solid at the turn instead of going paper-flat); the 2D chef
+   simply slides. Directions are mirrored so it reads as one replacing the
+   other from the opposite side. -66deg is a strong "turned to walk" pose that
+   still shows a hint of his face while the fins carry the volume. */
+.chef-swap {
+  perspective: 900px;
+}
+.chef-swap-3d-out {
+  animation: chef-swap-3d-out 0.72s ease-in both;
+}
+.chef-swap-3d-in {
+  animation: chef-swap-3d-in 0.72s ease-out both;
+}
+.chef-swap-2d-out {
+  animation: chef-swap-2d-out 0.72s ease-in both;
+}
+.chef-swap-2d-in {
+  animation: chef-swap-2d-in 0.72s ease-out both;
+}
+
+@keyframes chef-swap-3d-out {
+  0% { transform: translateX(0); opacity: 1; }
+  34% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(-150%); opacity: 0; }
+}
+@keyframes chef-swap-3d-in {
+  0% { transform: translateX(-150%); opacity: 0; }
+  66% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes chef-swap-2d-out {
+  0% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(135%); opacity: 0; }
+}
+@keyframes chef-swap-2d-in {
+  0% { transform: translateX(135%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+/* The 3D chef's TURN during a swap is applied to the INNER .chef3d (which is
+   preserve-3d, inside the stage's perspective) — NOT the outer wrapper.
+   Rotating the wrapper flattens the whole figure onto one plane first (that's
+   the "piece of paper"); rotating the inner element turns his actual 3D parts.
+   The angle is kept SMALL (~22deg) on purpose: flat CSS planes have no
+   silhouette near profile, so he stays close to front-facing (where every
+   part shows its full depth and he reads solid) and just angles slightly
+   toward his travel direction while the legs gait and the outer wrapper
+   travels + fades. He must FACE the way he MOVES or he moonwalks: OUT travels
+   left (translateX 0→-150%) so he angles -22deg (facing left); IN travels
+   right (translateX -150%→0) so he angles +22deg (facing right). Both end
+   squared-up at rotateY(0) so he STOPS facing forward. Declared after
+   .chef3d-gait so the body turn wins the `animation` on .chef3d while the
+   legs/arms keep gaiting via the descendant selectors. */
+@keyframes chef3d-swap-turn-out {
+  0%   { transform: rotateX(-6deg) rotateY(0deg) translateY(0); }
+  30%  { transform: rotateX(-6deg) rotateY(-22deg) translateY(calc(-2 * var(--u))); }
+  60%  { transform: rotateX(-6deg) rotateY(-16deg) translateY(0); }
+  100% { transform: rotateX(-6deg) rotateY(-22deg) translateY(calc(-2 * var(--u))); }
+}
+@keyframes chef3d-swap-turn-in {
+  0%   { transform: rotateX(-6deg) rotateY(22deg) translateY(calc(-2 * var(--u))); }
+  40%  { transform: rotateX(-6deg) rotateY(22deg) translateY(0); }
+  70%  { transform: rotateX(-6deg) rotateY(12deg) translateY(calc(-2 * var(--u))); }
+  100% { transform: rotateX(-6deg) rotateY(0deg) translateY(0); }
+}
+.chef3d-swap-out { animation: chef3d-swap-turn-out 0.72s ease-in-out both; }
+.chef3d-swap-in { animation: chef3d-swap-turn-in 0.72s ease-in-out both; }
+
+/* During a swap keep him CENTERED in the stage (only hide the bubble) so he
+   doesn't jump to the walk-stage's left edge as he lands. */
+.chef3d-swap-stage .chef3d-bubble { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chef-swap-3d-out, .chef-swap-3d-in, .chef-swap-2d-out, .chef-swap-2d-in {
+    animation: none !important;
+  }
+}
+[data-motion="reduced"] .chef-swap-3d-out,
+[data-motion="reduced"] .chef-swap-3d-in,
+[data-motion="reduced"] .chef-swap-2d-out,
+[data-motion="reduced"] .chef-swap-2d-in {
   animation: none !important;
 }

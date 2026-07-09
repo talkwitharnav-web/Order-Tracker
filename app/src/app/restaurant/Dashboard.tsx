@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, FormEvent, FC } from "react";
 import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { ChefSprite } from "@/components/ui/ChefSprite";
+import { ChefMascot } from "@/components/ui/ChefMascot";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalActions } from "@/components/ui/Modal";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
@@ -16,6 +16,8 @@ import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
 import { fetchJson } from "@/lib/api-client";
 import { NAMING_STYLES, suggestNextOrderName, type NamingStyle } from "@/lib/order-naming";
 import { useDropdownReveal } from "@/lib/useDropdownReveal";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { useSideBySideFit, useAutoFitText, useUiSelfCheck } from "@/lib/ui-awareness";
 
 export type OrderStatus = ApiOrderStatus;
 export type Order = {
@@ -73,6 +75,9 @@ const Nav: FC<{
   restaurantName: string;
 }> = ({ activeTab, setActiveTab, onLogout, restaurantName }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Guarantees a hover tooltip (and dev logging) whenever the kitchen name is
+  // too long for the fixed-width sidebar and gets truncated.
+  const { ref: kitchenNameRef } = useAutoFitText<HTMLHeadingElement>(restaurantName);
   const { shouldRender: showMobileMenu, animationClass: mobileMenuAnimationClass } = useDropdownReveal(
     mobileOpen,
     "inflow-reveal",
@@ -138,6 +143,7 @@ const Nav: FC<{
       <div className="hidden md:flex w-60 shrink-0 sticky top-0 h-screen overflow-y-auto bg-[var(--color-surface-1)] border-r border-[var(--color-border)] flex-col p-4">
         <div className="flex flex-col items-start gap-1 w-full overflow-hidden px-2 mb-6">
           <h2
+            ref={kitchenNameRef}
             className="font-display text-xl font-bold tracking-tight text-[var(--color-text-primary)] truncate w-full"
             title={restaurantName}
           >
@@ -181,6 +187,56 @@ const OrderCard: FC<{
   </Card>
 );
 
+/**
+ * A single row in the Home list. Self-aware layout: instead of a fixed
+ * `sm:flex-row` breakpoint, it measures whether the order name and the
+ * controls (stepper + delete) actually fit side by side and only then lays
+ * them out in a row — otherwise it stacks them, so a long name is never
+ * crammed against the buttons regardless of screen width. The name keeps
+ * `truncate` (single-line) so its intrinsic width stays measurable and so an
+ * extreme name still can't blow out the row when stacked.
+ */
+const HomeOrderRow: FC<{
+  order: Order;
+  exiting: boolean;
+  justUpdated: boolean;
+  onAdvance: (id: number, status: OrderStatus) => void;
+  onDeleteOrder: (id: number, skipConfirm: boolean) => void;
+}> = ({ order, exiting, justUpdated, onAdvance, onDeleteOrder }) => {
+  const { containerRef, aRef, bRef, fits } = useSideBySideFit<HTMLDivElement, HTMLSpanElement, HTMLDivElement>(16);
+  return (
+    <div
+      ref={containerRef}
+      className={`bg-[var(--color-surface-2)] p-3 sm:p-4 rounded-[var(--radius-sm)] flex gap-2 sm:gap-3 transition-all duration-200 card-elevated ${
+        fits ? "flex-row items-center justify-between" : "flex-col"
+      } ${exiting ? "animate-order-exit" : "animate-order-enter"} ${
+        justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""
+      }`}
+    >
+      <span
+        ref={aRef}
+        className="font-bold text-base sm:text-lg text-[var(--color-text-primary)] truncate min-w-0"
+        title={order.order_number}
+      >
+        #{order.order_number}
+      </span>
+      <div ref={bRef} className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex-1 min-w-0">
+          <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+        </div>
+        <button
+          onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
+          title="Hold Shift to skip the confirmation"
+          aria-label={`Delete order ${order.order_number}`}
+          className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1.5 sm:p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
+        >
+          <TrashIcon className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const HomeTab: FC<{
   orders: Order[];
   recentlyUpdatedId: number | null;
@@ -199,9 +255,14 @@ const HomeTab: FC<{
   const [namingStyle, setNamingStyle] = useState<NamingStyle>("freeform");
 
   useEffect(() => {
-    const stored = localStorage.getItem("orderNamingStyle");
-    if (stored && NAMING_STYLES.some((s) => s.value === stored)) {
-      setNamingStyle(stored as NamingStyle);
+    try {
+      const stored = localStorage.getItem("orderNamingStyle");
+      if (stored && NAMING_STYLES.some((s) => s.value === stored)) {
+        setNamingStyle(stored as NamingStyle);
+      }
+    } catch {
+      // localStorage can throw (private mode, sandboxed iframe, storage
+      // disabled) -- a persisted preference is a nicety, never worth a crash.
     }
   }, []);
 
@@ -220,7 +281,11 @@ const HomeTab: FC<{
 
   const handleStyleChange = (value: NamingStyle) => {
     setNamingStyle(value);
-    localStorage.setItem("orderNamingStyle", value);
+    try {
+      localStorage.setItem("orderNamingStyle", value);
+    } catch {
+      // Persisting the choice is best-effort; ignore storage failures.
+    }
   };
 
   const handleCreateOrder = async (e: FormEvent) => {
@@ -320,48 +385,20 @@ const HomeTab: FC<{
         </div>
         <div className="space-y-3 max-h-[60vh] overflow-y-auto">
           {filteredOrders.map((order) => (
-            <div
+            <HomeOrderRow
               key={order.id}
-              className={`bg-[var(--color-surface-2)] p-3 sm:p-4 rounded-[var(--radius-sm)] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:justify-between transition-all duration-200 card-elevated ${
-                exitingIds.has(order.id) ? "animate-order-exit" : "animate-order-enter"
-              } ${recentlyUpdatedId === order.id ? "ring-2 ring-[var(--color-brand)]" : ""}`}
-            >
-              <span
-                className="font-bold text-base sm:text-lg text-[var(--color-text-primary)] truncate min-w-0"
-                title={order.order_number}
-              >
-                #{order.order_number}
-              </span>
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                <div className="flex-1 min-w-0">
-                  <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
-                </div>
-                <button
-                  onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
-                  title="Hold Shift to skip the confirmation"
-                  aria-label={`Delete order ${order.order_number}`}
-                  className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1.5 sm:p-2 rounded-[var(--radius-full)] transition-colors shrink-0"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+              order={order}
+              exiting={exitingIds.has(order.id)}
+              justUpdated={recentlyUpdatedId === order.id}
+              onAdvance={onAdvance}
+              onDeleteOrder={onDeleteOrder}
+            />
           ))}
           {orders.length === 0 && (
-            <div className="flex flex-col items-center py-8 gap-2">
-              {/* Hidden below md: -- see ChefSprite's own file for why (the
-                  speech bubble's counter-scale has repeatedly rendered
-                  oversized on narrow viewports). A plain wrapper div carries
-                  the hidden/md:block toggle rather than ChefSprite's own
-                  className, matching the pattern already used in
-                  KitchenPortalLanding/SessionWelcomeBack -- ChefSprite's
-                  .chef-sprite-wrap sets display:flex internally, which
-                  collides in specificity with Tailwind's .hidden/.md\:block
-                  when applied to the same element. */}
-              <div className="hidden md:block">
-                <ChefSprite size={80} lines={["Quiet kitchen tonight...", "Add your first order above!", "I'll just be here... waiting...", "The stove is cold, boss."]} />
-              </div>
-              <p className="md:hidden text-sm text-[var(--color-text-muted)]">No orders yet — add your first one above!</p>
+            <div className="flex flex-col items-center py-8">
+              {/* Container-aware mascot (2D or 3D per user pref) fits itself at
+                  any viewport — no hide-on-mobile band-aid needed. */}
+              <ChefMascot size={88} lines={["Quiet kitchen tonight...", "Add your first order above!", "I'll just be here... waiting...", "The stove is cold, boss."]} />
             </div>
           )}
           {orders.length > 0 && filteredOrders.length === 0 && (
@@ -459,13 +496,9 @@ const OrderGrid: FC<{
 }> = ({ orders, recentlyUpdatedId, exitingIds, onAdvance, onDelete }) => {
   if (orders.length === 0) {
     return (
-      <div className="flex flex-col items-center py-8 gap-2">
-        {/* Hidden below md: -- see ChefSprite's own file and the identical
-            comment on the Home tab's empty state above for why. */}
-        <div className="hidden md:block">
-          <ChefSprite size={70} lines={["All caught up!", "Nothing on the stove right now.", "No orders ready for pickup yet.", "Kitchen's taking a breather."]} />
-        </div>
-        <p className="md:hidden text-sm text-[var(--color-text-muted)]">All caught up — nothing here right now.</p>
+      <div className="flex flex-col items-center py-8">
+        {/* Container-aware mascot (2D or 3D per user pref) fits itself. */}
+        <ChefMascot size={84} lines={["All caught up!", "Nothing on the stove right now.", "No orders ready for pickup yet.", "Kitchen's taking a breather."]} />
       </div>
     );
   }
@@ -496,6 +529,9 @@ function KitchenDashboardContent({
   const [activeTab, setActiveTab] = useState<Tab>("Home");
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Dev-only: warns in the console if anything on the dashboard spills past
+  // the viewport (the usual cause of a stray horizontal scrollbar).
+  useUiSelfCheck();
   const [orderToDelete, setOrderToDelete] = useState<number | null>(null);
   const [recentlyUpdatedId, setRecentlyUpdatedId] = useState<number | null>(null);
   // Orders mid-slide-out-to-delete -- still rendered (with the exit
@@ -650,7 +686,7 @@ function KitchenDashboardContent({
       <main className="flex-grow p-4 sm:p-6 md:p-8 overflow-y-auto">
         <h1 className="font-display text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)] mb-6 shrink-0">{activeTab}</h1>
         <div key={activeTab} className="tab-content-enter">
-          {renderContent()}
+          <ErrorBoundary label={`dashboard:${activeTab}`}>{renderContent()}</ErrorBoundary>
         </div>
       </main>
 

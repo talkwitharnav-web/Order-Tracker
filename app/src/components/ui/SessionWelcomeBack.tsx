@@ -3,7 +3,7 @@
 import { FC } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { ChefSprite } from "@/components/ui/ChefSprite";
+import { ChefMascot } from "@/components/ui/ChefMascot";
 
 const GUARD_LINES = [
   "I guarded your session with my life!",
@@ -29,17 +29,11 @@ export const SessionWelcomeBack: FC<{
   <div className="min-h-dvh flex items-center justify-center p-4">
     <main className="w-full max-w-md mx-auto">
       <Card className="p-4 sm:p-10 text-center">
-        {/* See the identical comment in KitchenPortalLanding.tsx: an extra
-            plain wrapper div carries the hidden/sm:block toggle instead of
-            ChefSprite's own className, since its internal .chef-sprite-wrap
-            class sets display:flex in globals.css and collides in
-            specificity with Tailwind's .hidden/.sm\:block. */}
+        {/* One container-aware mascot (2D or 3D per the user's toggle); it
+            measures its box and fits, so no breakpoint twin-instance hack. */}
         <div className="flex justify-center mb-1 sm:mb-2">
-          <div className="sm:hidden">
-            <ChefSprite lines={GUARD_LINES} size={110} />
-          </div>
-          <div className="hidden sm:block">
-            <ChefSprite lines={GUARD_LINES} size={140} />
+          <div className="w-28 sm:w-36">
+            <ChefMascot lines={GUARD_LINES} size={140} />
           </div>
         </div>
         <h1 className="font-display text-2xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mt-1 sm:mt-2 mb-1 sm:mb-2">
