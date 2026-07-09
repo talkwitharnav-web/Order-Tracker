@@ -91,16 +91,18 @@ app/
     │   ├── restaurant/
     │   │   ├── Dashboard.tsx         # KitchenDashboard — responsive Nav, StatusStepper, naming-style dropdown, order slide animations
     │   │   ├── home/page.tsx, login/page.tsx, signup/page.tsx, restauranthome/page.tsx
-    │   ├── layout.tsx                # pre-hydration inline script applies theme/contrast/ui-size/motion/focus/cvd from localStorage
+    │   ├── layout.tsx                # pre-hydration inline script applies theme/contrast/ui-size/motion/focus/cvd/mascot from localStorage
     │   ├── page.tsx                  # gateway `/` — sprite+sidebar if admin session active, else login form
     │   └── globals.css               # all tokens + keyframes
     ├── components/ui/                # Button, Card, Input, Checkbox, StatusBadge, StatusStepper, Modal, Toast, PageHeader, AuthCard,
     │                                  # HealthPin, SessionWelcomeBack, ThemeToggle, AccessibilityMenu, ThemedTooltip, UiSizeToggle,
-    │                                  # SettingsToggles, RestaurantAutocomplete, ChefSprite, BackgroundArt, GatewaySidebar,
-    │                                  # KitchenPortalLanding, CopyableValue, StatusDurationCell, RestaurantFilterDropdown, StatusFilterDropdown
+    │                                  # SettingsToggles, RestaurantAutocomplete, ChefSprite, ChefSprite3D, ChefMascot, MascotStyleToggle,
+    │                                  # ErrorBoundary, BackgroundArt, GatewaySidebar, KitchenPortalLanding, CopyableValue,
+    │                                  # StatusDurationCell, RestaurantFilterDropdown, StatusFilterDropdown, FullscreenToggle
     └── lib/
         ├── db.ts, ws-hub.ts, order-status.ts, order-naming.ts, order-duration.ts
         ├── accessibility-prefs.ts, session.ts, auth.ts, rate-limit.ts, api-client.ts, validate.ts, logger.ts
+        ├── mascot-style.ts, ui-awareness.ts, useReservedTopRight.ts, useDropdownReveal.ts
 ```
 
 ## 8. WebSocket Architecture
@@ -159,6 +161,13 @@ See `MOBILE_MIGRATION_PLAN.md` for the authoritative next-steps list. Done and v
 - **`src/lib/ui-awareness.ts`** — shared "self-aware layout" toolkit. Pure helpers: `boxesIntersect`, `horizontalGap`, `isOverflowingX`, `clamp`, `toBox`. Dev-only `reportUiIssue(kind, detail)` (console.warn, silent in prod). Hooks: `useAutoFitText(text?)` → `{ ref, overflowing }` (sets a `title` tooltip when text is clipped); `useSideBySideFit(gap?)` → `{ containerRef, aRef, bRef, fits }` (decides row-vs-stack from INTRINSIC width `a.scrollWidth + b.offsetWidth + gap` vs `container.clientWidth` — measuring intrinsic, not live, widths is what stops stack↔unstack oscillation); `useUiSelfCheck(enabled=dev)` (dev-only scan, gated on real `documentElement.scrollWidth` overflow, skips `[aria-hidden]` subtrees). All SSR-safe, ResizeObserver-feature-detected, try/catch-wrapped. Same measure-your-container pattern as `ChefSprite`/`useReservedTopRight`.
 - **Wiring**: `Dashboard.tsx` — Home order rows use `useSideBySideFit` (a long order name stacks by content even on a wide screen; short stays inline), the sidebar kitchen name uses `useAutoFitText`, and `KitchenDashboardContent` calls `useUiSelfCheck()`. `HomeOrderRow` is now its own component (hooks can't run inside a `.map`).
 - **Error boundaries**: `src/app/error.tsx` (route-level, Next App Router convention — catches render errors in any route segment, "Try again"/"Go home"), `src/app/global-error.tsx` (root-layout failure, renders its own `<html>/<body>`, inline-styled), `src/components/ui/ErrorBoundary.tsx` (reusable class boundary; wraps the dashboard tab content via `label="dashboard:<tab>"`). Boundaries catch render/lifecycle only — event-handler errors still use the API layer's try/catch. `localStorage` access in the naming-style pref is try/catch-wrapped.
+
+## 15. Chef mascot: 2D/3D style toggle (2026-07-09)
+- **`src/lib/mascot-style.ts`** — per-device style preference (`MascotStyle = "2d" | "3d"`, default `"3d"`), same `data-mascot` attribute + localStorage(`mascotStyle`) pattern as theme/contrast/ui-size, applied pre-hydration by `layout.tsx`'s inline script so there's no flash of the wrong style. `getMascotStyle()`/`setMascotStyle()` read/write it; `useMascotStyle()` is the reactive hook. Also hosts a small module-level presence registry — `registerMascot()`/`useHasMascot()` — so `SettingsToggles` only renders the 2D/3D toggle button when a `ChefMascot` is actually mounted on the page (nothing to switch otherwise).
+- **`src/components/ui/ChefSprite3D.tsx`** — a pure-CSS 3D chef (no WebGL/canvas), built from layered `<div>`s inside a `perspective`/`transform-style: preserve-3d` stage (`.chef3d-*` classes in `globals.css`). Same character design as the 2D `ChefSprite` (toque, round head, apron, bow tie). 11 whole-body idle animations only — no arm/hand-only idles, matching the 2D sprite's own rule (see CLAUDE.md's ChefSprite arm-animation lesson). Supports `walk` (paces side-to-side within its container, legs/arms in contralateral gait) and cursor-follow head tracking after a click.
+- **`src/components/ui/ChefMascot.tsx`** — the drop-in wrapper every call site actually renders (replaces bare `ChefSprite` usage everywhere: `page.tsx`, `Dashboard.tsx`, `KitchenPortalLanding.tsx`, `SessionWelcomeBack.tsx`). Renders `ChefSprite` or `ChefSprite3D` per the current preference, and — ONLY when the preference genuinely changes via the toggle (never on mount/remount) — plays a themed swap: the outgoing chef walks/turns off, the incoming one arrives, then settles. Reduced-motion swaps instantly with no animation.
+- **`src/components/ui/MascotStyleToggle.tsx`** — the toolbar button (Box/Square icon from lucide-react) that flips the preference; wired into `SettingsToggles.tsx` gated behind `useHasMascot()`.
+- **Gotcha**: `ChefSprite3D`'s CSS (`.chef3d-*`, ~20 classes + 11 keyframes) is substantial and lives entirely in `globals.css` — if it's ever missing after a merge/file-sync, the 3D sprite mounts but renders as an unstyled stack of divs, not a crash. Verify with `grep -c chef3d app/src/app/globals.css` (should be 100+) after any file-sync/merge involving the mascot files.
 
 ## Update discipline for this file
 Fold new facts into the relevant existing section above rather than appending a new numbered entry — this file was condensed once already because unbounded chronological sections become unreadable and mostly redundant with `CLAUDE.md`. Keep this file scoped to "what's true about the repo right now" (schema, routes, mechanisms) — narrative/judgment-calls/lessons belong in `CLAUDE.md` instead.
