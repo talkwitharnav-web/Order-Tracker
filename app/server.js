@@ -92,6 +92,57 @@ const PUBLIC_ALLOWED_PREFIXES = [
   "/favicon.ico",
 ];
 
+// Themed 404 body for the pre-Next host gate above -- this response never
+// touches Next's router (that's the whole point of the gate: don't even let
+// a LAN/public visitor probe whether an admin-only path exists), so it can't
+// reuse React components. Plain self-contained HTML/CSS instead, matching
+// globals.css's warm-bistro tokens by hand (light + dark via
+// prefers-color-scheme, since there's no client-side theme toggle here).
+// Kitchen/Customer buttons mirror src/app/not-found.tsx's LAN branch -- keep
+// both in sync if the copy/links ever change.
+const RESTRICTED_HOST_404_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found</title>
+<style>
+  :root { --surface-0: #faf6ee; --surface-1: #ffffff; --border: #e8dcc6; --border-strong: #d8c6a3; --text-primary: #2b2320; --text-secondary: #6b5c4d; --brand: #c1602f; --brand-hover: #a34e23; }
+  @media (prefers-color-scheme: dark) {
+    :root { --surface-0: #211a15; --surface-1: #2b221c; --border: #3d3128; --border-strong: #4f4034; --text-primary: #f5ecdf; --text-secondary: #c9b8a4; --brand: #e07a45; --brand-hover: #ec9463; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 1rem; background: var(--surface-0); color: var(--text-primary); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { width: 100%; max-width: 26rem; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 0.75rem; padding: 2.5rem 1.75rem; text-align: center; }
+  .hat { font-size: 3rem; line-height: 1; margin-bottom: 0.5rem; }
+  h1 { font-size: 1.75rem; font-weight: 600; margin: 0.5rem 0 0.5rem; }
+  p { color: var(--text-secondary); font-size: 0.95rem; margin: 0 0 1.5rem; }
+  .buttons { display: flex; flex-direction: column; gap: 0.75rem; }
+  @media (min-width: 480px) { .buttons { flex-direction: row; } }
+  a.btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.95rem; text-decoration: none; transition: background-color 0.15s ease; }
+  a.btn-primary { background: var(--brand); color: #fff; }
+  a.btn-primary:hover { background: var(--brand-hover); }
+  a.btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border-strong); }
+  a.btn-secondary:hover { background: var(--border); }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div class="hat" aria-hidden="true">&#127859;</div>
+    <h1>Page not found</h1>
+    <p>That page doesn't exist, or moved somewhere else.</p>
+    <div class="buttons">
+      <a class="btn btn-primary" href="/restaurant/home">Kitchen</a>
+      <a class="btn btn-secondary" href="/customer">Track an Order</a>
+    </div>
+  </div>
+</main>
+</body>
+</html>
+`;
+
 function isRestrictedHost(hostHeader) {
   if (!hostHeader) return false;
   const hostname = hostHeader.split(":")[0].toLowerCase();
@@ -204,8 +255,8 @@ app.prepare().then(() => {
 
     if (isRestrictedHost(req.headers.host) && !isPubliclyAllowedPath(parsedUrl.pathname)) {
       res.statusCode = 404;
-      res.setHeader("Content-Type", "text/plain");
-      res.end("404 Not Found");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.end(RESTRICTED_HOST_404_HTML);
       return;
     }
 
