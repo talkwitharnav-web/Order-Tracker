@@ -13,6 +13,8 @@ Narrative decisions, debugging lessons, and machine-specific guardrails for futu
 - Never use `git checkout -- <file>` to undo one edit in a dirty file; it can erase unrelated uncommitted work.
 - Ask before restarting/stopping the project server when a user session may be active. Docker may be auto-started if stopped, but never force-restart an already-running instance.
 - Windows host, PowerShell/Git Bash hybrid. Prefer forward slashes in Node/script paths.
+- **When the user says a new admin page must NOT be nested under/reachable from another admin page's own header, that means no cross-link at all in either direction** — not just "give it its own route file." `/admin/audit` was built as its own page but a link to it was still added inside `/admin/db`'s header, which the user explicitly rejected on 2026-07-10 as ignoring their instruction. `/admin/db`, `/admin/staff`, and `/admin/audit` are independent siblings reachable only from the gateway (`/`) sidebar; do not add a button linking one admin page to another without being asked.
+- A `db.ts` schema/migration change needs a full `node server.js` restart before it takes effect — `initDb()` is memoized per-process, and Turbopack route HMR does not re-run it. Ask before restarting per the rule above, and don't run manual `docker exec psql` DDL concurrently with a server that's mid-restart-and-migrating; a genuine race between the two produced a confusing transient "column does not exist" error on 2026-07-10 that looked like a broken migration but wasn't.
 
 ## The User and Working Style
 
@@ -82,6 +84,8 @@ Technical mechanics are in `SYSTEM_MEMORY.md`; these are the settled judgment ca
 - **Sessions:** valid remembered kitchens resume directly to the dashboard. The redundant Welcome Back screen and `?fresh=1` bypass were removed.
 - **Error handling:** route/root/dashboard boundaries catch render failures; async handlers still need explicit try/catch.
 - **Security:** settled audits are summarized in `SYSTEM_MEMORY.md` and evidenced in `SECURITY_ATTACK_LOG.md`. Do not reopen fixed/rejected findings without a new reason.
+- **Audit log:** must outlive the order/restaurant it describes. `order_status_events.order_id` was originally `ON DELETE CASCADE`, which meant an admin hard-deleting an order silently destroyed its own audit trail — the exact opposite of what an audit trail is for. Fixed 2026-07-10 to `ON DELETE SET NULL` plus denormalized `restaurant_name`/`order_number` written at insert time, so the log stays readable even after the row it describes is gone. Do not reintroduce a cascading FK here. `/admin/audit` is its own top-level page (not nested in `/admin/db`) with a separate `PURGE AUDIT` confirmation phrase, distinct from `/admin/db`'s `PURGE DATABASE` — purging audit history must never be reachable via the same phrase/modal as purging live data.
+- **PinPad is PIN-only**, no employee name-picker — removed 2026-07-10 as pure friction on a shared kitchen tablet mid-rush. Do not re-add a name-selection step; if per-employee PIN collisions ever become a real problem, the fix is tightening `pinCollidesWithAnotherEmployee`, not bringing back the picker.
 
 ## Data Safety and Recovery
 

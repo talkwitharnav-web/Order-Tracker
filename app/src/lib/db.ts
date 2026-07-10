@@ -306,10 +306,21 @@ async function runInitDb() {
   // nullable: God Mode admin overrides and any transition made before an
   // employee PIN is supplied still record an event, just without attribution,
   // rather than silently skipping the audit row entirely.
+  //
+  // order_id is ON DELETE SET NULL (not CASCADE) and restaurant_name/
+  // order_number are denormalized onto this row -- an audit trail that
+  // vanishes the moment the order it describes is gone is useless for its
+  // actual purpose (an admin hard-deleting an order is exactly the kind of
+  // action someone would later want to audit). Kitchen-side order delete is
+  // already soft (orders.deleted_at), so only an admin's real DELETE FROM
+  // orders can ever null this out, and even then the event row -- and the
+  // restaurant/order name it happened under -- survives.
   await db.query(`
     CREATE TABLE IF NOT EXISTS order_status_events (
       id SERIAL PRIMARY KEY,
-      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+      restaurant_name TEXT NOT NULL,
+      order_number TEXT NOT NULL,
       from_status TEXT,
       to_status TEXT NOT NULL,
       employee_id INTEGER REFERENCES restaurant_employees(id) ON DELETE SET NULL,
@@ -320,5 +331,51 @@ async function runInitDb() {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_order_status_events_order_id
     ON order_status_events (order_id);
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_order_status_events_restaurant_name
+    ON order_status_events (LOWER(restaurant_name));
+  `);
+
+  // Migrate any pre-existing installs: the table may already exist from
+  // before restaurant_name/order_number/nullable-order_id existed (this
+  // audit page and its columns are new). ADD COLUMN IF NOT EXISTS is a
+  // no-op on a fresh CREATE TABLE above, and backfills existing rows from
+  // their still-live order (there's nothing to backfill for a row whose
+  // order is already gone under the OLD cascade-delete behavior -- those
+  // were already lost before this fix, which is exactly the bug being
+  // fixed going forward).
+  await db.query(`ALTER TABLE order_status_events ADD COLUMN IF NOT EXISTS restaurant_name TEXT;`);
+  await db.query(`ALTER TABLE order_status_events ADD COLUMN IF NOT EXISTS order_number TEXT;`);
+  await db.query(`
+    UPDATE order_status_events ose SET
+      restaurant_name = o.restaurant_name,
+      order_number = o.order_number
+    FROM orders o
+    WHERE ose.order_id = o.id AND ose.restaurant_name IS NULL;
+  `);
+  // Any row still NULL at this point belongs to an order this install never
+  // had a live row for (shouldn't normally happen going forward, but keeps
+  // the NOT NULL constraint below from failing on odd historical data).
+  await db.query(`DELETE FROM order_status_events WHERE restaurant_name IS NULL OR order_number IS NULL;`);
+  await db.query(`ALTER TABLE order_status_events ALTER COLUMN restaurant_name SET NOT NULL;`);
+  await db.query(`ALTER TABLE order_status_events ALTER COLUMN order_number SET NOT NULL;`);
+  // Drop the old CASCADE constraint and recreate as SET NULL, and make
+  // order_id itself nullable -- both required for a hard delete to preserve
+  // this row instead of destroying it.
+  await db.query(`ALTER TABLE order_status_events ALTER COLUMN order_id DROP NOT NULL;`);
+  await db.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_name = 'order_status_events' AND constraint_name = 'order_status_events_order_id_fkey'
+      ) THEN
+        ALTER TABLE order_status_events DROP CONSTRAINT order_status_events_order_id_fkey;
+      END IF;
+      ALTER TABLE order_status_events
+        ADD CONSTRAINT order_status_events_order_id_fkey
+        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+    END $$;
   `);
 }

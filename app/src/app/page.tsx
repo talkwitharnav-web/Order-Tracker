@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Database } from "lucide-react";
+import { Lock, Database, ScrollText } from "lucide-react";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -65,14 +65,26 @@ export default function GatewayCommandCenter() {
 
   if (checkingSession) return null;
 
+  // Both admin-only sidebar links -- Audit Log is a sibling of Access DB
+  // here, not nested under /admin/db, since it's its own independent view
+  // (see admin/audit/page.tsx), not a sub-feature of the DB console.
   const navExtra = hasAdminSession ? (
-    <a
-      href="/admin/db"
-      className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] transition-colors"
-    >
-      <Database size={18} />
-      Access DB
-    </a>
+    <>
+      <a
+        href="/admin/db"
+        className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] transition-colors"
+      >
+        <Database size={18} />
+        Access DB
+      </a>
+      <a
+        href="/admin/audit"
+        className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] transition-colors"
+      >
+        <ScrollText size={18} />
+        Audit Log
+      </a>
+    </>
   ) : null;
 
   const sidebarActions = hasAdminSession ? (
@@ -114,6 +126,12 @@ export default function GatewayCommandCenter() {
                 className="w-full text-center px-4 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-[var(--color-on-brand)] transition-colors"
               >
                 Access DB
+              </a>
+              <a
+                href="/admin/audit"
+                className="w-full text-center px-4 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold border border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] transition-colors"
+              >
+                Audit Log
               </a>
             </div>
           </div>

@@ -26,11 +26,13 @@ Current technical truth for the Restaurant Order Tracker. Narrative history and 
 
 | Area | Route | Behavior |
 |---|---|---|
-| Admin | `/`, `/admin/db`, `/admin/staff` | Localhost-only gateway, DB console, and kitchen staff/roles management |
+| Admin | `/`, `/admin/db`, `/admin/staff`, `/admin/audit` | Localhost-only gateway, DB console, kitchen staff/roles management, and cross-kitchen audit log |
 | Kitchen | `/restaurant/*` | Authenticated dashboard; polls orders every 5 seconds |
 | Customer | `/customer` | Public lookup; live WebSocket updates |
 
-Non-localhost hosts expose only customer/kitchen/API/static prefixes; `/`, `/admin/db`, and `/admin/staff` return 404. This is public-routing rehearsal, not full internet deployment.
+Non-localhost hosts expose only customer/kitchen/API/static prefixes; `/`, `/admin/db`, `/admin/staff`, and `/admin/audit` return 404. This is public-routing rehearsal, not full internet deployment.
+
+`/admin/db`, `/admin/staff`, and `/admin/audit` are independent SIBLINGS, not nested under one another — each reachable only from the gateway (`/`) sidebar's admin-only links (Access DB / Staff link inside admin/db's own header / Audit Log), never from within another admin page's header. Do not add cross-links between them beyond that; a prior attempt to link Audit Log from inside admin/db's header was explicitly rejected by the user.
 
 ## Data Model and Order Rules
 
@@ -67,6 +69,11 @@ Per-kitchen employee roster and append-only status-change audit trail; see "Empl
 - Customer pickup sets `acknowledged_at`. Complete duration stops there or at the kitchen’s configured cap.
 - Kitchen cards show total age; Received/Preparing views are oldest-first; navigation shows counts.
 
+### Priority Ordering and Overdue Alerts
+
+- `lib/order-priority.ts` `sortByPriority()` is the single automatic ordering applied to Home (mixed statuses) and to the single-status Received/Preparing/Complete tabs alike — NOT a user-chosen sort/filter, always on. Ranking is **Preparing first, then Received, then Complete**, each group oldest-in-its-current-status first. This is deliberately the OPPOSITE of `order-status.ts`'s `ORDERED_STATUS_KEYS` (Received→Preparing→Complete lifecycle order used by `StatusStepper`) — do not reuse that array for priority ranking; a long-Preparing order must always outrank a freshly-Received one regardless of raw age.
+- `isOrderOverdue()`/`OVERDUE_THRESHOLD_MINUTES` flag an order once it has spent longer than its current status's threshold: 8 min Received, 20 min Preparing, 10 min Complete (Complete's threshold is about confirming customer pickup/accessibility, not prep speed). Overdue orders get a persistent red-ring/tinted card (`--color-danger`) plus a warning-orange (`--color-warning`, a dedicated token added across every theme/contrast/CVD variant in `globals.css`) one-time toast per order+status crossing the threshold.
+
 ## Customer Tracking and Handoff
 
 - Public lookup requires restaurant + order label and is rate-limited.
@@ -96,13 +103,15 @@ Per-kitchen employee roster and append-only status-change audit trail; see "Empl
 
 - `restaurant_employees` (id, restaurant_id, name, `account_type` `manager|employee`, nullable `role_id` FK, `pin_length` 4|6, bcrypt `pin_hash`, `deleted_at`) is a per-kitchen roster, separate from the restaurant's own login. No employee session/cookie exists. `account_type` is the fixed value that controls Staff-tab/admin-staff access; `role_id` is a kitchen-defined display label (see `restaurant_roles`) with no permission effect of its own — permissions-per-role are explicitly future work, not built yet.
 - `restaurant_roles` (id, restaurant_id, name) — free-text labels ("Chef", "Cashier", ...) a kitchen (or admin) can create/rename/delete and assign to any employee regardless of `account_type`. Deleting a role in-use sets that employee's `role_id` to NULL (not an error).
-- A PIN is verified fresh on every attributable order action via `POST .../employees/verify-pin`, not established as a session — matches real POS terminals attributing frequent per-order actions on a shared device without a per-employee login/logout cycle. Each employee's PIN length (4 or 6 digits) is fixed at creation/reset time and known server-side, so the client-side `PinPad` renders exactly that many digit slots once an employee is selected — no guessing/debounce needed.
+- A PIN is verified fresh on every attributable order action via `POST .../employees/verify-pin`, not established as a session — matches real POS terminals attributing frequent per-order actions on a shared device without a per-employee login/logout cycle.
+- **`PinPad` is PIN-only: there is no name/employee picker.** Tapping your own name from a list first was removed as pure friction on a shared kitchen tablet mid-rush. The pad shows only a numeric keypad plus one "Manager" toggle button that switches the pad between expecting/auto-submitting at 4 vs 6 digits — a display-length hint only, NOT a server-side filter (a forgotten toggle press just means the pad stays 4-digit and won't match a 6-digit manager PIN; it is never rejected as "wrong mode"). The server resolves WHOSE PIN was typed by checking it against every active same-length employee in that kitchen (`lib/employee-auth.ts` `findEmployeeByPinOnly`), not by trusting a client-asserted `employeeId`. This only stays unambiguous because employee create/edit rejects a PIN that collides with another active employee's same-length PIN in the same kitchen (`pinCollidesWithAnotherEmployee`, 409 on collision). `verifyEmployeeForAction`/`verify-pin` still accept an optional `employeeId` for backward compatibility, but no current caller sends one.
 - **Managers must have a 6-digit PIN; employees may use 4.** `lib/employee-auth.ts` `requiredPinLength(accountType)` is the single source of truth — PIN length is DERIVED from `account_type` server-side on every create/edit, never accepted from the client, since a manager PIN also unlocks the Staff tab/admin staff access and warrants more entropy. Promoting an employee to manager without also supplying a new 6-digit PIN in the same request is rejected (400), so an account can never end up as `account_type = 'manager'` with a stale 4-digit PIN. One pre-existing account (kitchen "asdf", employee "John Doe") predates this fix and still has a 4-digit manager PIN — left as-is per user direction; do not "fix" it without being asked.
-- `POST /api/orders` and `PUT /api/orders/[id]` both accept optional `employeeId`+`pin`, independently re-verified server-side via shared `lib/employee-auth.ts` (never trusts a client-asserted id). Enforcement is conditional: a kitchen with zero employees configured can still operate fully unattributed; the moment it has ≥1 employee, `employeeId`+`pin` become MANDATORY on both routes (missing them is a 400), not just optional-forever. Admin (God Mode) callers bypass this entirely — admin never supplies employeeId/pin, and is treated as a distinct already-logged path.
-- Every order creation AND every forward status transition inserts one row into append-only `order_status_events` (order_id, from_status nullable, to_status, employee_id nullable, employee_name denormalized, created_at) in the same DB transaction as the `orders` INSERT/UPDATE — this is the actual "who added it, who moved it, how fast" audit trail; `orders`' own timestamp columns only ever hold current/first-entry state, not a full history. A creation event has `from_status = NULL`.
+- `POST /api/orders` and `PUT /api/orders/[id]` both accept optional `pin`+`pinLength` (4|6, from the client's Manager toggle state), independently re-verified/resolved server-side via shared `lib/employee-auth.ts` (never trusts a client-asserted id). Enforcement is conditional: a kitchen with zero employees configured can still operate fully unattributed; the moment it has ≥1 employee, `pin` becomes MANDATORY on both routes (missing it is a 400), not just optional-forever. Admin (God Mode) callers bypass this entirely — admin never supplies pin, and is treated as a distinct already-logged path.
+- Every order creation AND every forward status transition inserts one row into append-only `order_status_events` (id, nullable `order_id` FK **`ON DELETE SET NULL`**, denormalized `restaurant_name`+`order_number` NOT NULL, `from_status` nullable, `to_status`, `employee_id` nullable, `employee_name` denormalized, `created_at`) in the same DB transaction as the `orders` INSERT/UPDATE — this is the actual "who added it, who moved it, how fast" audit trail; `orders`' own timestamp columns only ever hold current/first-entry state, not a full history. A creation event has `from_status = NULL`. **`order_id` is deliberately `SET NULL`, not `CASCADE`** — an admin hard-deleting an order (or deleting a whole restaurant) must NOT destroy that order's audit history; `restaurant_name`/`order_number` are written directly onto each event row at insert time specifically so the log stays self-contained and readable even after the order/restaurant it describes is gone. Kitchen-side order delete is already soft (`orders.deleted_at`), so this only ever matters for a real admin delete. The status-change **Undo** path does not currently insert an audit event — a known gap, not yet fixed.
 - Same timing-safe dummy-hash precedent as restaurant login (`SECURITY_ATTACK_LOG.md` F4) applied to PIN checks. PIN verification is rate-limited per-restaurant+IP (15/min) — tighter than login, since a PIN has much less entropy than a password.
-- Kitchen dashboard: clicking an order's advance button or Add Order opens `PinPad` (numeric keypad, not a text input) if the kitchen has any employees configured. Employee roster/role management (dashboard `StaffTab`) lives in its own nav tab (not Home), gated behind unlocking with a manager's own PIN — there's no employee session to check `account_type` against server-side beyond the per-request PIN check, so the unlock step exists purely client-side as friction, while every actual mutation is still re-authorized by `requireRestaurantOrAdmin` regardless.
+- Kitchen dashboard: clicking an order's advance button or Add Order opens `PinPad` (numeric keypad, not a text input) if the kitchen has any employees configured. Employee roster/role management (dashboard `StaffTab`) lives in its own nav tab (not Home), gated behind unlocking with a manager's own PIN — the resolved identity's `accountType` is checked client-side (`=== "manager"`) before granting the unlock, since `PinPad`'s Manager toggle only affects expected PIN length, not who the server checks against; every actual mutation is still re-authorized by `requireRestaurantOrAdmin` regardless of this client-side gate.
 - Admin-side staff management lives at `/admin/staff` (linked from `/admin/db`'s header) — search a kitchen, view its profile grouped into Managers/Roles/Employees, and add/edit (name, account_type, role, PIN+length)/remove any account. This is the bootstrap path for a kitchen's very first manager, since the kitchen-side Staff tab's manager-PIN-unlock is otherwise a chicken-and-egg lock-out for a kitchen with no employees yet.
+- **`/admin/audit`** reads `order_status_events` (see above) — chronological "who did what" across every kitchen, admin-only, its own top-level page reachable ONLY from the gateway (`/`) sidebar's Audit Log link, never from inside `/admin/db`. Default view is unfiltered; typing a kitchen name into the search narrows via `GET /api/dev/audit?restaurantName=`, which then reveals a second employee-name filter scoped to people seen in that kitchen's events (`employeeName` requires `restaurantName` too — a name is only unique per-restaurant). `DELETE /api/dev/audit` ("Purge Audit Log") wipes every event and requires typing the exact phrase `PURGE AUDIT` (client + `{ confirmation: "PURGE AUDIT" }`) — deliberately a DIFFERENT phrase from `/admin/db`'s `PURGE DATABASE`, and this purge only clears audit history, never restaurants/orders themselves.
 - `PinPad` supports real keyboard input (digits, Backspace, Enter), not just clicks — a `document`-level `keydown` listener, matching `Modal`'s own Escape/Tab handling. `submit()` is guarded by a `useRef` (not the `verifying` state) to stay synchronous against React StrictMode's dev-only double-effect-invocation, which could otherwise let two listener instances both pass a stale `verifying === false` check and fire duplicate `verify-pin` requests for one keypress.
 - Both PINs and the restaurant's own password are bcrypt-hashed before storage (never stored raw) — `pin_hash`/`password` columns only, same as every other credential in this app (see `raw_password` being the one documented, user-approved local-dev exception, which does NOT apply to PINs).
 
@@ -130,9 +139,10 @@ Per-kitchen employee roster and append-only status-change audit trail; see "Empl
 
 ## WebSockets
 
-- Registry: `globalThis.__orderTrackerWsClients`, entries shaped `{ ws, restaurantName }`.
-- Every `/ws` connection declares `?restaurant=`; broadcasts without `restaurant_name` are dropped.
-- Events: `order_updated`, `order_deleted`. Customer clients refetch REST rather than trusting payload status.
+- Registry: `globalThis.__orderTrackerWsClients`, entries shaped `{ ws, restaurantName }` — restaurant-scoped, unauthenticated (customer/kitchen tracker).
+- Every non-admin `/ws` connection declares `?restaurant=`; broadcasts without `restaurant_name` are dropped.
+- **Separate admin channel**: `?admin=1` instead of `?restaurant=`, authenticated by verifying the `admin_session` cookie server-side in `server.js`'s upgrade handler (a minimal reimplementation of `lib/session.ts`'s HMAC verify, since this CJS entrypoint can't `require()` that TS module directly — keep both in lockstep by hand). Registers into a separate `globalThis.__orderTrackerAdminWsClients` set (see `lib/ws-hub.ts` `registerAdminClient`/`adminClients`). This is the ONE socket allowed to see every restaurant's order events at once — `/admin/db` uses it to live-update its table (create/status-change/delete) without polling, reconnecting with the same exponential backoff as the customer tracker's socket.
+- Events: `order_updated`, `order_deleted`. Customer clients refetch REST rather than trusting payload status; `/admin/db` refetches `/api/dev/db` on any event (skipped while a destructive-confirm/password/rename modal is open, so a background refetch can't reset in-progress input).
 - Browser Origin must match Host. Missing Origin is accepted only from private-LAN IPs for future React Native clients.
 - Non-`/ws` upgrades delegate to Next’s handler. LAN HMR is still unreliable in dev; manual refresh works and production would not use HMR.
 
@@ -175,12 +185,13 @@ Per-kitchen employee roster and append-only status-change audit trail; see "Empl
 | `/api/restaurants/by-name/[name]/settings` | Kitchen pickup cap |
 | `/api/restaurants/by-name/[name]/employees` | List/add employees |
 | `/api/restaurants/by-name/[name]/employees/[id]` | Deactivate/reset PIN |
-| `/api/restaurants/by-name/[name]/employees/verify-pin` | Per-action PIN check for attribution |
+| `/api/restaurants/by-name/[name]/employees/verify-pin` | PIN-only per-action check; resolves identity from `pin`+`pinLength` (no `employeeId` needed) |
 | `/api/restaurants/by-name/[name]/roles` | List/add kitchen-defined role labels |
 | `/api/restaurants/by-name/[name]/roles/[roleId]` | Rename/delete a role label |
 | `/api/health` | Authenticated health; infrastructure detail admin-only |
 | `/api/customer-origin` | Authenticated reachable-origin resolver |
 | `/api/dev/db`, `/api/dev/seed` | Admin DB view/Purge and destructive Seed |
+| `/api/dev/audit` | Admin audit-log view (optional `restaurantName`/`employeeName` filters) and `DELETE` Purge (`PURGE AUDIT` phrase) |
 
 ## Operations
 
@@ -196,9 +207,10 @@ Per-kitchen employee roster and append-only status-change audit trail; see "Empl
 ### Backups/destructive actions
 
 - Server runs `pg_dump` every 3 hours and keeps 3 files in `backups/`.
-- Seed requires `{ confirmation: "SEED DATABASE" }` and transactionally creates 5 sample kitchens plus 30 live/5 deleted lifecycle-rich orders (shared password `password123`); Purge requires `{ confirmation: "PURGE DATABASE" }`.
+- Seed requires `{ confirmation: "SEED DATABASE" }` and transactionally creates 5 sample kitchens plus 30 live/5 deleted lifecycle-rich orders (shared password `password123`); Purge (`/admin/db`, wipes restaurants/orders) requires `{ confirmation: "PURGE DATABASE" }`; Purge Audit Log (`/admin/audit`, wipes only `order_status_events`, leaves restaurants/orders untouched) requires the DIFFERENT phrase `{ confirmation: "PURGE AUDIT" }` — never conflate the two confirmation phrases.
 - Restore only after loading a dump into a temporary DB and verifying counts/names, then stop app and swap DB names.
 - At this update the user intentionally wants the live database empty. Old snapshots may contain previous kitchens; do not restore without asking.
+- `db.ts`'s `runInitDb()` migration is idempotent and memoized per-process (`initDbPromise`) — it only actually runs once per server start. A schema change here (e.g. adding/backfilling a column, changing an FK's `ON DELETE` behavior) needs a full `node server.js` restart to take effect; Turbopack route HMR does not re-run it.
 
 ### Dev cache
 

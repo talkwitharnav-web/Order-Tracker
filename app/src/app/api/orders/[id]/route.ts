@@ -240,9 +240,17 @@ export async function PUT(
       }
 
       await client.query(
-        `INSERT INTO order_status_events (order_id, from_status, to_status, employee_id, employee_name)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [orderId, currentOrder.status, canonicalStatus, verifiedEmployee?.id ?? null, verifiedEmployee?.name ?? null],
+        `INSERT INTO order_status_events (order_id, restaurant_name, order_number, from_status, to_status, employee_id, employee_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          orderId,
+          currentOrder.restaurant_name,
+          currentOrder.order_number,
+          currentOrder.status,
+          canonicalStatus,
+          verifiedEmployee?.id ?? null,
+          verifiedEmployee?.name ?? null,
+        ],
       );
 
       await client.query("COMMIT");

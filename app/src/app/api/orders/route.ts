@@ -92,9 +92,9 @@ export async function POST(request: Request) {
       order = result.rows[0] as typeof order;
 
       await client.query(
-        `INSERT INTO order_status_events (order_id, from_status, to_status, employee_id, employee_name)
-         VALUES ($1, NULL, $2, $3, $4)`,
-        [order.id, order.status, verifiedEmployee?.id ?? null, verifiedEmployee?.name ?? null],
+        `INSERT INTO order_status_events (order_id, restaurant_name, order_number, from_status, to_status, employee_id, employee_name)
+         VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
+        [order.id, order.restaurant_name, order.order_number, order.status, verifiedEmployee?.id ?? null, verifiedEmployee?.name ?? null],
       );
 
       await client.query("COMMIT");
