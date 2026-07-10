@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { requiredPinLength } from "@/lib/employee-auth";
+import { requiredPinLength, pinCollidesWithAnotherEmployee } from "@/lib/employee-auth";
 
 /**
  * Employee roster management for a kitchen's own account (or admin, for
@@ -130,6 +130,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
 
     const roleCheck = await resolveRoleId(restaurantId, rawRoleId);
     if (!roleCheck.ok) return roleCheck.response;
+
+    // PIN-only lookup (see lib/employee-auth.ts findEmployeeByPinOnly) is
+    // only unambiguous if no two active employees share a PIN at the same
+    // length -- reject here rather than let a real collision silently
+    // attribute actions to whichever employee bcrypt happens to check first.
+    if (await pinCollidesWithAnotherEmployee(restaurantName, pin, pinLength)) {
+      return NextResponse.json(
+        { error: "That PIN is already in use by another employee. Choose a different one." },
+        { status: 409 },
+      );
+    }
 
     const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
 

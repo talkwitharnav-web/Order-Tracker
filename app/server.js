@@ -1,10 +1,49 @@
 const { createServer } = require("http");
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- this file is a plain CJS Node entrypoint, same as the requires above/below
 const dgram = require("dgram");
+const { createHmac, timingSafeEqual } = require("crypto");
 const next = require("next");
 const { WebSocketServer } = require("ws");
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- see the dgram require above
 const { startBackupSchedule } = require("./scripts/db-backup");
+
+// This CJS entrypoint can't `require()` src/lib/session.ts directly (no TS/
+// ESM loader here, same reason ws-hub.ts's client bookkeeping above is
+// duplicated rather than imported) -- so admin-session verification for the
+// /ws upgrade below is a deliberately minimal reimplementation of that
+// file's sign()/verifySessionToken(), kept in exact lockstep with it. Any
+// change to the token format, secret fallback, or cookie name in
+// src/lib/session.ts must be mirrored here too.
+const ADMIN_SESSION_COOKIE_NAME = "admin_session";
+function verifyAdminSessionToken(token) {
+  if (!token) return false;
+  const secret = process.env.SESSION_SECRET || "dev-only-insecure-session-secret";
+  const [data, signature] = token.split(".");
+  if (!data || !signature) return false;
+  const expectedSignature = createHmac("sha256", secret).update(data).digest("base64url");
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expectedSignature);
+  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(data, "base64url").toString("utf8"));
+    return payload.type === "admin" && typeof payload.exp === "number" && payload.exp >= Date.now();
+  } catch {
+    return false;
+  }
+}
+
+// Minimal same-name cookie extraction from the raw upgrade request header --
+// no Set-Cookie parsing needed, just reading what the browser already sent.
+function readCookie(cookieHeader, name) {
+  if (!cookieHeader) return null;
+  const parts = cookieHeader.split(";");
+  for (const part of parts) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return null;
+}
 
 // True for an IPv4 address in one of the private/LAN ranges (10.0.0.0/8,
 // 172.16.0.0/12, 192.168.0.0/16) or a Node-reported IPv4-mapped-IPv6 form of
@@ -220,6 +259,12 @@ process.on("unhandledRejection", (reason) => {
 const clients = globalThis.__orderTrackerWsClients ?? new Set();
 globalThis.__orderTrackerWsClients = clients;
 
+// Mirrors ws-hub.ts's adminClients -- same globalThis-sharing mechanism as
+// `clients` above (see that file for why this process shares state across
+// the CJS server and the Next/TS route handlers this way).
+const adminWsClients = globalThis.__orderTrackerAdminWsClients ?? new Set();
+globalThis.__orderTrackerAdminWsClients = adminWsClients;
+
 // Per-IP cap on concurrent /ws connections (see SECURITY_ATTACK_LOG.md F7) —
 // bounds how many passive listener sockets a single caller can hold open.
 // A restaurant's customers commonly share one public/NAT address, and a
@@ -324,6 +369,22 @@ app.prepare().then(() => {
     });
   });
 
+  // Separate from the restaurant-scoped `clients` set above: an admin
+  // connection is authenticated by cookie (not by declaring a restaurant
+  // name it's trusted to know) and receives every restaurant's order events
+  // -- see ws-hub.ts's registerAdminClient/adminClients for why this stays
+  // a distinct path rather than a wildcard on the existing scoped one.
+  wss.on("admin-connection", (ws, ip) => {
+    adminWsClients.add(ws);
+    wsConnectionsByIp.set(ip, (wsConnectionsByIp.get(ip) || 0) + 1);
+    ws.on("close", () => {
+      adminWsClients.delete(ws);
+      const next = (wsConnectionsByIp.get(ip) || 1) - 1;
+      if (next <= 0) wsConnectionsByIp.delete(ip);
+      else wsConnectionsByIp.set(ip, next);
+    });
+  });
+
   const nextUpgradeHandler = app.getUpgradeHandler();
 
   server.on("upgrade", (req, socket, head) => {
@@ -332,18 +393,6 @@ app.prepare().then(() => {
     const query = Object.fromEntries(upgradeUrl.searchParams);
 
     if (pathname === "/ws") {
-      // Every connection must declare which restaurant it's tracking (see
-      // SECURITY_ATTACK_LOG.md F7) -- broadcast() then only delivers events
-      // for that restaurant to this socket. A connection with no restaurant
-      // param has nothing to subscribe to and is rejected outright, closing
-      // off the previous "connect and receive every restaurant's live order
-      // stream" eavesdropping surface.
-      const restaurantName = typeof query.restaurant === "string" ? query.restaurant.trim() : "";
-      if (!restaurantName) {
-        socket.destroy();
-        return;
-      }
-
       // Reject WS upgrades from other origins — broadcasts contain live order
       // data for every restaurant, so this stops arbitrary sites (and,
       // crucially, non-browser clients that omit Origin entirely) from
@@ -374,6 +423,37 @@ app.prepare().then(() => {
       }
 
       if ((wsConnectionsByIp.get(ip) || 0) >= MAX_WS_CONNECTIONS_PER_IP) {
+        socket.destroy();
+        return;
+      }
+
+      // Admin path: authenticated by the admin_session cookie instead of a
+      // declared restaurant name -- this is the one socket allowed to see
+      // every restaurant's order events at once (the /admin/db table), so it
+      // must prove it's actually the logged-in admin rather than just
+      // asserting ?admin=1. Falls through to socket.destroy() below on any
+      // failure, same as an unrecognized/missing restaurant param would.
+      if (query.admin === "1") {
+        const cookieHeader = req.headers.cookie;
+        const adminToken = readCookie(cookieHeader, ADMIN_SESSION_COOKIE_NAME);
+        if (!verifyAdminSessionToken(adminToken)) {
+          socket.destroy();
+          return;
+        }
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          wss.emit("admin-connection", ws, ip);
+        });
+        return;
+      }
+
+      // Every non-admin connection must declare which restaurant it's
+      // tracking (see SECURITY_ATTACK_LOG.md F7) -- broadcast() then only
+      // delivers events for that restaurant to this socket. A connection
+      // with no restaurant param has nothing to subscribe to and is
+      // rejected outright, closing off the previous "connect and receive
+      // every restaurant's live order stream" eavesdropping surface.
+      const restaurantName = typeof query.restaurant === "string" ? query.restaurant.trim() : "";
+      if (!restaurantName) {
         socket.destroy();
         return;
       }

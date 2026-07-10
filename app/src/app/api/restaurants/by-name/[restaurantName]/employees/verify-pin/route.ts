@@ -7,17 +7,26 @@ import { parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 /**
- * Verifies an employee's PIN and returns their identity for attribution --
- * deliberately NOT a session/cookie (see SYSTEM_MEMORY.md "Employee
- * Attribution"). Checked fresh on every status-changing action, matching how
- * real POS systems attribute frequent per-order actions on a shared
- * terminal without a slow per-employee login/logout cycle.
+ * Verifies a PIN and returns whose it is, for attribution -- deliberately
+ * NOT a session/cookie (see SYSTEM_MEMORY.md "Employee Attribution").
+ * Checked fresh on every status-changing action, matching how real POS
+ * systems attribute frequent per-order actions on a shared terminal without
+ * a slow per-employee login/logout cycle.
+ *
+ * PIN-only: the caller does NOT pre-select an employee by name/id (PinPad
+ * has no name list anymore -- picking your own name from a list on a shared
+ * tablet mid-rush was pure friction). It sends just `pin` + `pinLength` (4
+ * or 6, from the Manager toggle) and this resolves identity by checking the
+ * PIN against every active same-length employee in this kitchen -- safe to
+ * be unambiguous only because employee create/edit rejects a PIN that
+ * collides with another active employee's same-length PIN (see
+ * lib/employee-auth.ts pinCollidesWithAnotherEmployee).
  *
  * Same timing-safe-dummy-hash precedent as /api/restaurants/login (see
- * SECURITY_ATTACK_LOG.md F4): always run bcrypt.compare even when the
- * employee id doesn't exist/belong to this restaurant, so "no such
- * employee" and "wrong PIN" take approximately the same time and can't be
- * used to enumerate valid employee ids.
+ * SECURITY_ATTACK_LOG.md F4): always run at least one bcrypt.compare even
+ * when there are zero candidates, so "no employees this length" and "wrong
+ * PIN" take approximately the same time and can't be used to enumerate
+ * roster size.
  */
 const DUMMY_PIN_HASH = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8V8IvJs2jGiFH3rF0KwYNwHUsgnh8G";
 
@@ -51,32 +60,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
-    const { employeeId: rawEmployeeId, pin: rawPin } = body as { employeeId?: unknown; pin?: unknown };
+    const { pin: rawPin, pinLength: rawPinLength } = body as { pin?: unknown; pinLength?: unknown };
 
-    const employeeId =
-      typeof rawEmployeeId === "number" && Number.isSafeInteger(rawEmployeeId) ? rawEmployeeId : null;
     const pin = typeof rawPin === "string" ? rawPin : null;
+    const pinLength: 4 | 6 = rawPinLength === 6 ? 6 : 4;
 
-    if (employeeId === null || !pin) {
-      return NextResponse.json({ error: "employeeId and pin are required" }, { status: 400 });
+    if (!pin) {
+      return NextResponse.json({ error: "pin is required" }, { status: 400 });
     }
 
-    // Scoped by restaurant NAME, not just employeeId -- an authenticated
-    // kitchen session must not be able to verify (or timing-probe) another
+    // Scoped by restaurant NAME and pinLength -- an authenticated kitchen
+    // session must not be able to verify (or timing-probe) another
     // restaurant's employee PINs.
     const result = await query<EmployeeRow>(
       `SELECT re.id, re.name, re.account_type, re.pin_hash
        FROM restaurant_employees re
        JOIN restaurants r ON r.id = re.restaurant_id
-       WHERE re.id = $1 AND re.deleted_at IS NULL
+       WHERE re.deleted_at IS NULL AND re.pin_length = $1
          AND LOWER(r.name) = LOWER($2) AND r.deleted_at IS NULL`,
-      [employeeId, restaurantName],
+      [pinLength, restaurantName],
     );
-    const employee = result.rows[0];
 
-    const isPinValid = await bcrypt.compare(pin, employee?.pin_hash ?? DUMMY_PIN_HASH);
+    let employee: EmployeeRow | null = null;
+    for (const candidate of result.rows) {
+      const isValid = await bcrypt.compare(pin, candidate.pin_hash);
+      if (isValid) employee = candidate;
+    }
+    if (result.rows.length === 0) {
+      await bcrypt.compare(pin, DUMMY_PIN_HASH);
+    }
 
-    if (!employee || !isPinValid) {
+    if (!employee) {
       logger.warn(`POST /api/restaurants/by-name/${restaurantName}/employees/verify-pin - invalid PIN attempt`);
       return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
     }

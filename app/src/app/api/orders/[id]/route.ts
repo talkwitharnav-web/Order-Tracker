@@ -81,11 +81,12 @@ export async function PUT(
     if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
-    const { status, undoToken, employeeId, pin } = body as {
+    const { status, undoToken, employeeId, pin, pinLength } = body as {
       status?: unknown;
       undoToken?: unknown;
       employeeId?: unknown;
       pin?: unknown;
+      pinLength?: unknown;
     };
 
     logger.info(`PUT /api/orders/${orderId} - updating status`, { status });
@@ -133,7 +134,7 @@ export async function PUT(
     // kitchen has employees, PIN is mandatory").
     const employeeCheck = typeof undoToken === "string" || isAdmin
       ? { ok: true as const, employee: null }
-      : await verifyEmployeeForAction(currentOrder.restaurant_name, employeeId, pin);
+      : await verifyEmployeeForAction(currentOrder.restaurant_name, employeeId, pin, pinLength);
     if (!employeeCheck.ok) return employeeCheck.response;
     const verifiedEmployee = employeeCheck.employee;
 

@@ -4,7 +4,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
-import { requiredPinLength } from "@/lib/employee-auth";
+import { requiredPinLength, pinCollidesWithAnotherEmployee } from "@/lib/employee-auth";
 
 const SALT_ROUNDS = 10;
 
@@ -158,6 +158,14 @@ export async function PUT(
     if (rawPin !== undefined) {
       const pin = typeof rawPin === "string" && new RegExp(`^\\d{${effectivePinLength}}$`).test(rawPin) ? rawPin : null;
       if (!pin) return NextResponse.json({ error: `PIN must be exactly ${effectivePinLength} digits` }, { status: 400 });
+      // Same collision guard as employee creation -- PIN-only lookup stays
+      // unambiguous only if no two active employees share a same-length PIN.
+      if (await pinCollidesWithAnotherEmployee(restaurantName, pin, effectivePinLength, employeeId)) {
+        return NextResponse.json(
+          { error: "That PIN is already in use by another employee. Choose a different one." },
+          { status: 409 },
+        );
+      }
       const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
       values.push(pinHash);
       setClauses.push(`pin_hash = $${values.length}`);

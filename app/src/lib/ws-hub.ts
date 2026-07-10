@@ -15,15 +15,34 @@ type ClientEntry = { ws: WebSocket; restaurantName: string };
 
 const globalForWs = globalThis as unknown as {
   __orderTrackerWsClients?: Set<ClientEntry>;
+  __orderTrackerAdminWsClients?: Set<WebSocket>;
 };
 
 const clients = globalForWs.__orderTrackerWsClients ?? new Set<ClientEntry>();
 globalForWs.__orderTrackerWsClients = clients;
 
+/**
+ * Separate from `clients` above: an admin session is authenticated (see
+ * server.js's /ws upgrade handler, which verifies admin_session before
+ * registering here) and is the one legitimate case that needs to see EVERY
+ * restaurant's order activity at once, unlike the restaurant-scoped
+ * customer/kitchen sockets in `clients` (see SECURITY_ATTACK_LOG.md F7) --
+ * so this is a distinct set rather than a wildcard restaurantName on the
+ * existing scoped path, keeping the "every socket must declare one
+ * restaurant" invariant intact for the unauthenticated path.
+ */
+const adminClients = globalForWs.__orderTrackerAdminWsClients ?? new Set<WebSocket>();
+globalForWs.__orderTrackerAdminWsClients = adminClients;
+
 export function registerClient(ws: WebSocket, restaurantName: string) {
   const entry: ClientEntry = { ws, restaurantName: restaurantName.toLowerCase() };
   clients.add(entry);
   ws.on("close", () => clients.delete(entry));
+}
+
+export function registerAdminClient(ws: WebSocket) {
+  adminClients.add(ws);
+  ws.on("close", () => adminClients.delete(ws));
 }
 
 export type OrderEvent =
@@ -58,6 +77,20 @@ export function broadcast(event: OrderEvent) {
       }
     } else {
       clients.delete(client);
+    }
+  }
+
+  // Admin sees every restaurant's order events -- this is the one channel
+  // deliberately NOT scoped to a single restaurantName (see registerAdminClient).
+  for (const ws of adminClients) {
+    if (ws.readyState === ws.OPEN) {
+      try {
+        ws.send(message);
+      } catch {
+        adminClients.delete(ws);
+      }
+    } else {
+      adminClients.delete(ws);
     }
   }
 }

@@ -184,6 +184,78 @@ function AdminDbContent() {
       .catch(() => router.push("/"));
   }, [router, fetchData]);
 
+  // This page previously only ever fetched once on mount, so any order
+  // created/advanced/deleted elsewhere (a kitchen, another admin tab) never
+  // showed up here without a manual reload. The app already has a WS hub for
+  // exactly this (see lib/ws-hub.ts, used today by the customer tracker) --
+  // it's normally scoped to one restaurant per socket, but this page needs
+  // every restaurant's activity at once, so it connects via the separate
+  // `?admin=1` path (authenticated by the admin_session cookie server-side,
+  // see server.js's /ws upgrade handler) instead of declaring one restaurant
+  // name. Reconnects with the same exponential backoff as the customer
+  // tracker's socket (see app/customer/page.tsx) rather than a fixed
+  // interval, so a real outage doesn't hammer the server with retries.
+  const fetchDataRef = useRef(fetchData);
+  useEffect(() => {
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
+
+  // Refetching mid-edit would reset in-progress input under an open
+  // destructive-confirm/password/rename modal -- read via a ref (not a
+  // dependency) so the socket effect below doesn't tear down and reopen the
+  // connection every time a modal opens/closes.
+  const anyModalOpen = confirmState.isOpen || passwordResetTarget !== null || renameTarget !== null;
+  const anyModalOpenRef = useRef(anyModalOpen);
+  useEffect(() => {
+    anyModalOpenRef.current = anyModalOpen;
+  }, [anyModalOpen]);
+
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closedByEffect = false;
+    let reconnectAttempt = 0;
+
+    const RECONNECT_BASE_MS = 2000;
+    const RECONNECT_MAX_MS = 30000;
+
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws?admin=1`);
+
+      socket.onopen = () => {
+        reconnectAttempt = 0;
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "order_updated" || data.type === "order_deleted") {
+            if (!anyModalOpenRef.current) void fetchDataRef.current();
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      socket.onclose = () => {
+        if (!closedByEffect) {
+          const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+          reconnectAttempt += 1;
+          reconnectTimer = setTimeout(connect, delay);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      closedByEffect = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, []);
+
   useEffect(() => () => {
     if (filterAnimationTimerRef.current) clearTimeout(filterAnimationTimerRef.current);
   }, []);

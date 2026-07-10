@@ -16,8 +16,8 @@ export async function POST(request: Request) {
     if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
-    const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber, employeeId, pin } =
-      body as { restaurant_name?: unknown; order_number?: unknown; employeeId?: unknown; pin?: unknown };
+    const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber, employeeId, pin, pinLength } =
+      body as { restaurant_name?: unknown; order_number?: unknown; employeeId?: unknown; pin?: unknown; pinLength?: unknown };
 
     // requireSafeName (not requireString) -- these values get stored and
     // rendered back out (kitchen dashboard, customer tracker, admin/db), so
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     const isAdmin = await isAdminRequest();
     const employeeCheck = isAdmin
       ? { ok: true as const, employee: null }
-      : await verifyEmployeeForAction(restaurant_name, employeeId, pin);
+      : await verifyEmployeeForAction(restaurant_name, employeeId, pin, pinLength);
     if (!employeeCheck.ok) return employeeCheck.response;
     const verifiedEmployee = employeeCheck.employee;
 

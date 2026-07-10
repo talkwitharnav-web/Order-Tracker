@@ -53,6 +53,7 @@
   --color-danger: #b3402c;
   --color-danger-hover: #96331f;
   --color-success: #4f7942;
+  --color-warning: #b3540a; /* hazard orange — overdue-order alerts, distinct from danger's red */
 
   /* Radius scale — exactly three sizes used app-wide */
   --radius-sm: 0.5rem; /* buttons, inputs, badges */
@@ -102,6 +103,7 @@
   --color-danger: #d9694c;
   --color-danger-hover: #e4886e;
   --color-success: #8fb377;
+  --color-warning: #e8912f;
 }
 
 /*
@@ -166,6 +168,7 @@
   --color-danger: #7a2410;
   --color-danger-hover: #5c1a0a;
   --color-success: #20441a;
+  --color-warning: #7a3d00;
 }
 
 [data-theme="dark"][data-contrast="high"] {
@@ -205,6 +208,7 @@
   --color-danger: #ff9478;
   --color-danger-hover: #ffab94;
   --color-success: #a8d68f;
+  --color-warning: #ffb355;
 }
 
 /*
@@ -493,6 +497,10 @@
   --color-danger: #D55E00;
   --color-danger-hover: #a84900;
   --color-success: #CC79A7;
+  /* Preparing-icon already owns #E69F00 in this palette -- reuse danger's
+     vermillion for the overdue-order alert (toast + card) instead of adding
+     a fourth hue this 3-color-safe palette wasn't tuned to keep separated. */
+  --color-warning: #D55E00;
 }
 [data-theme="dark"][data-cvd="deuteranopia"] {
   --color-brand: #56B4E9;
@@ -516,6 +524,7 @@
   --color-danger: #ff9d5c;
   --color-danger-hover: #ffb37f;
   --color-success: #e0a8c8;
+  --color-warning: #ff9d5c;
 }
 
 [data-cvd="protanopia"] {
@@ -540,6 +549,9 @@
   --color-danger: #000000;
   --color-danger-hover: #262626;
   --color-success: #56B4E9;
+  /* Distinct hazard tone from black/danger and from preparing's olive-yellow
+     icon -- vermillion reads clearly as "alert" without colliding here. */
+  --color-warning: #D55E00;
 }
 [data-theme="dark"][data-cvd="protanopia"] {
   --color-brand: #56B4E9;
@@ -563,6 +575,7 @@
   --color-danger: #f5f5f5;
   --color-danger-hover: #ffffff;
   --color-success: #9fd6f5;
+  --color-warning: #F0E442;
 }
 
 [data-cvd="tritanopia"] {
@@ -587,6 +600,10 @@
   --color-danger: #920000;
   --color-danger-hover: #6e0000;
   --color-success: #5A9E3A;
+  /* Preparing-icon already owns orange (#D55E00) here -- reuse danger's deep
+     red for the overdue alert rather than adding a hue this blue-yellow-weak
+     palette wasn't tuned to keep separated. */
+  --color-warning: #920000;
 }
 [data-theme="dark"][data-cvd="tritanopia"] {
   --color-brand: #e0a8c8;
@@ -610,6 +627,7 @@
   --color-danger: #ff5c8a;
   --color-danger-hover: #ff85a6;
   --color-success: #8fcf6e;
+  --color-warning: #ff5c8a;
 }
 
 /*
@@ -681,6 +699,7 @@
   --color-danger: var(--color-danger);
   --color-danger-hover: var(--color-danger-hover);
   --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
 
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);

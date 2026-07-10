@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback, FormEvent, FC } from "react";
-import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search, SearchX, Clock3, Users } from "lucide-react";
+import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search, SearchX, Clock3, Users, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChefMascot } from "@/components/ui/ChefMascot";
@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/Select";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
 import { fetchJson, ApiError } from "@/lib/api-client";
-import { PinPad, type PinPadEmployee } from "@/components/ui/PinPad";
+import { PinPad, type PinPadEmployee, type VerifiedPinIdentity } from "@/components/ui/PinPad";
 import { StrengthMeter } from "@/components/ui/StrengthMeter";
 import { scorePinStrength } from "@/lib/credential-strength";
 import {
@@ -29,6 +29,7 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useSideBySideFit, useAutoFitText, useUiSelfCheck } from "@/lib/ui-awareness";
 import { computeStatusDurationMs, formatOrderAge } from "@/lib/order-duration";
 import { CustomerHandoffCard } from "@/components/ui/CustomerHandoffCard";
+import { sortByPriority, isOrderOverdue, OVERDUE_THRESHOLD_MINUTES } from "@/lib/order-priority";
 
 export type OrderStatus = ApiOrderStatus;
 export type Order = {
@@ -94,7 +95,7 @@ const api = {
   async createOrder(
     restName: string,
     orderNum: string,
-    employee?: { id: number; pin: string },
+    credentials?: { pin: string; pinLength: 4 | 6 },
   ): Promise<Order> {
     // No retries: creating an order isn't idempotent from the client's
     // point of view (a "timed out" request could have actually landed), and
@@ -107,7 +108,7 @@ const api = {
       body: JSON.stringify({
         restaurant_name: restName,
         order_number: orderNum,
-        ...(employee ? { employeeId: employee.id, pin: employee.pin } : {}),
+        ...(credentials ? { pin: credentials.pin, pinLength: credentials.pinLength } : {}),
       }),
     }, { retries: 0 });
   },
@@ -115,7 +116,7 @@ const api = {
     id: number,
     status: OrderStatus,
     undoToken?: string,
-    employee?: { id: number; pin: string },
+    credentials?: { pin: string; pinLength: 4 | 6 },
   ): Promise<StatusUpdateResult> {
     return fetchJson<StatusUpdateResult>(`/api/orders/${id}`, {
       method: "PUT",
@@ -123,7 +124,7 @@ const api = {
       body: JSON.stringify({
         status,
         ...(undoToken ? { undoToken } : {}),
-        ...(employee ? { employeeId: employee.id, pin: employee.pin } : {}),
+        ...(credentials ? { pin: credentials.pin, pinLength: credentials.pinLength } : {}),
       }),
     });
   },
@@ -135,16 +136,20 @@ const api = {
     );
     return { employees: data.employees.map(toPinPadEmployee) };
   },
-  async verifyEmployeePin(restName: string, employeeId: number, pin: string): Promise<boolean> {
+  async verifyPin(restName: string, pin: string, pinLength: 4 | 6): Promise<VerifiedPinIdentity | null> {
     try {
-      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restName)}/employees/verify-pin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId, pin }),
-      }, { retries: 0 });
-      return true;
+      const data = await fetchJson<{ employee: VerifiedPinIdentity }>(
+        `/api/restaurants/by-name/${encodeURIComponent(restName)}/employees/verify-pin`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin, pinLength }),
+        },
+        { retries: 0 },
+      );
+      return data.employee;
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) return false;
+      if (err instanceof ApiError && err.status === 401) return null;
       throw err;
     }
   },
@@ -292,32 +297,80 @@ const OrderAge: FC<{ receivedAt: string }> = ({ receivedAt }) => {
   );
 };
 
+/**
+ * Live "has this order overstayed its current status's threshold" check,
+ * ticking on the same 30s cadence as OrderAge -- a card must turn overdue on
+ * its own between the 5s order-list polls, not wait for the next poll to
+ * happen to land after the threshold passed.
+ */
+function useOrderOverdue(order: Order): boolean {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+  return isOrderOverdue(order, nowMs);
+}
+
+/** Small "overdue" pill -- icon + text, never color-only, matching StatusBadge's approach. */
+const OverdueBadge: FC<{ status: OrderStatus }> = ({ status }) => {
+  const minutes = OVERDUE_THRESHOLD_MINUTES[normalizeStatus(status)];
+  const label =
+    normalizeStatus(status) === "complete"
+      ? `Past ${minutes}m — confirm pickup`
+      : `Past ${minutes}m`;
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs font-bold text-[var(--color-warning)] whitespace-nowrap"
+      title={
+        normalizeStatus(status) === "complete"
+          ? "This order has been Complete a while — make sure the customer actually got it or can access it."
+          : `This order has been in ${status} longer than ${minutes} minutes.`
+      }
+    >
+      <TriangleAlert className="w-3.5 h-3.5" aria-hidden="true" />
+      {label}
+    </span>
+  );
+};
+
 const OrderCard: FC<{
   order: Order;
   justUpdated: boolean;
   isExiting: boolean;
   onAdvance: (id: number, status: OrderStatus) => void;
   onDelete: (id: number, skipConfirm: boolean) => void;
-}> = ({ order, justUpdated, isExiting, onAdvance, onDelete }) => (
-  <Card
-    className={`flex flex-col p-4 sm:p-5 transition-all duration-200 ${isExiting ? "animate-order-exit" : "animate-order-enter"} ${justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""}`}
-  >
-    <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4">
-      <p className="font-bold text-lg sm:text-xl text-[var(--color-text-primary)] break-all" title={order.order_number}>
-        #{order.order_number}
-      </p>
-      <OrderAge receivedAt={order.received_at} />
-    </div>
-    <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
-    <button
-      onClick={(e) => onDelete(order.id, e.shiftKey)}
-      title="Hold Shift to skip the confirmation"
-      className="w-full mt-4 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/20 transition-colors"
+}> = ({ order, justUpdated, isExiting, onAdvance, onDelete }) => {
+  const overdue = useOrderOverdue(order);
+  return (
+    <Card
+      style={overdue && !justUpdated ? { backgroundColor: "color-mix(in srgb, var(--color-danger) 12%, var(--color-surface-1))" } : undefined}
+      className={`flex flex-col p-4 sm:p-5 transition-all duration-200 ${isExiting ? "animate-order-exit" : "animate-order-enter"} ${
+        justUpdated ? "ring-2 ring-[var(--color-brand)]" : overdue ? "ring-2 ring-[var(--color-danger)]" : ""
+      }`}
     >
-      Delete
-    </button>
-  </Card>
-);
+      <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4">
+        <p className="font-bold text-lg sm:text-xl text-[var(--color-text-primary)] break-all" title={order.order_number}>
+          #{order.order_number}
+        </p>
+        <OrderAge receivedAt={order.received_at} />
+      </div>
+      {overdue && (
+        <div className="mb-3">
+          <OverdueBadge status={order.status} />
+        </div>
+      )}
+      <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+      <button
+        onClick={(e) => onDelete(order.id, e.shiftKey)}
+        title="Hold Shift to skip the confirmation"
+        className="w-full mt-4 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/20 transition-colors"
+      >
+        Delete
+      </button>
+    </Card>
+  );
+};
 
 /**
  * A single row in the Home list. Self-aware layout: instead of a fixed
@@ -336,13 +389,15 @@ const HomeOrderRow: FC<{
   onDeleteOrder: (id: number, skipConfirm: boolean) => void;
 }> = ({ order, exiting, justUpdated, onAdvance, onDeleteOrder }) => {
   const { containerRef, aRef, bRef, fits } = useSideBySideFit<HTMLDivElement, HTMLSpanElement, HTMLDivElement>(16);
+  const overdue = useOrderOverdue(order);
   return (
     <div
       ref={containerRef}
+      style={overdue && !justUpdated ? { backgroundColor: "color-mix(in srgb, var(--color-danger) 15%, var(--color-surface-2))" } : undefined}
       className={`bg-[var(--color-surface-2)] p-3 sm:p-4 rounded-[var(--radius-sm)] flex gap-2 sm:gap-3 transition-all duration-200 card-elevated ${
         fits ? "flex-row items-center justify-between" : "flex-col"
       } ${exiting ? "animate-order-exit" : "animate-order-enter"} ${
-        justUpdated ? "ring-2 ring-[var(--color-brand)]" : ""
+        justUpdated ? "ring-2 ring-[var(--color-brand)]" : overdue ? "ring-2 ring-[var(--color-danger)]" : ""
       }`}
     >
       <span ref={aRef} className="flex flex-col min-w-0" title={order.order_number}>
@@ -350,6 +405,7 @@ const HomeOrderRow: FC<{
           #{order.order_number}
         </span>
         <OrderAge receivedAt={order.received_at} />
+        {overdue && <OverdueBadge status={order.status} />}
       </span>
       <div ref={bRef} className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="flex-1 min-w-0">
@@ -465,11 +521,15 @@ const HomeTab: FC<{
     () => {
       const displayQuery = searchQuery.trim().toLowerCase();
       const lookupQuery = normalizeOrderLookupKey(searchQuery);
-      return orders.filter((order) => {
+      const matched = orders.filter((order) => {
         const displayMatch = order.order_number.toLowerCase().includes(displayQuery);
         const lookupMatch = lookupQuery.length > 0 && normalizeOrderLookupKey(order.order_number).includes(lookupQuery);
         return displayMatch || lookupMatch;
       });
+      // Automatic priority order, not a user-chosen sort: Received first,
+      // then Preparing, then Complete, each oldest-in-status first -- so
+      // whatever needs attention soonest is always at the top of Home too.
+      return sortByPriority(matched);
     },
     [orders, searchQuery],
   );
@@ -785,10 +845,22 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
         </Button>
         <PinPad
           isOpen={pinPadOpen}
-          employees={managers}
           onClose={() => setPinPadOpen(false)}
-          onVerify={(employeeId, pin) => api.verifyEmployeePin(restaurantName, employeeId, pin)}
-          onVerified={() => {
+          onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
+          onVerified={(employee) => {
+            // The pad's Manager toggle only controls expected PIN LENGTH,
+            // not who it's checked against -- verifyPin can still resolve to
+            // a non-manager (e.g. someone types a random 6-digit string that
+            // happens not to match anyone, or in a future world with 6-digit
+            // employee PINs). The Staff tab specifically must only unlock
+            // for an actual manager account, so that check happens here,
+            // client-side-displayed but not the real security boundary --
+            // every mutation this tab performs is independently re-authorized
+            // server-side by requireRestaurantOrAdmin regardless.
+            if (employee.accountType !== "manager") {
+              onError("That PIN doesn't belong to a manager account.");
+              return;
+            }
             setPinPadOpen(false);
             setUnlocked(true);
           }}
@@ -1131,6 +1203,33 @@ function KitchenDashboardContent({
     return () => clearInterval(interval);
   }, [restaurantName]);
 
+  // One-time overdue toast per order+status: keyed by `${id}:${status}` so an
+  // order that leaves and later re-enters a status (e.g. a kitchen Undo) can
+  // fire again, but a single overdue order sitting there doesn't retoast
+  // every tick. Checked on its own timer independent of the 5s order poll,
+  // since "overdue" is purely a function of elapsed time, not new server data.
+  const overdueToastedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const checkOverdue = () => {
+      const now = Date.now();
+      for (const order of orders) {
+        if (!isOrderOverdue(order, now)) continue;
+        const key = `${order.id}:${normalizeStatus(order.status)}`;
+        if (overdueToastedRef.current.has(key)) continue;
+        overdueToastedRef.current.add(key);
+        const minutes = OVERDUE_THRESHOLD_MINUTES[normalizeStatus(order.status)];
+        const message =
+          normalizeStatus(order.status) === "complete"
+            ? `Order #${order.order_number} has been Complete over ${minutes}m — make sure the customer got it or can access it.`
+            : `Order #${order.order_number} has been ${order.status} over ${minutes}m.`;
+        showToast(message, "warning");
+      }
+    };
+    checkOverdue();
+    const interval = setInterval(checkOverdue, 30_000);
+    return () => clearInterval(interval);
+  }, [orders, showToast]);
+
   const handleUndoStatus = async (
     id: number,
     mistakenStatus: OrderStatus,
@@ -1156,14 +1255,18 @@ function KitchenDashboardContent({
     }
   };
 
-  const performAdvanceStatus = async (id: number, status: OrderStatus, employee?: { id: number; pin: string }) => {
+  const performAdvanceStatus = async (
+    id: number,
+    status: OrderStatus,
+    credentials?: { pin: string; pinLength: 4 | 6 },
+  ) => {
     const previousOrder = orders.find((order) => order.id === id);
     if (!previousOrder) return;
 
     try {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
       flash(id);
-      const response = await api.updateOrderStatus(id, status, undefined, employee);
+      const response = await api.updateOrderStatus(id, status, undefined, credentials);
       setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...response.order } : order)));
 
       if (response.undo) {
@@ -1198,10 +1301,10 @@ function KitchenDashboardContent({
 
   const performCreateOrder = async (
     orderNumber: string,
-    employee?: { id: number; pin: string },
+    credentials?: { pin: string; pinLength: 4 | 6 },
   ): Promise<Order | null> => {
     try {
-      const newOrder = await api.createOrder(restaurantName, orderNumber, employee);
+      const newOrder = await api.createOrder(restaurantName, orderNumber, credentials);
       handleAddOrder(newOrder);
       return newOrder;
     } catch (error) {
@@ -1306,16 +1409,9 @@ function KitchenDashboardContent({
       return <StaffTab restaurantName={restaurantName} onError={(message) => showToast(message, "error")} />;
     }
 
-    let displayedOrders = orders.filter((o) => normalizeStatus(o.status) === normalizeStatus(activeTab));
-
-    if (activeTab === "Received" || activeTab === "Preparing") {
-      displayedOrders = [...displayedOrders].sort((left, right) => {
-        const leftTime = new Date(left.received_at).getTime();
-        const rightTime = new Date(right.received_at).getTime();
-        if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return left.id - right.id;
-        return leftTime - rightTime || left.id - right.id;
-      });
-    }
+    const displayedOrders = sortByPriority(
+      orders.filter((o) => normalizeStatus(o.status) === normalizeStatus(activeTab)),
+    );
 
     return (
       <OrderGrid
@@ -1353,25 +1449,23 @@ function KitchenDashboardContent({
 
       <PinPad
         isOpen={pendingAdvance !== null}
-        employees={employees}
         onClose={() => setPendingAdvance(null)}
-        onVerify={(employeeId, pin) => api.verifyEmployeePin(restaurantName, employeeId, pin)}
+        onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
         onVerified={(employee, pin) => {
           if (!pendingAdvance) return;
           const { id, status } = pendingAdvance;
           setPendingAdvance(null);
           // PIN already verified once above just to give fast UI feedback
           // (wrong-PIN retry without leaving the pad) -- the status route
-          // independently re-verifies employeeId+pin itself server-side
-          // before attributing anything, since a client-side "it verified"
-          // signal is never trusted for the actual attribution.
-          void performAdvanceStatus(id, status, { id: employee.id, pin });
+          // independently re-verifies the pin itself server-side before
+          // attributing anything, since a client-side "it verified" signal
+          // is never trusted for the actual attribution.
+          void performAdvanceStatus(id, status, { pin, pinLength: employee.accountType === "manager" ? 6 : 4 });
         }}
       />
 
       <PinPad
         isOpen={createOrderPinOpen}
-        employees={employees}
         onClose={() => {
           // Cancelling must resolve (not leave hanging) the promise HomeTab
           // is awaiting in handleCreateOrder, or its "Add Order" flow would
@@ -1380,7 +1474,7 @@ function KitchenDashboardContent({
           pendingCreateOrderRef.current?.resolve(null);
           pendingCreateOrderRef.current = null;
         }}
-        onVerify={(employeeId, pin) => api.verifyEmployeePin(restaurantName, employeeId, pin)}
+        onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
         onVerified={(employee, pin) => {
           const pending = pendingCreateOrderRef.current;
           if (!pending) return;
@@ -1388,8 +1482,8 @@ function KitchenDashboardContent({
           pendingCreateOrderRef.current = null;
           // Same trust model as status-change attribution: this client-side
           // verify is only for fast wrong-PIN UI feedback, the order-create
-          // route independently re-verifies employeeId+pin server-side.
-          void performCreateOrder(pending.orderNumber, { id: employee.id, pin }).then(pending.resolve);
+          // route independently re-verifies the pin server-side.
+          void performCreateOrder(pending.orderNumber, { pin, pinLength: employee.accountType === "manager" ? 6 : 4 }).then(pending.resolve);
         }}
       />
     </div>

@@ -10,9 +10,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { CheckCircle2, XCircle, X } from "lucide-react";
+import { CheckCircle2, XCircle, TriangleAlert, X } from "lucide-react";
 
-type ToastType = "success" | "error";
+type ToastType = "success" | "error" | "warning";
 interface ToastItem {
   id: number;
   message: string;
@@ -54,11 +54,17 @@ const ToastCard: FC<{
   <div
     style={style}
     className={`flex items-center gap-3 rounded-[var(--radius-sm)] shadow-lg p-4 text-white w-80 max-w-[90vw] ${
-      item.type === "success" ? "bg-[var(--color-success)]" : "bg-[var(--color-danger)]"
+      item.type === "success"
+        ? "bg-[var(--color-success)]"
+        : item.type === "warning"
+          ? "bg-[var(--color-warning)]"
+          : "bg-[var(--color-danger)]"
     } ${item.removing ? "animate-notification-pop-out" : "animate-notification-pop-in"}`}
   >
     {item.type === "success" ? (
       <CheckCircle2 className="w-5 h-5 shrink-0" />
+    ) : item.type === "warning" ? (
+      <TriangleAlert className="w-5 h-5 shrink-0" />
     ) : (
       <XCircle className="w-5 h-5 shrink-0" />
     )}
