@@ -301,7 +301,7 @@ const AccountSection: FC<{
                 }}
               />
             ) : (
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm font-medium text-[var(--color-text-primary)]">
                   {account.name}
                   {account.role_name && (
