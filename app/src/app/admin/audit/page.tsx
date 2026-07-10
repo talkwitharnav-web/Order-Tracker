@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -98,6 +98,71 @@ function AdminAuditContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
+  // Every order creation/status-change/Undo writes a row to order_status_events
+  // AND calls the shared ws-hub broadcast() in the same request (see
+  // api/orders/route.ts and api/orders/[id]/route.ts) -- broadcast() already
+  // fans "order_updated"/"order_deleted" out to every admin socket (see
+  // lib/ws-hub.ts), the exact same channel /admin/db already uses to live-update
+  // without polling. Reusing it here means the audit log gets pushed updates
+  // instantly instead of requiring a manual refresh, with no separate 5s poll.
+  // Re-run loadEvents with whatever kitchen is currently selected -- read via a
+  // ref (not a dependency) so the socket effect below doesn't tear down and
+  // reconnect every time the user changes the kitchen filter.
+  const selectedKitchenRef = useRef(selectedKitchen);
+  useEffect(() => {
+    selectedKitchenRef.current = selectedKitchen;
+  }, [selectedKitchen]);
+  const loadEventsRef = useRef(loadEvents);
+  useEffect(() => {
+    loadEventsRef.current = loadEvents;
+  }, [loadEvents]);
+
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closedByEffect = false;
+    let reconnectAttempt = 0;
+
+    const RECONNECT_BASE_MS = 2000;
+    const RECONNECT_MAX_MS = 30000;
+
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws?admin=1`);
+
+      socket.onopen = () => {
+        reconnectAttempt = 0;
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "order_updated" || data.type === "order_deleted") {
+            void loadEventsRef.current(selectedKitchenRef.current);
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      socket.onclose = () => {
+        if (!closedByEffect) {
+          const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+          reconnectAttempt += 1;
+          reconnectTimer = setTimeout(connect, delay);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      closedByEffect = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, []);
+
   const closePurgeModal = () => {
     setPurgeModalOpen(false);
     setPurgeConfirmationInput("");
@@ -161,7 +226,7 @@ function AdminAuditContent() {
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden p-4 sm:p-8">
-      <SettingsToggles health={<HealthPin />} />
+      <SettingsToggles health={<HealthPin showAuditSize />} />
 
       <Modal isOpen={purgeModalOpen} title="Purge Audit Log" onClose={closePurgeModal} danger>
         <form
@@ -316,14 +381,26 @@ function AdminAuditContent() {
                 ) : (
                   visibleEvents.map((event) => (
                     <tr key={event.id} className="border-b border-[var(--color-border)] last:border-0">
-                      <td className="py-3 px-4 text-[var(--color-text-muted)] whitespace-nowrap">
+                      <td className="py-3 px-4 text-[var(--color-text-primary)] whitespace-nowrap">
                         {new Date(event.created_at).toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-[var(--color-text-primary)]">{event.restaurant_name}</td>
                       <td className="py-3 px-4 text-[var(--color-text-secondary)]">{event.order_number}</td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          {event.from_status ? (
+                          {event.to_status === "Deleted" ? (
+                            // "Deleted" is a lifecycle event, not a real order
+                            // status -- StatusBadge/normalizeStatus only know
+                            // Received/Preparing/Complete (see SYSTEM_MEMORY.md's
+                            // status-vocab note) and would warn + fall back to
+                            // "Received" if handed this literally. Render it as
+                            // its own danger-toned label instead of a StatusBadge.
+                            <>
+                              {event.from_status && <StatusBadge status={event.from_status} />}
+                              <span className="text-[var(--color-text-muted)]">&rarr;</span>
+                              <span className="text-xs font-semibold text-[var(--color-danger)]">Deleted</span>
+                            </>
+                          ) : event.from_status ? (
                             <>
                               <StatusBadge status={event.from_status} />
                               <span className="text-[var(--color-text-muted)]">&rarr;</span>

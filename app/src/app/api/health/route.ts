@@ -47,6 +47,7 @@ export async function GET(request: Request) {
   let dbLatencyMs: number | null = null;
   let dbError: string | null = null;
   let dbSizeBytes: number | null = null;
+  let auditSizeBytes: number | null = null;
 
   try {
     await pool.query("SELECT 1");
@@ -56,6 +57,14 @@ export async function GET(request: Request) {
     // correct regardless of what DATABASE_URL's path segment says.
     const sizeResult = await pool.query<{ size: string }>("SELECT pg_database_size(current_database())::text AS size");
     dbSizeBytes = Number(sizeResult.rows[0]?.size ?? null) || null;
+    // pg_total_relation_size (not pg_relation_size) so this includes the
+    // table's own indexes (idx_order_status_events_order_id/restaurant_name)
+    // too -- matches how the DB-wide figure above already counts everything,
+    // not just raw heap pages, so the two numbers stay comparable at a glance.
+    const auditSizeResult = await pool.query<{ size: string }>(
+      "SELECT pg_total_relation_size('order_status_events')::text AS size",
+    );
+    auditSizeBytes = Number(auditSizeResult.rows[0]?.size ?? null) || null;
   } catch (err) {
     // Full error text (which can include internal connection details) is
     // always logged server-side, but only echoed to the caller when they're
@@ -94,6 +103,7 @@ export async function GET(request: Request) {
       latencyMs: dbLatencyMs,
       error: dbError,
       sizeBytes: isAdmin ? dbSizeBytes : null,
+      auditSizeBytes: isAdmin ? auditSizeBytes : null,
       pool: isAdmin ? { total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount } : null,
     },
     ws: {

@@ -108,7 +108,7 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
         onClick={(e) => e.stopPropagation()}
         className={`bg-[var(--color-surface-1)] border ${
           danger ? "border-[var(--color-danger)]" : "border-[var(--color-border-strong)]"
-        } rounded-[var(--radius-md)] shadow-xl p-6 w-full max-w-md ${panelClass}`}
+        } rounded-[var(--radius-md)] shadow-xl p-6 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto ${panelClass}`}
       >
         <h2
           id="modal-title"

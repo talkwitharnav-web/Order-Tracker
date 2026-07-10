@@ -128,11 +128,18 @@ export async function PUT(
     // Verified fresh against THIS order's restaurant on every call -- never
     // trust employeeId alone for attribution. Skipped entirely for Undo
     // (below, Undo reverses the kitchen's own immediately-prior mistake
-    // within an 8-second window, not a new attributable action) and for
-    // admin God Mode overrides (a distinct, already-logged path -- admin
-    // never supplies employeeId/pin, so it must not get swept into "this
-    // kitchen has employees, PIN is mandatory").
-    const employeeCheck = typeof undoToken === "string" || isAdmin
+    // within an 8-second window, not a new attributable action) and for a
+    // genuine admin God Mode override -- but "genuine" requires no pin/
+    // employeeId to have actually been sent, not merely isAdmin being true.
+    // isAdminRequest() only reports whether an admin_session cookie EXISTS,
+    // and SYSTEM_MEMORY.md documents that a browser may validly hold both an
+    // admin_session AND a restaurant_session at once (e.g. admin console open
+    // in one tab, kitchen dashboard logged in and actively used in another).
+    // Bypassing on isAdmin alone silently discarded a real employee's PIN
+    // attribution any time this coincidence occurred, even though the action
+    // came from the kitchen UI with a real verified PIN, not from admin.
+    const isGenuineAdminOverride = isAdmin && employeeId === undefined && pin === undefined;
+    const employeeCheck = typeof undoToken === "string" || isGenuineAdminOverride
       ? { ok: true as const, employee: null }
       : await verifyEmployeeForAction(currentOrder.restaurant_name, employeeId, pin, pinLength);
     if (!employeeCheck.ok) return employeeCheck.response;
@@ -305,8 +312,15 @@ export async function DELETE(
   try {
     await initDb();
 
-    const existing = await query<{ restaurant_name: string }>(
-      "SELECT restaurant_name FROM orders WHERE id = $1 AND deleted_at IS NULL",
+    const body = await parseJsonBody(request);
+    const { employeeId, pin, pinLength } = (body && typeof body === "object" ? body : {}) as {
+      employeeId?: unknown;
+      pin?: unknown;
+      pinLength?: unknown;
+    };
+
+    const existing = await query<{ restaurant_name: string; order_number: string; status: string }>(
+      "SELECT restaurant_name, order_number, status FROM orders WHERE id = $1 AND deleted_at IS NULL",
       [orderId],
     );
     if (existing.rows.length === 0) {
@@ -316,22 +330,79 @@ export async function DELETE(
     const auth = await requireRestaurantOrAdmin(existing.rows[0].restaurant_name);
     if (!auth.ok) return auth.response;
 
+    // Same PIN-attribution rule as create/status-change (see SYSTEM_MEMORY.md
+    // "Employee Attribution"): mandatory once this kitchen has >=1 employee,
+    // optional (no roster to attribute to) if it has none. And same fix as
+    // the coexisting-admin-session bug above -- "genuine admin override"
+    // requires no pin/employeeId to have actually been sent, not merely an
+    // admin_session cookie existing alongside a real kitchen session.
+    const isAdmin = await isAdminRequest();
+    const isGenuineAdminOverride = isAdmin && employeeId === undefined && pin === undefined;
+    const employeeCheck = isGenuineAdminOverride
+      ? { ok: true as const, employee: null }
+      : await verifyEmployeeForAction(existing.rows[0].restaurant_name, employeeId, pin, pinLength);
+    if (!employeeCheck.ok) return employeeCheck.response;
+    const verifiedEmployee = employeeCheck.employee;
+
     // Admin deletes are real/permanent (matches the Purge button's
     // semantics — an admin choosing to delete a specific row means it's
     // actually gone, not just hidden). A kitchen deleting its own order
     // still soft-deletes (deleted_at), recoverable via admin/db's Deleted
     // view, same as before — this asymmetry is intentional, not a bug.
-    const isAdmin = await isAdminRequest();
-    const result = isAdmin
-      ? await query("DELETE FROM orders WHERE id = $1", [orderId])
-      : await query("UPDATE orders SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL", [orderId]);
+    //
+    // This branch must key off isGenuineAdminOverride, NOT the raw isAdmin
+    // flag -- isAdmin only means an admin_session cookie exists, and a
+    // browser can validly hold both an admin_session and a restaurant_session
+    // at once (see SYSTEM_MEMORY.md). Using raw isAdmin here previously
+    // caused a real kitchen employee's PIN-verified delete to get silently
+    // HARD-deleted (unrecoverable, and orphaned from admin/db's Deleted view
+    // entirely) any time an admin happened to also be logged in on that
+    // browser, even though attribution above already correctly resolved a
+    // real employee, not admin.
+    //
+    // Transactional so the audit event can never exist without the delete
+    // actually landing (or vice versa) -- same reasoning as create/status-
+    // change. The audit event is written BEFORE a genuine admin hard-delete
+    // so order_id still points at a live row at insert time; ON DELETE SET
+    // NULL then keeps the row's own restaurant_name/order_number as the
+    // durable record once the order itself is gone (see db.ts's table comment).
+    const client = await getPool().connect();
+    let result: { rowCount: number | null };
+    try {
+      await client.query("BEGIN");
 
-    if (result.rowCount === 0) {
-      logger.warn(`DELETE /api/orders/${orderId} - order not found`);
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      await client.query(
+        `INSERT INTO order_status_events (order_id, restaurant_name, order_number, from_status, to_status, employee_id, employee_name)
+         VALUES ($1, $2, $3, $4, 'Deleted', $5, $6)`,
+        [
+          orderId,
+          existing.rows[0].restaurant_name,
+          existing.rows[0].order_number,
+          existing.rows[0].status,
+          verifiedEmployee?.id ?? null,
+          verifiedEmployee?.name ?? null,
+        ],
+      );
+
+      result = isGenuineAdminOverride
+        ? await client.query("DELETE FROM orders WHERE id = $1", [orderId])
+        : await client.query("UPDATE orders SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL", [orderId]);
+
+      if (result.rowCount === 0) {
+        await client.query("ROLLBACK");
+        logger.warn(`DELETE /api/orders/${orderId} - order not found`);
+        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
 
-    logger.info(`DELETE /api/orders/${orderId} - order ${isAdmin ? "permanently deleted" : "soft-deleted"} successfully`);
+    logger.info(`DELETE /api/orders/${orderId} - order ${isGenuineAdminOverride ? "permanently deleted" : "soft-deleted"} successfully`);
 
     broadcast({
       type: "order_deleted",

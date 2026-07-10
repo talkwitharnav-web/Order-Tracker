@@ -950,7 +950,7 @@ function AdminDbContent() {
                           endAt={o.isDeleted ? o.deleted_at : null}
                         />
                       </td>
-                      <td className="py-3 px-4 text-[var(--color-text-muted)] hidden md:table-cell">
+                      <td className="py-3 px-4 text-[var(--color-text-primary)] hidden md:table-cell">
                         {new Date(o.created_at).toLocaleString()}
                       </td>
                       <td className="sticky right-0 py-3 px-4 text-right bg-[var(--color-surface-1)] z-10">

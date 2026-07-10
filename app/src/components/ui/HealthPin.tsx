@@ -11,6 +11,7 @@ type HealthResponse = {
     connected: boolean;
     latencyMs: number | null;
     sizeBytes: number | null;
+    auditSizeBytes: number | null;
     // Admin-only detail -- null for a kitchen-account caller (see
     // SECURITY_ATTACK_LOG.md's "Health Endpoint Leaks Infrastructure
     // Details" finding). tier/latencyMs (the signal a kitchen actually
@@ -90,8 +91,17 @@ function clientTierFromLatency(ms: number): HealthTier {
  * human-readable) inline in the pill itself — opt-in, and only passed from
  * admin/db, since disk usage isn't something a kitchen needs to see on
  * every page, but is directly relevant on the page that manages the DB.
+ *
+ * `showAuditSize` is the same idea but for just the order_status_events
+ * table (pg_total_relation_size, so it includes that table's own indexes,
+ * not the whole database) -- opt-in, only passed from admin/audit, since
+ * that page's own Purge Audit Log button is what this size is actually
+ * relevant to, the same way showDbSize pairs with admin/db's Purge Database.
  */
-export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {}) {
+export function HealthPin({
+  showDbSize = false,
+  showAuditSize = false,
+}: { showDbSize?: boolean; showAuditSize?: boolean } = {}) {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [clientLatencyMs, setClientLatencyMs] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
@@ -177,6 +187,9 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
       {showDbSize && health?.db.sizeBytes != null && (
         <span className="text-[var(--color-text-muted)] whitespace-nowrap">· {formatBytes(health.db.sizeBytes)}</span>
       )}
+      {showAuditSize && health?.db.auditSizeBytes != null && (
+        <span className="text-[var(--color-text-muted)] whitespace-nowrap">· {formatBytes(health.db.auditSizeBytes)}</span>
+      )}
 
       {showPopover && (
         <div className={`${popoverAnimationClass} absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg p-4 text-xs text-[var(--color-text-secondary)] z-30`}>
@@ -200,6 +213,12 @@ export function HealthPin({ showDbSize = false }: { showDbSize?: boolean } = {})
                 <div className="flex justify-between gap-3">
                   <dt className="text-[var(--color-text-muted)]">DB size</dt>
                   <dd className="text-[var(--color-text-primary)] font-medium">{formatBytes(health.db.sizeBytes)}</dd>
+                </div>
+              )}
+              {showAuditSize && health.db.auditSizeBytes != null && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-[var(--color-text-muted)]">Audit log size</dt>
+                  <dd className="text-[var(--color-text-primary)] font-medium">{formatBytes(health.db.auditSizeBytes)}</dd>
                 </div>
               )}
               {health.db.pool && (

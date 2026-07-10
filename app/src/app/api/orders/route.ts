@@ -59,9 +59,17 @@ export async function POST(request: Request) {
 
     // Admin creating an order directly (e.g. via dev/seed-adjacent tooling)
     // bypasses PIN attribution the same way admin status overrides do -- a
-    // distinct, already-logged path, not a staff floor action.
+    // distinct, already-logged path, not a staff floor action. But that only
+    // holds when admin genuinely didn't send a pin/employeeId -- isAdmin here
+    // just means an admin_session cookie EXISTS, and a browser can validly
+    // hold both an admin_session and a restaurant_session at once (admin
+    // console open in one tab, kitchen dashboard actively used in another).
+    // Bypassing purely on isAdmin silently discarded a real employee's PIN
+    // attribution whenever that coincidence occurred, even though the create
+    // request came from the kitchen UI with a real verified PIN.
     const isAdmin = await isAdminRequest();
-    const employeeCheck = isAdmin
+    const isGenuineAdminOverride = isAdmin && employeeId === undefined && pin === undefined;
+    const employeeCheck = isGenuineAdminOverride
       ? { ok: true as const, employee: null }
       : await verifyEmployeeForAction(restaurant_name, employeeId, pin, pinLength);
     if (!employeeCheck.ok) return employeeCheck.response;

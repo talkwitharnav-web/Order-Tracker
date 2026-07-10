@@ -41,6 +41,16 @@ export const PinPad: FC<{
   onClose: () => void;
   onVerify: (pin: string, pinLength: 4 | 6) => Promise<VerifiedPinIdentity | null>;
   onVerified: (employee: VerifiedPinIdentity, pin: string) => void;
+  /**
+   * When set, hides the Manager toggle entirely and locks the pad to this
+   * length -- for a context that can ONLY ever be unlocked by one specific
+   * PIN length (e.g. the Staff-tab's manager-only unlock, always 6 digits;
+   * see requiredPinLength in lib/employee-auth.ts). Without this, the pad
+   * defaulted to 4-digit mode even there, so a manager's real 6-digit PIN
+   * got auto-submitted (and rejected) after the 4th digit unless they first
+   * remembered to tap a toggle that had no reason to exist on that screen.
+   */
+  forcedPinLength?: 4 | 6;
 }> = (props) => (
   // Remounting on each open (via `key`) resets all internal state for free --
   // avoids a setState-in-effect to "reset on open", which would otherwise
@@ -53,8 +63,9 @@ const PinPadContent: FC<{
   onClose: () => void;
   onVerify: (pin: string, pinLength: 4 | 6) => Promise<VerifiedPinIdentity | null>;
   onVerified: (employee: VerifiedPinIdentity, pin: string) => void;
-}> = ({ isOpen, onClose, onVerify, onVerified }) => {
-  const [isManager, setIsManager] = useState(false);
+  forcedPinLength?: 4 | 6;
+}> = ({ isOpen, onClose, onVerify, onVerified, forcedPinLength }) => {
+  const [isManager, setIsManager] = useState(forcedPinLength === 6);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -67,7 +78,7 @@ const PinPadContent: FC<{
   // immediately, closing that window.
   const submittingRef = useRef(false);
 
-  const pinLength: 4 | 6 = isManager ? 6 : 4;
+  const pinLength: 4 | 6 = forcedPinLength ?? (isManager ? 6 : 4);
 
   const submit = async (candidatePin: string) => {
     if (submittingRef.current) return;
@@ -108,7 +119,7 @@ const PinPadContent: FC<{
   };
 
   const toggleManager = () => {
-    if (verifying) return;
+    if (verifying || forcedPinLength) return;
     setIsManager((prev) => !prev);
     setPin("");
     setError(null);
@@ -141,21 +152,23 @@ const PinPadContent: FC<{
 
   return (
     <Modal isOpen={isOpen} title="Enter your PIN" onClose={onClose}>
-      <div className="flex justify-center mb-4">
-        <button
-          type="button"
-          onClick={toggleManager}
-          disabled={verifying}
-          aria-pressed={isManager}
-          className={`px-4 py-2 rounded-[var(--radius-sm)] text-sm font-semibold border transition-colors disabled:opacity-50 ${
-            isManager
-              ? "bg-[var(--color-warning)] text-white border-[var(--color-warning)]"
-              : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border-[var(--color-border-strong)]"
-          }`}
-        >
-          Manager
-        </button>
-      </div>
+      {!forcedPinLength && (
+        <div className="flex justify-center mb-4">
+          <button
+            type="button"
+            onClick={toggleManager}
+            disabled={verifying}
+            aria-pressed={isManager}
+            className={`px-4 py-2 rounded-[var(--radius-sm)] text-sm font-semibold border transition-colors disabled:opacity-50 ${
+              isManager
+                ? "bg-[var(--color-warning)] text-white border-[var(--color-warning)]"
+                : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border-[var(--color-border-strong)]"
+            }`}
+          >
+            Manager
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center justify-center gap-3 mb-4" aria-live="polite">
         {Array.from({ length: pinLength }).map((_, i) => (

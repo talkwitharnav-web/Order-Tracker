@@ -153,8 +153,12 @@ const api = {
       throw err;
     }
   },
-  async deleteOrder(id: number) {
-    return fetchJson(`/api/orders/${id}`, { method: "DELETE" });
+  async deleteOrder(id: number, credentials?: { pin: string; pinLength: 4 | 6 }) {
+    return fetchJson(`/api/orders/${id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(credentials ? { pin: credentials.pin, pinLength: credentials.pinLength } : {}),
+    });
   },
 };
 
@@ -847,6 +851,14 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
           isOpen={pinPadOpen}
           onClose={() => setPinPadOpen(false)}
           onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
+          // This unlock can ONLY ever be a manager (see the accountType check
+          // below), and managers always have a 6-digit PIN (requiredPinLength
+          // in lib/employee-auth.ts) -- so force 6 digits instead of showing
+          // the generic Manager length-toggle here. Without this, the pad
+          // defaulted to 4-digit mode and auto-submitted (then rejected) a
+          // manager's real PIN after its 4th digit unless they happened to
+          // tap a toggle that served no purpose on this screen.
+          forcedPinLength={6}
           onVerified={(employee) => {
             // The pad's Manager toggle only controls expected PIN LENGTH,
             // not who it's checked against -- verifyPin can still resolve to
@@ -1335,14 +1347,14 @@ function KitchenDashboardContent({
   // fires and the card would sit deleted-but-still-visible forever.
   const ORDER_EXIT_ANIMATION_MS = 300;
 
-  const deleteOrder = async (id: number) => {
+  const deleteOrder = async (id: number, credentials?: { pin: string; pinLength: 4 | 6 }) => {
     // Play the slide-out first, then actually remove the order from state
     // once the animation has had time to finish -- deleting from `orders`
     // immediately (the old behavior) left no time for any exit animation
     // to render at all.
     setExitingIds((prev) => new Set(prev).add(id));
     try {
-      await api.deleteOrder(id);
+      await api.deleteOrder(id, credentials);
       showToast("Order deleted successfully", "success");
       setTimeout(() => {
         setOrders((prev) => prev.filter((o) => o.id !== id));
@@ -1354,7 +1366,7 @@ function KitchenDashboardContent({
       }, ORDER_EXIT_ANIMATION_MS);
     } catch (error) {
       console.error("Failed to delete order", error);
-      showToast("Failed to delete order", "error");
+      showToast(error instanceof Error ? error.message : "Failed to delete order", "error");
       setExitingIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -1364,22 +1376,50 @@ function KitchenDashboardContent({
     }
   };
 
-  // Holding Shift while clicking Delete skips the "are you sure" modal --
-  // if someone deliberately holds an extra key, they've already signaled
-  // they mean it, so the confirmation would just be friction at that point.
+  // Deleting is destructive enough to need the same PIN attribution as
+  // create/status-change once this kitchen has any employees configured
+  // (see SYSTEM_MEMORY.md "Employee Attribution") -- otherwise (no roster
+  // yet) it proceeds unattributed exactly as before. Holding Shift while
+  // clicking Delete skips the "are you sure" confirmation modal (an extra
+  // deliberate keypress already signals intent, so that confirmation would
+  // just be friction) but still requires the PIN when employees exist --
+  // shift-click is not a way to bypass attribution, only the "are you sure".
+  const pendingDeleteRef = useRef<number | null>(null);
+  const [deletePinOpen, setDeletePinOpen] = useState(false);
+
+  const startDeletePinFlow = (id: number) => {
+    pendingDeleteRef.current = id;
+    setDeletePinOpen(true);
+  };
+
   const requestDeleteOrder = (id: number, skipConfirm: boolean) => {
+    if (employees.length === 0) {
+      if (skipConfirm) {
+        void deleteOrder(id);
+        return;
+      }
+      setOrderToDelete(id);
+      return;
+    }
+
+    // Employees exist: PIN is mandatory either way. Shift-click only skips
+    // the confirmation modal, going straight to the PIN pad instead.
     if (skipConfirm) {
-      deleteOrder(id);
+      startDeletePinFlow(id);
       return;
     }
     setOrderToDelete(id);
   };
 
-  const confirmDeleteOrder = async () => {
+  const confirmDeleteOrder = () => {
     if (orderToDelete === null) return;
     const id = orderToDelete;
     setOrderToDelete(null);
-    await deleteOrder(id);
+    if (employees.length === 0) {
+      void deleteOrder(id);
+      return;
+    }
+    startDeletePinFlow(id);
   };
 
   const handleAddOrder = (newOrder: Order) => {
@@ -1484,6 +1524,26 @@ function KitchenDashboardContent({
           // verify is only for fast wrong-PIN UI feedback, the order-create
           // route independently re-verifies the pin server-side.
           void performCreateOrder(pending.orderNumber, { pin, pinLength: employee.accountType === "manager" ? 6 : 4 }).then(pending.resolve);
+        }}
+      />
+
+      <PinPad
+        isOpen={deletePinOpen}
+        onClose={() => {
+          setDeletePinOpen(false);
+          pendingDeleteRef.current = null;
+        }}
+        onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
+        onVerified={(employee, pin) => {
+          const id = pendingDeleteRef.current;
+          if (id === null) return;
+          setDeletePinOpen(false);
+          pendingDeleteRef.current = null;
+          // Same trust model as create/status-change attribution: this
+          // client-side verify is only for fast wrong-PIN UI feedback, the
+          // delete route independently re-verifies the pin server-side
+          // before writing the audit event.
+          void deleteOrder(id, { pin, pinLength: employee.accountType === "manager" ? 6 : 4 });
         }}
       />
     </div>
