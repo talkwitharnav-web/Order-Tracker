@@ -1,14 +1,30 @@
-import { normalizeStatus, ORDERED_STATUS_KEYS, type StatusKey } from "@/lib/order-status";
+import { normalizeStatus, type StatusKey } from "@/lib/order-status";
 import { computeStatusDurationMs } from "@/lib/order-duration";
 
 /**
  * Kitchen-wide automatic priority ordering (not a user-chosen sort/filter):
- * Received orders first, then Preparing, then Complete -- each group
- * oldest-in-its-current-status first, so whatever needs attention soonest is
- * always at the top. Applies identically to Home (all statuses mixed) and
- * to the single-status Received/Preparing/Complete tabs (where the status
- * group is already fixed, so only the within-group oldest-first part acts).
+ * Preparing orders first, then Received, then Complete -- each group
+ * oldest-in-its-current-status first, so whatever needs the kitchen's
+ * attention soonest is always at the top. Applies identically to Home (all
+ * statuses mixed) and to the single-status Received/Preparing/Complete tabs
+ * (where the status group is already fixed, so only the within-group
+ * oldest-first part acts).
+ *
+ * Preparing outranks Received deliberately -- an order actively on the
+ * stove is more urgent than one that just came in, no matter how long the
+ * Received order has been waiting (e.g. a 25-minute-old Preparing order
+ * must stay above a 1-minute-old Received order, not the other way
+ * around). This is a DIFFERENT ordering than ORDERED_STATUS_KEYS in
+ * order-status.ts, which encodes the forward lifecycle
+ * (Received -> Preparing -> Complete) for the status stepper -- do not
+ * reuse that one here.
  */
+const PRIORITY_RANK: Record<StatusKey, number> = {
+  preparing: 0,
+  received: 1,
+  complete: 2,
+};
+
 const STATUS_START_FIELD: Record<StatusKey, "received_at" | "preparing_at" | "complete_at"> = {
   received: "received_at",
   preparing: "preparing_at",
@@ -24,12 +40,10 @@ export type PriorityOrder = {
 };
 
 export function sortByPriority<T extends PriorityOrder>(orders: T[]): T[] {
-  const statusRank = new Map<StatusKey, number>(ORDERED_STATUS_KEYS.map((key, i) => [key, i]));
-
   return [...orders].sort((left, right) => {
     const leftStatus = normalizeStatus(left.status);
     const rightStatus = normalizeStatus(right.status);
-    const rankDiff = (statusRank.get(leftStatus) ?? 0) - (statusRank.get(rightStatus) ?? 0);
+    const rankDiff = PRIORITY_RANK[leftStatus] - PRIORITY_RANK[rightStatus];
     if (rankDiff !== 0) return rankDiff;
 
     const leftStart = left[STATUS_START_FIELD[leftStatus]];
