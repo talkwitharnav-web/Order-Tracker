@@ -217,4 +217,108 @@ async function runInitDb() {
     CREATE INDEX IF NOT EXISTS idx_orders_restaurant_live
     ON orders (LOWER(restaurant_name)) WHERE deleted_at IS NULL;
   `);
+
+  // Per-employee identities within a kitchen account, for attributing WHO
+  // made a status change (see SYSTEM_MEMORY.md "Employee Attribution") --
+  // separate from the restaurant's own login, which remains the single
+  // device-level kitchen session. PIN, not password: verified fresh on each
+  // status-changing action rather than establishing its own session/cookie,
+  // matching how real POS systems attribute frequent per-order actions
+  // without a full per-employee login/logout cycle.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS restaurant_employees (
+      id SERIAL PRIMARY KEY,
+      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'employee',
+      pin_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
+    );
+  `);
+  // Case-insensitive uniqueness per kitchen, live rows only -- mirrors
+  // idx_restaurants_unique_name_ci's reasoning so a deactivated employee's
+  // name can be reused by a new hire immediately.
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_employees_unique_name_ci
+    ON restaurant_employees (restaurant_id, LOWER(name)) WHERE deleted_at IS NULL;
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_restaurant_employees_restaurant_live
+    ON restaurant_employees (restaurant_id) WHERE deleted_at IS NULL;
+  `);
+
+  // Kitchen-defined display labels ("Chef", "Cashier", "Dishwasher", ...),
+  // purely cosmetic/organizational -- see SYSTEM_MEMORY.md "Employee
+  // Attribution". Distinct from `restaurant_employees.account_type` below,
+  // which is the fixed manager/employee value that actually controls
+  // Staff-tab/admin access; a role_id has no permission effect on its own.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS restaurant_roles (
+      id SERIAL PRIMARY KEY,
+      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await db.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_roles_unique_name_ci
+    ON restaurant_roles (restaurant_id, LOWER(name));
+  `);
+
+  // account_type is the original `role` column's actual meaning (manager vs
+  // "everyone else who can be attributed to an action") -- split out under
+  // its own name once `role` also needed to mean "kitchen-defined display
+  // label" (role_id, below), which are two different concepts that used to
+  // be conflated in one column. Backfill from the pre-existing `role`
+  // values ('manager' stays 'manager'; the former default 'cashier' and
+  // anything else becomes 'employee', matching the terminology rename --
+  // "cashier" implied only front-of-house staff change status, when
+  // actually anyone can).
+  await db.query(`ALTER TABLE restaurant_employees ADD COLUMN IF NOT EXISTS account_type TEXT;`);
+  await db.query(`UPDATE restaurant_employees SET account_type = 'manager' WHERE account_type IS NULL AND role = 'manager';`);
+  await db.query(`UPDATE restaurant_employees SET account_type = 'employee' WHERE account_type IS NULL;`);
+  await db.query(`ALTER TABLE restaurant_employees ALTER COLUMN account_type SET NOT NULL;`);
+  await db.query(`ALTER TABLE restaurant_employees ALTER COLUMN account_type SET DEFAULT 'employee';`);
+
+  // Nullable FK to the kitchen's own custom role labels -- null means "no
+  // custom label set", which is a normal, common state (a kitchen that
+  // never bothered defining roles), not an error.
+  await db.query(`ALTER TABLE restaurant_employees ADD COLUMN IF NOT EXISTS role_id INTEGER REFERENCES restaurant_roles(id) ON DELETE SET NULL;`);
+
+  // PIN length is chosen per-employee at creation time (4 or 6 digits) --
+  // bcrypt itself doesn't care, but the PIN pad UI needs to know how many
+  // dots/digits to render when THIS employee is the one entering their PIN.
+  // Backfilled to 4 for any employee created before this column existed
+  // (every PIN accepted so far has in fact been 4-6 digits per the existing
+  // PIN_PATTERN validator, and 4 was the only length actually reachable
+  // through the UI before the toggle existed).
+  await db.query(`ALTER TABLE restaurant_employees ADD COLUMN IF NOT EXISTS pin_length SMALLINT;`);
+  await db.query(`UPDATE restaurant_employees SET pin_length = 4 WHERE pin_length IS NULL;`);
+  await db.query(`ALTER TABLE restaurant_employees ALTER COLUMN pin_length SET NOT NULL;`);
+  await db.query(`ALTER TABLE restaurant_employees ALTER COLUMN pin_length SET DEFAULT 4;`);
+
+  // Append-only audit trail of every status transition, separate from
+  // orders' own single-row status/timestamp columns -- those only ever hold
+  // the CURRENT status and the FIRST time each stage was entered, so they
+  // can't show a full history (e.g. an admin override bouncing a status back
+  // and forth) or who performed each individual step. employee_id is
+  // nullable: God Mode admin overrides and any transition made before an
+  // employee PIN is supplied still record an event, just without attribution,
+  // rather than silently skipping the audit row entirely.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS order_status_events (
+      id SERIAL PRIMARY KEY,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      employee_id INTEGER REFERENCES restaurant_employees(id) ON DELETE SET NULL,
+      employee_name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_order_status_events_order_id
+    ON order_status_events (order_id);
+  `);
 }

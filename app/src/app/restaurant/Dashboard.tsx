@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, FormEvent, FC } from "react";
-import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search, SearchX, Clock3 } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback, FormEvent, FC } from "react";
+import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search, SearchX, Clock3, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChefMascot } from "@/components/ui/ChefMascot";
@@ -13,7 +13,10 @@ import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { Select } from "@/components/ui/Select";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { normalizeStatus, type ApiOrderStatus } from "@/lib/order-status";
-import { fetchJson } from "@/lib/api-client";
+import { fetchJson, ApiError } from "@/lib/api-client";
+import { PinPad, type PinPadEmployee } from "@/components/ui/PinPad";
+import { StrengthMeter } from "@/components/ui/StrengthMeter";
+import { scorePinStrength } from "@/lib/credential-strength";
 import {
   formatOrderDisplayInput,
   NAMING_STYLES,
@@ -37,8 +40,8 @@ export type Order = {
   complete_at: string | null;
   acknowledged_at: string | null;
 };
-type Tab = "Home" | "Received" | "Preparing" | "Complete";
-type StatusCounts = Record<Exclude<Tab, "Home">, number>;
+type Tab = "Home" | "Received" | "Preparing" | "Complete" | "Staff";
+type StatusCounts = Record<Exclude<Tab, "Home" | "Staff">, number>;
 type StatusUpdateResult = {
   order: Order;
   undo?: {
@@ -54,7 +57,30 @@ const TAB_ITEMS: { tab: Tab; Icon: typeof Home }[] = [
   { tab: "Received", Icon: Inbox },
   { tab: "Preparing", Icon: Flame },
   { tab: "Complete", Icon: CheckCircle },
+  { tab: "Staff", Icon: Users },
 ];
+
+// Raw shape returned by GET .../employees -- snake_case, matches the DB
+// columns directly (see lib/db.ts restaurant_employees/restaurant_roles).
+type EmployeeApiRow = {
+  id: number;
+  name: string;
+  account_type: "manager" | "employee";
+  role_id: number | null;
+  role_name: string | null;
+  pin_length: number;
+  created_at: string;
+};
+
+function toPinPadEmployee(row: EmployeeApiRow): PinPadEmployee {
+  return {
+    id: row.id,
+    name: row.name,
+    accountType: row.account_type,
+    roleName: row.role_name,
+    pinLength: row.pin_length === 6 ? 6 : 4,
+  };
+}
 
 // --- API HELPERS ---
 const api = {
@@ -65,7 +91,11 @@ const api = {
     // retrying would only pile up redundant in-flight requests.
     return fetchJson<Order[]>(url, {}, { retries: 0 });
   },
-  async createOrder(restName: string, orderNum: string): Promise<Order> {
+  async createOrder(
+    restName: string,
+    orderNum: string,
+    employee?: { id: number; pin: string },
+  ): Promise<Order> {
     // No retries: creating an order isn't idempotent from the client's
     // point of view (a "timed out" request could have actually landed), and
     // the DB's unique-order-name index would just turn a retry into a
@@ -74,15 +104,49 @@ const api = {
     return fetchJson<Order>("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ restaurant_name: restName, order_number: orderNum }),
+      body: JSON.stringify({
+        restaurant_name: restName,
+        order_number: orderNum,
+        ...(employee ? { employeeId: employee.id, pin: employee.pin } : {}),
+      }),
     }, { retries: 0 });
   },
-  async updateOrderStatus(id: number, status: OrderStatus, undoToken?: string): Promise<StatusUpdateResult> {
+  async updateOrderStatus(
+    id: number,
+    status: OrderStatus,
+    undoToken?: string,
+    employee?: { id: number; pin: string },
+  ): Promise<StatusUpdateResult> {
     return fetchJson<StatusUpdateResult>(`/api/orders/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, ...(undoToken ? { undoToken } : {}) }),
+      body: JSON.stringify({
+        status,
+        ...(undoToken ? { undoToken } : {}),
+        ...(employee ? { employeeId: employee.id, pin: employee.pin } : {}),
+      }),
     });
+  },
+  async getEmployees(restName: string): Promise<{ employees: PinPadEmployee[] }> {
+    const data = await fetchJson<{ employees: EmployeeApiRow[] }>(
+      `/api/restaurants/by-name/${encodeURIComponent(restName)}/employees`,
+      {},
+      { retries: 0 },
+    );
+    return { employees: data.employees.map(toPinPadEmployee) };
+  },
+  async verifyEmployeePin(restName: string, employeeId: number, pin: string): Promise<boolean> {
+    try {
+      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restName)}/employees/verify-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeId, pin }),
+      }, { retries: 0 });
+      return true;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) return false;
+      throw err;
+    }
   },
   async deleteOrder(id: number) {
     return fetchJson(`/api/orders/${id}`, { method: "DELETE" });
@@ -122,7 +186,7 @@ const Nav: FC<{
       >
         <Icon className="w-5 h-5 shrink-0" />
         <span>{tab}</span>
-        {tab !== "Home" && (
+        {tab !== "Home" && tab !== "Staff" && (
           <span className="ml-auto min-w-6 px-1.5 py-0.5 rounded-[var(--radius-full)] bg-[var(--color-surface-0)] text-[var(--color-text-secondary)] text-xs text-center">
             <span aria-hidden="true">{statusCounts[tab]}</span>
             <span className="sr-only">
@@ -309,11 +373,11 @@ const HomeTab: FC<{
   recentlyUpdatedId: number | null;
   exitingIds: Set<number>;
   restaurantName: string;
-  onAddOrder: (order: Order) => void;
+  onCreateOrder: (orderNumber: string) => Promise<Order | null>;
   onDeleteOrder: (id: number, skipConfirm: boolean) => void;
   onAdvance: (id: number, status: OrderStatus) => void;
   onError: (message: string) => void;
-}> = ({ orders, recentlyUpdatedId, exitingIds, restaurantName, onAddOrder, onDeleteOrder, onAdvance, onError }) => {
+}> = ({ orders, recentlyUpdatedId, exitingIds, restaurantName, onCreateOrder, onDeleteOrder, onAdvance, onError }) => {
   const [orderNumber, setOrderNumber] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   // Persisted per-device (localStorage), same pattern as the theme/contrast/
@@ -359,8 +423,13 @@ const HomeTab: FC<{
     e.preventDefault();
     if (!orderNumber.trim()) return;
     try {
-      const newOrder = await api.createOrder(restaurantName, orderNumber);
-      onAddOrder(newOrder);
+      // onCreateOrder itself gates on the employee PIN (if this kitchen has
+      // any staff configured) before the order is actually created -- see
+      // KitchenDashboardContent.requestCreateOrder. Returns null if the
+      // PIN prompt was cancelled, in which case nothing was created and
+      // there's nothing further to do here.
+      const newOrder = await onCreateOrder(orderNumber);
+      if (!newOrder) return;
       // Sequential/letter-number/table-pager immediately suggest the next
       // value again so the kitchen can just keep hitting Add Order during a
       // rush without retyping; name-based/freeform styles clear for a fresh
@@ -571,6 +640,375 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
   );
 };
 
+type RoleApiRow = { id: number; name: string; created_at: string };
+
+/**
+ * Manager-gated employee roster: add/edit/deactivate employees, reset PINs,
+ * and manage the kitchen's own custom role labels (Chef, Cashier, etc. --
+ * see SYSTEM_MEMORY.md "Employee Attribution"). Client-side display is a
+ * convenience only -- every mutation here is re-authorized server-side by
+ * requireRestaurantOrAdmin, same as every other kitchen-scoped route. The
+ * "unlock with a manager's own PIN" step exists because there's no
+ * per-employee session to check accountType against, so this reuses the
+ * same PinPad and restricts which employees can unlock it to managers.
+ */
+const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void }> = ({
+  restaurantName,
+  onError,
+}) => {
+  const [employees, setEmployees] = useState<PinPadEmployee[]>([]);
+  const [roles, setRoles] = useState<RoleApiRow[]>([]);
+  const [unlocked, setUnlocked] = useState(false);
+  const [pinPadOpen, setPinPadOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [newAccountType, setNewAccountType] = useState<"manager" | "employee">("employee");
+  // PIN length is DERIVED from account type, not independently choosable --
+  // managers require a 6-digit PIN (see lib/employee-auth.ts
+  // requiredPinLength; the server enforces this regardless, this just keeps
+  // the UI from prompting for a length that would be rejected).
+  const newPinLength = newAccountType === "manager" ? 6 : 4;
+  const [newRoleId, setNewRoleId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [newRoleName, setNewRoleName] = useState("");
+
+  const managers = employees.filter((e) => e.accountType === "manager");
+
+  const loadAll = useCallback(() => {
+    api.getEmployees(restaurantName).then((data) => setEmployees(data.employees)).catch(() => {});
+    fetchJson<{ roles: RoleApiRow[] }>(`/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/roles`)
+      .then((data) => setRoles(data.roles))
+      .catch(() => {});
+  }, [restaurantName]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const roleOptions = [
+    { value: "", label: "No role label" },
+    ...roles.map((r) => ({ value: String(r.id), label: r.name })),
+  ];
+
+  const addEmployee = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim() || !new RegExp(`^\\d{${newPinLength}}$`).test(newPin)) {
+      onError(`Enter a name and a ${newPinLength}-digit PIN`);
+      return;
+    }
+    setSaving(true);
+    try {
+      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/employees`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName.trim(),
+          pin: newPin,
+          pinLength: newPinLength,
+          accountType: newAccountType,
+          roleId: newRoleId ? Number(newRoleId) : undefined,
+        }),
+      });
+      setNewName("");
+      setNewPin("");
+      setNewAccountType("employee");
+      setNewRoleId("");
+      loadAll();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to add employee");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deactivate = async (id: number) => {
+    try {
+      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/employees/${id}`, {
+        method: "DELETE",
+      });
+      loadAll();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to deactivate employee");
+    }
+  };
+
+  const updateEmployee = async (id: number, patch: Record<string, unknown>) => {
+    try {
+      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/employees/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      loadAll();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update employee");
+    }
+  };
+
+  const addRole = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newRoleName.trim()) return;
+    try {
+      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/roles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newRoleName.trim() }),
+      });
+      setNewRoleName("");
+      loadAll();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to add role");
+    }
+  };
+
+  const deleteRole = async (id: number) => {
+    try {
+      await fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/roles/${id}`, {
+        method: "DELETE",
+      });
+      loadAll();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to delete role");
+    }
+  };
+
+  if (!unlocked) {
+    return (
+      <Card>
+        <h3 className="text-xl font-bold text-[var(--color-text-primary)] mb-1">Staff</h3>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+          Manage who can be attributed to order actions. A manager PIN is required to open this panel.
+        </p>
+        <Button type="button" variant="secondary" onClick={() => setPinPadOpen(true)}>
+          Unlock with manager PIN
+        </Button>
+        <PinPad
+          isOpen={pinPadOpen}
+          employees={managers}
+          onClose={() => setPinPadOpen(false)}
+          onVerify={(employeeId, pin) => api.verifyEmployeePin(restaurantName, employeeId, pin)}
+          onVerified={() => {
+            setPinPadOpen(false);
+            setUnlocked(true);
+          }}
+        />
+        {managers.length === 0 && employees.length === 0 && (
+          <p className="text-xs text-[var(--color-text-muted)] mt-3">
+            No employees yet. Ask an admin to add your first manager from the admin console, or add employees below
+            once unlocked.
+          </p>
+        )}
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <h3 className="text-xl font-bold text-[var(--color-text-primary)] mb-4">Employees</h3>
+        <ul className="space-y-2 mb-4">
+          {employees.map((employee) => (
+            <li
+              key={employee.id}
+              className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 rounded-[var(--radius-sm)] bg-[var(--color-surface-2)]"
+            >
+              {editingId === employee.id ? (
+                <EmployeeEditRow
+                  employee={employee}
+                  roleOptions={roleOptions}
+                  onCancel={() => setEditingId(null)}
+                  onSave={async (patch) => {
+                    await updateEmployee(employee.id, patch);
+                    setEditingId(null);
+                  }}
+                />
+              ) : (
+                <>
+                  <span className="text-sm font-medium text-[var(--color-text-primary)]">
+                    {employee.name}{" "}
+                    <span className="text-[var(--color-text-muted)] font-normal">
+                      ({employee.accountType === "manager" ? "Manager" : "Employee"}
+                      {employee.roleName ? `, ${employee.roleName}` : ""})
+                    </span>
+                  </span>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="ghost" size="md" onClick={() => setEditingId(employee.id)}>
+                      Edit
+                    </Button>
+                    <Button type="button" variant="ghost" size="md" onClick={() => deactivate(employee.id)}>
+                      Remove
+                    </Button>
+                  </div>
+                </>
+              )}
+            </li>
+          ))}
+          {employees.length === 0 && (
+            <li className="text-sm text-[var(--color-text-muted)]">No employees yet.</li>
+          )}
+        </ul>
+
+        <form onSubmit={addEmployee} className="flex flex-wrap items-end gap-2">
+          <Input
+            aria-label="Employee name"
+            placeholder="Full name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className="flex-1 min-w-[10rem]"
+          />
+          <Select
+            ariaLabel="Account type"
+            value={newAccountType}
+            options={[
+              { value: "employee", label: "Employee (4-digit PIN)" },
+              { value: "manager", label: "Manager (6-digit PIN)" },
+            ]}
+            onChange={(v) => {
+              setNewAccountType(v);
+              setNewPin("");
+            }}
+          />
+          <div className="w-36">
+            <Input
+              aria-label="Employee PIN"
+              placeholder={`${newPinLength}-digit PIN`}
+              inputMode="numeric"
+              value={newPin}
+              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, newPinLength))}
+            />
+            <StrengthMeter {...scorePinStrength(newPin, newPinLength)} empty={newPin.length === 0} />
+          </div>
+          <Select
+            ariaLabel="Role label"
+            value={newRoleId}
+            options={roleOptions}
+            onChange={setNewRoleId}
+          />
+          <Button type="submit" disabled={saving}>
+            Add
+          </Button>
+        </form>
+      </Card>
+
+      <Card>
+        <h3 className="text-xl font-bold text-[var(--color-text-primary)] mb-1">Roles</h3>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+          Custom labels (Chef, Cashier, Dishwasher, ...) you can assign to any employee above. Labels are for
+          organization only -- Manager/Employee above controls Staff-tab access.
+        </p>
+        <ul className="space-y-2 mb-4">
+          {roles.map((role) => (
+            <li
+              key={role.id}
+              className="flex items-center justify-between gap-3 px-3 py-2 rounded-[var(--radius-sm)] bg-[var(--color-surface-2)]"
+            >
+              <span className="text-sm font-medium text-[var(--color-text-primary)]">{role.name}</span>
+              <Button type="button" variant="ghost" size="md" onClick={() => deleteRole(role.id)}>
+                Delete
+              </Button>
+            </li>
+          ))}
+          {roles.length === 0 && <li className="text-sm text-[var(--color-text-muted)]">No custom roles yet.</li>}
+        </ul>
+        <form onSubmit={addRole} className="flex flex-wrap items-end gap-2">
+          <Input
+            aria-label="New role name"
+            placeholder="Role name (e.g. Chef)"
+            value={newRoleName}
+            onChange={(e) => setNewRoleName(e.target.value)}
+            className="flex-1 min-w-[10rem]"
+          />
+          <Button type="submit">Add Role</Button>
+        </form>
+      </Card>
+    </div>
+  );
+};
+
+const EmployeeEditRow: FC<{
+  employee: PinPadEmployee;
+  roleOptions: { value: string; label: string }[];
+  onCancel: () => void;
+  onSave: (patch: Record<string, unknown>) => Promise<void>;
+}> = ({ employee, roleOptions, onCancel, onSave }) => {
+  const currentRoleId = roleOptions.find((r) => r.label === employee.roleName)?.value ?? "";
+  const [name, setName] = useState(employee.name);
+  const [accountType, setAccountType] = useState<"manager" | "employee">(employee.accountType);
+  const [roleId, setRoleId] = useState(currentRoleId);
+  const [resetPin, setResetPin] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // PIN length is DERIVED from the currently-selected account type, not
+  // independently choosable -- managers require a 6-digit PIN (see
+  // lib/employee-auth.ts requiredPinLength). Promoting employee->manager
+  // here forces a PIN reset in the same save, matching the server's
+  // rejection of a promotion that doesn't also fix the PIN length.
+  const requiredLength = accountType === "manager" ? 6 : 4;
+  const isPromotingToManager = accountType === "manager" && employee.accountType !== "manager";
+  const mustResetPin = isPromotingToManager || employee.pinLength !== requiredLength;
+
+  const save = async () => {
+    if (mustResetPin && !new RegExp(`^\\d{${requiredLength}}$`).test(resetPin)) return;
+    setSaving(true);
+    const patch: Record<string, unknown> = {
+      name,
+      accountType,
+      roleId: roleId ? Number(roleId) : null,
+    };
+    if (resetPin) {
+      patch.pin = resetPin;
+      patch.pinLength = requiredLength;
+    }
+    await onSave(patch);
+    setSaving(false);
+  };
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 w-full">
+      <Input aria-label="Edit name" value={name} onChange={(e) => setName(e.target.value)} className="flex-1 min-w-[8rem]" />
+      <Select
+        ariaLabel="Edit account type"
+        value={accountType}
+        options={[
+          { value: "employee", label: "Employee (4-digit PIN)" },
+          { value: "manager", label: "Manager (6-digit PIN)" },
+        ]}
+        onChange={(v) => {
+          setAccountType(v);
+          setResetPin("");
+        }}
+      />
+      <Select ariaLabel="Edit role label" value={roleId} options={roleOptions} onChange={setRoleId} />
+      <div className="w-48">
+        <Input
+          aria-label={mustResetPin ? `New ${requiredLength}-digit PIN (required)` : "Reset PIN (optional)"}
+          placeholder={mustResetPin ? `New ${requiredLength}-digit PIN (required)` : "New PIN (optional)"}
+          inputMode="numeric"
+          value={resetPin}
+          onChange={(e) => setResetPin(e.target.value.replace(/\D/g, "").slice(0, requiredLength))}
+        />
+        <StrengthMeter {...scorePinStrength(resetPin, requiredLength)} empty={resetPin.length === 0} />
+      </div>
+      <Button
+        type="button"
+        onClick={save}
+        disabled={saving || (mustResetPin && resetPin.length !== requiredLength)}
+      >
+        Save
+      </Button>
+      <Button type="button" variant="ghost" onClick={onCancel}>
+        Cancel
+      </Button>
+      {isPromotingToManager && (
+        <p className="text-xs text-[var(--color-text-muted)] w-full">
+          Promoting to Manager requires setting a new 6-digit PIN.
+        </p>
+      )}
+    </div>
+  );
+};
+
 const OrderGrid: FC<{
   orders: Order[];
   recentlyUpdatedId: number | null;
@@ -624,6 +1062,27 @@ function KitchenDashboardContent({
   // `orders`, see deleteOrder below.
   const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Employee roster for PIN-based status-change attribution (see
+  // SYSTEM_MEMORY.md "Employee Attribution"). Empty roster means this
+  // kitchen hasn't set up employees yet -- status changes proceed exactly
+  // as before, unattributed, rather than blocking kitchen operations.
+  const [employees, setEmployees] = useState<PinPadEmployee[]>([]);
+  const [pendingAdvance, setPendingAdvance] = useState<{ id: number; status: OrderStatus } | null>(null);
+  // Order creation's PIN gate resolves the promise HomeTab is awaiting
+  // (see onCreateOrder below), rather than firing a callback like status
+  // advance does -- HomeTab needs to know synchronously (via await) whether
+  // to clear/advance its naming-style input, not just get notified later.
+  const pendingCreateOrderRef = useRef<{
+    orderNumber: string;
+    resolve: (order: Order | null) => void;
+  } | null>(null);
+  const [createOrderPinOpen, setCreateOrderPinOpen] = useState(false);
+
+  useEffect(() => {
+    api.getEmployees(restaurantName)
+      .then((data) => setEmployees(data.employees))
+      .catch(() => setEmployees([]));
+  }, [restaurantName]);
   const statusCounts = useMemo<StatusCounts>(() => {
     const counts: StatusCounts = { Received: 0, Preparing: 0, Complete: 0 };
     for (const order of orders) {
@@ -697,14 +1156,14 @@ function KitchenDashboardContent({
     }
   };
 
-  const handleAdvanceStatus = async (id: number, status: OrderStatus) => {
+  const performAdvanceStatus = async (id: number, status: OrderStatus, employee?: { id: number; pin: string }) => {
     const previousOrder = orders.find((order) => order.id === id);
     if (!previousOrder) return;
 
     try {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
       flash(id);
-      const response = await api.updateOrderStatus(id, status);
+      const response = await api.updateOrderStatus(id, status, undefined, employee);
       setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...response.order } : order)));
 
       if (response.undo) {
@@ -724,6 +1183,46 @@ function KitchenDashboardContent({
       showToast(error instanceof Error ? error.message : "Failed to update status", "error");
       void fetchOrders();
     }
+  };
+
+  // Entry point every order card actually calls. If this kitchen has any
+  // employees set up, require a PIN tap first so the transition can be
+  // attributed -- otherwise (no roster yet) proceed exactly as before.
+  const handleAdvanceStatus = (id: number, status: OrderStatus) => {
+    if (employees.length === 0) {
+      void performAdvanceStatus(id, status);
+      return;
+    }
+    setPendingAdvance({ id, status });
+  };
+
+  const performCreateOrder = async (
+    orderNumber: string,
+    employee?: { id: number; pin: string },
+  ): Promise<Order | null> => {
+    try {
+      const newOrder = await api.createOrder(restaurantName, orderNumber, employee);
+      handleAddOrder(newOrder);
+      return newOrder;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Failed to create order", "error");
+      return null;
+    }
+  };
+
+  // Entry point HomeTab calls (awaited) before creating an order. Same PIN
+  // gate as status advance: no employees set up yet proceeds unattributed;
+  // otherwise a PIN is required. Resolves to null (not created) if the PIN
+  // prompt is cancelled, so HomeTab knows not to advance its naming-style
+  // suggestion.
+  const requestCreateOrder = (orderNumber: string): Promise<Order | null> => {
+    if (employees.length === 0) {
+      return performCreateOrder(orderNumber);
+    }
+    return new Promise((resolve) => {
+      pendingCreateOrderRef.current = { orderNumber, resolve };
+      setCreateOrderPinOpen(true);
+    });
   };
 
   // 300ms matches .animate-order-exit's own animation duration in
@@ -788,8 +1287,26 @@ function KitchenDashboardContent({
   const renderContent = () => {
     if (isLoading) return <p className="text-[var(--color-text-muted)]">Setting up the kitchen...</p>;
 
-    let displayedOrders =
-      activeTab === "Home" ? orders : orders.filter((o) => normalizeStatus(o.status) === normalizeStatus(activeTab));
+    if (activeTab === "Home") {
+      return (
+        <HomeTab
+          orders={orders}
+          recentlyUpdatedId={recentlyUpdatedId}
+          exitingIds={exitingIds}
+          restaurantName={restaurantName}
+          onCreateOrder={requestCreateOrder}
+          onDeleteOrder={requestDeleteOrder}
+          onAdvance={handleAdvanceStatus}
+          onError={(message) => showToast(message, "error")}
+        />
+      );
+    }
+
+    if (activeTab === "Staff") {
+      return <StaffTab restaurantName={restaurantName} onError={(message) => showToast(message, "error")} />;
+    }
+
+    let displayedOrders = orders.filter((o) => normalizeStatus(o.status) === normalizeStatus(activeTab));
 
     if (activeTab === "Received" || activeTab === "Preparing") {
       displayedOrders = [...displayedOrders].sort((left, right) => {
@@ -798,21 +1315,6 @@ function KitchenDashboardContent({
         if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return left.id - right.id;
         return leftTime - rightTime || left.id - right.id;
       });
-    }
-
-    if (activeTab === "Home") {
-      return (
-        <HomeTab
-          orders={displayedOrders}
-          recentlyUpdatedId={recentlyUpdatedId}
-          exitingIds={exitingIds}
-          restaurantName={restaurantName}
-          onAddOrder={handleAddOrder}
-          onDeleteOrder={requestDeleteOrder}
-          onAdvance={handleAdvanceStatus}
-          onError={(message) => showToast(message, "error")}
-        />
-      );
     }
 
     return (
@@ -848,6 +1350,48 @@ function KitchenDashboardContent({
         </p>
         <ModalActions onCancel={() => setOrderToDelete(null)} onConfirm={confirmDeleteOrder} danger confirmLabel="Delete" />
       </Modal>
+
+      <PinPad
+        isOpen={pendingAdvance !== null}
+        employees={employees}
+        onClose={() => setPendingAdvance(null)}
+        onVerify={(employeeId, pin) => api.verifyEmployeePin(restaurantName, employeeId, pin)}
+        onVerified={(employee, pin) => {
+          if (!pendingAdvance) return;
+          const { id, status } = pendingAdvance;
+          setPendingAdvance(null);
+          // PIN already verified once above just to give fast UI feedback
+          // (wrong-PIN retry without leaving the pad) -- the status route
+          // independently re-verifies employeeId+pin itself server-side
+          // before attributing anything, since a client-side "it verified"
+          // signal is never trusted for the actual attribution.
+          void performAdvanceStatus(id, status, { id: employee.id, pin });
+        }}
+      />
+
+      <PinPad
+        isOpen={createOrderPinOpen}
+        employees={employees}
+        onClose={() => {
+          // Cancelling must resolve (not leave hanging) the promise HomeTab
+          // is awaiting in handleCreateOrder, or its "Add Order" flow would
+          // stall indefinitely with no error and no created order.
+          setCreateOrderPinOpen(false);
+          pendingCreateOrderRef.current?.resolve(null);
+          pendingCreateOrderRef.current = null;
+        }}
+        onVerify={(employeeId, pin) => api.verifyEmployeePin(restaurantName, employeeId, pin)}
+        onVerified={(employee, pin) => {
+          const pending = pendingCreateOrderRef.current;
+          if (!pending) return;
+          setCreateOrderPinOpen(false);
+          pendingCreateOrderRef.current = null;
+          // Same trust model as status-change attribution: this client-side
+          // verify is only for fast wrong-PIN UI feedback, the order-create
+          // route independently re-verifies employeeId+pin server-side.
+          void performCreateOrder(pending.orderNumber, { id: employee.id, pin }).then(pending.resolve);
+        }}
+      />
     </div>
   );
 }

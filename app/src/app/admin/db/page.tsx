@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown, Pencil } from "lucide-react";
+import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown, Pencil, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -18,7 +18,9 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { Select } from "@/components/ui/Select";
 import { StatusDurationCell, StatusDurationCompleteCell } from "@/components/ui/StatusDurationCell";
 import { BackgroundArt } from "@/components/ui/BackgroundArt";
+import { StrengthMeter } from "@/components/ui/StrengthMeter";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
+import { scorePasswordStrength } from "@/lib/credential-strength";
 
 interface Restaurant {
   id: number;
@@ -567,6 +569,7 @@ function AdminDbContent() {
           placeholder="Enter new password"
           className="mb-2"
         />
+        <StrengthMeter {...scorePasswordStrength(newPassword)} empty={newPassword.length === 0} />
         <ModalActions
           onCancel={() => {
             setPasswordResetTarget(null);
@@ -614,6 +617,10 @@ function AdminDbContent() {
           backHref="/"
           actions={
             <>
+              <Button variant="secondary" onClick={() => router.push("/admin/staff")}>
+                <Users size={16} />
+                Staff
+              </Button>
               <Button variant="secondary" onClick={handleSeed}>
                 <Database size={16} />
                 Seed Database

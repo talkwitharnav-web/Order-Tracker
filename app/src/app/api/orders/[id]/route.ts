@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { query, initDb } from "@/lib/db";
+import { query, getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
+import { verifyEmployeeForAction } from "@/lib/employee-auth";
 
 // Forward-only lifecycle (see SYSTEM_MEMORY.md §2 status-vocab quirk — this
 // is the API-vocabulary set, unrelated to the customer-facing display
@@ -80,7 +81,12 @@ export async function PUT(
     if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
-    const { status, undoToken } = body as { status?: unknown; undoToken?: unknown };
+    const { status, undoToken, employeeId, pin } = body as {
+      status?: unknown;
+      undoToken?: unknown;
+      employeeId?: unknown;
+      pin?: unknown;
+    };
 
     logger.info(`PUT /api/orders/${orderId} - updating status`, { status });
 
@@ -117,6 +123,19 @@ export async function PUT(
     const currentOrder = existing.rows[0];
     const currentStatus = currentOrder.status.toLowerCase();
     const nextStatus = canonicalStatus.toLowerCase();
+
+    // Verified fresh against THIS order's restaurant on every call -- never
+    // trust employeeId alone for attribution. Skipped entirely for Undo
+    // (below, Undo reverses the kitchen's own immediately-prior mistake
+    // within an 8-second window, not a new attributable action) and for
+    // admin God Mode overrides (a distinct, already-logged path -- admin
+    // never supplies employeeId/pin, so it must not get swept into "this
+    // kitchen has employees, PIN is mandatory").
+    const employeeCheck = typeof undoToken === "string" || isAdmin
+      ? { ok: true as const, employee: null }
+      : await verifyEmployeeForAction(currentOrder.restaurant_name, employeeId, pin);
+    if (!employeeCheck.ok) return employeeCheck.response;
+    const verifiedEmployee = employeeCheck.employee;
 
     if (typeof undoToken === "string") {
       const previousStatus = PREVIOUS_STATUS[currentStatus];
@@ -185,34 +204,58 @@ export async function PUT(
     const timestampColumn = STATUS_TIMESTAMP_COLUMN[nextStatus];
     const canUndo = !isAdmin && STATUS_ORDER.indexOf(nextStatus) === STATUS_ORDER.indexOf(currentStatus) + 1;
     const transitionToken = canUndo ? randomUUID() : null;
-    const result = await query<UpdatedOrder>(
-      `UPDATE orders
-       SET status = $1,
-           updated_at = NOW(),
-           ${timestampColumn} = COALESCE(${timestampColumn}, NOW()),
-           status_transition_token = $2,
-           status_transition_at = CASE WHEN $2::text IS NULL THEN NULL ELSE NOW() END
-       WHERE id = $3
-         AND deleted_at IS NULL
-         ${isAdmin ? "" : "AND LOWER(status) = $4"}
-       RETURNING id, restaurant_name, order_number, status, updated_at,
-                 received_at, preparing_at, complete_at, acknowledged_at,
-                 status_transition_token, status_transition_at`,
-      isAdmin
-        ? [canonicalStatus, transitionToken, orderId]
-        : [canonicalStatus, transitionToken, orderId, currentStatus],
-    );
 
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: "Order changed in another tab. Refreshing the latest status." },
-        { status: 409 },
+    // Transactional so the audit event can never exist without the status
+    // change actually landing (or vice versa) -- a crash/error between the
+    // two would otherwise leave an inconsistent audit trail.
+    const client = await getPool().connect();
+    let updatedOrder: UpdatedOrder;
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<UpdatedOrder>(
+        `UPDATE orders
+         SET status = $1,
+             updated_at = NOW(),
+             ${timestampColumn} = COALESCE(${timestampColumn}, NOW()),
+             status_transition_token = $2,
+             status_transition_at = CASE WHEN $2::text IS NULL THEN NULL ELSE NOW() END
+         WHERE id = $3
+           AND deleted_at IS NULL
+           ${isAdmin ? "" : "AND LOWER(status) = $4"}
+         RETURNING id, restaurant_name, order_number, status, updated_at,
+                   received_at, preparing_at, complete_at, acknowledged_at,
+                   status_transition_token, status_transition_at`,
+        isAdmin
+          ? [canonicalStatus, transitionToken, orderId]
+          : [canonicalStatus, transitionToken, orderId, currentStatus],
       );
+
+      if (result.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "Order changed in another tab. Refreshing the latest status." },
+          { status: 409 },
+        );
+      }
+
+      await client.query(
+        `INSERT INTO order_status_events (order_id, from_status, to_status, employee_id, employee_name)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [orderId, currentOrder.status, canonicalStatus, verifiedEmployee?.id ?? null, verifiedEmployee?.name ?? null],
+      );
+
+      await client.query("COMMIT");
+      updatedOrder = result.rows[0];
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
 
-    logger.info(`PUT /api/orders/${orderId} - status updated successfully`);
-
-    const updatedOrder = result.rows[0];
+    logger.info(`PUT /api/orders/${orderId} - status updated successfully`, {
+      employee: verifiedEmployee?.name ?? null,
+    });
 
     broadcast({
       type: "order_updated",

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { query, initDb } from "@/lib/db";
+import { query, getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
-import { requireRestaurantOrAdmin } from "@/lib/auth";
+import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
 import { requireString, requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeOrderLookupKey } from "@/lib/order-naming";
+import { verifyEmployeeForAction } from "@/lib/employee-auth";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
@@ -15,8 +16,8 @@ export async function POST(request: Request) {
     if (body === null) {
       return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
     }
-    const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber } =
-      body as { restaurant_name?: unknown; order_number?: unknown };
+    const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber, employeeId, pin } =
+      body as { restaurant_name?: unknown; order_number?: unknown; employeeId?: unknown; pin?: unknown };
 
     // requireSafeName (not requireString) -- these values get stored and
     // rendered back out (kitchen dashboard, customer tracker, admin/db), so
@@ -56,6 +57,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Admin creating an order directly (e.g. via dev/seed-adjacent tooling)
+    // bypasses PIN attribution the same way admin status overrides do -- a
+    // distinct, already-logged path, not a staff floor action.
+    const isAdmin = await isAdminRequest();
+    const employeeCheck = isAdmin
+      ? { ok: true as const, employee: null }
+      : await verifyEmployeeForAction(restaurant_name, employeeId, pin);
+    if (!employeeCheck.ok) return employeeCheck.response;
+    const verifiedEmployee = employeeCheck.employee;
+
     let order: {
       id: number;
       restaurant_name: string;
@@ -66,15 +77,29 @@ export async function POST(request: Request) {
       complete_at: string | null;
       acknowledged_at: string | null;
     };
+    // Transactional so the audit event can never exist without the order
+    // actually landing (or vice versa) -- same reasoning as the status-change
+    // route's transaction.
+    const client = await getPool().connect();
     try {
-      const result = await query(
+      await client.query("BEGIN");
+      const result = await client.query(
         `INSERT INTO orders (restaurant_name, order_number)
          VALUES ($1, $2)
          RETURNING id, restaurant_name, order_number, status, received_at, preparing_at, complete_at, acknowledged_at`,
         [restaurant_name, order_number],
       );
       order = result.rows[0] as typeof order;
+
+      await client.query(
+        `INSERT INTO order_status_events (order_id, from_status, to_status, employee_id, employee_name)
+         VALUES ($1, NULL, $2, $3, $4)`,
+        [order.id, order.status, verifiedEmployee?.id ?? null, verifiedEmployee?.name ?? null],
+      );
+
+      await client.query("COMMIT");
     } catch (insertErr) {
+      await client.query("ROLLBACK");
       if (
         insertErr instanceof Error &&
         "code" in insertErr &&
@@ -90,10 +115,13 @@ export async function POST(request: Request) {
         );
       }
       throw insertErr;
+    } finally {
+      client.release();
     }
 
     logger.info("POST /api/orders - order created successfully", {
       orderId: order.id,
+      employee: verifiedEmployee?.name ?? null,
     });
 
     broadcast({ type: "order_updated", payload: order });

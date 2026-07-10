@@ -7,7 +7,9 @@ import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Button } from "@/components/ui/Button";
+import { StrengthMeter } from "@/components/ui/StrengthMeter";
 import { fetchJson } from "@/lib/api-client";
+import { scorePasswordStrength } from "@/lib/credential-strength";
 
 async function getActiveSessionName() {
   try {
@@ -148,6 +150,7 @@ export default function RestaurantSignupPage() {
         <p id="password-requirements" className="mt-1.5 text-xs text-[var(--color-text-muted)]">
           Use 8–200 characters with no spaces.
         </p>
+        <StrengthMeter {...scorePasswordStrength(password)} empty={password.length === 0} />
       </div>
       <Checkbox label="Remember Me" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
       <Button type="submit" size="lg" disabled={isLoading} className="w-full">

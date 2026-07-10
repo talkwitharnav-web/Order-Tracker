@@ -26,11 +26,11 @@ Current technical truth for the Restaurant Order Tracker. Narrative history and 
 
 | Area | Route | Behavior |
 |---|---|---|
-| Admin | `/`, `/admin/db` | Localhost-only gateway and DB console |
+| Admin | `/`, `/admin/db`, `/admin/staff` | Localhost-only gateway, DB console, and kitchen staff/roles management |
 | Kitchen | `/restaurant/*` | Authenticated dashboard; polls orders every 5 seconds |
 | Customer | `/customer` | Public lookup; live WebSocket updates |
 
-Non-localhost hosts expose only customer/kitchen/API/static prefixes; `/` and `/admin/db` return 404. This is public-routing rehearsal, not full internet deployment.
+Non-localhost hosts expose only customer/kitchen/API/static prefixes; `/`, `/admin/db`, and `/admin/staff` return 404. This is public-routing rehearsal, not full internet deployment.
 
 ## Data Model and Order Rules
 
@@ -54,6 +54,10 @@ Indexes:
 - Live restaurant-order lookup index and `updated_at` index
 
 `initDb()` creates/migrates idempotently and memoizes its promise. A soft-deleted identifier can be reused by a new live order; undelete returns 409 if that canonical identity is occupied.
+
+### `restaurant_employees` and `order_status_events`
+
+Per-kitchen employee roster and append-only status-change audit trail; see "Employee Attribution" under Auth for the full design.
 
 ### Lifecycle
 
@@ -87,6 +91,26 @@ Indexes:
 - `requireAdmin()` for DB/admin mutation routes
 - `requireRestaurantOrAdmin(name)` for restaurant-scoped order operations
 - `requireAnyAuthenticated()` for aggregate health/customer-origin
+
+### Employee Attribution
+
+- `restaurant_employees` (id, restaurant_id, name, `account_type` `manager|employee`, nullable `role_id` FK, `pin_length` 4|6, bcrypt `pin_hash`, `deleted_at`) is a per-kitchen roster, separate from the restaurant's own login. No employee session/cookie exists. `account_type` is the fixed value that controls Staff-tab/admin-staff access; `role_id` is a kitchen-defined display label (see `restaurant_roles`) with no permission effect of its own — permissions-per-role are explicitly future work, not built yet.
+- `restaurant_roles` (id, restaurant_id, name) — free-text labels ("Chef", "Cashier", ...) a kitchen (or admin) can create/rename/delete and assign to any employee regardless of `account_type`. Deleting a role in-use sets that employee's `role_id` to NULL (not an error).
+- A PIN is verified fresh on every attributable order action via `POST .../employees/verify-pin`, not established as a session — matches real POS terminals attributing frequent per-order actions on a shared device without a per-employee login/logout cycle. Each employee's PIN length (4 or 6 digits) is fixed at creation/reset time and known server-side, so the client-side `PinPad` renders exactly that many digit slots once an employee is selected — no guessing/debounce needed.
+- **Managers must have a 6-digit PIN; employees may use 4.** `lib/employee-auth.ts` `requiredPinLength(accountType)` is the single source of truth — PIN length is DERIVED from `account_type` server-side on every create/edit, never accepted from the client, since a manager PIN also unlocks the Staff tab/admin staff access and warrants more entropy. Promoting an employee to manager without also supplying a new 6-digit PIN in the same request is rejected (400), so an account can never end up as `account_type = 'manager'` with a stale 4-digit PIN. One pre-existing account (kitchen "asdf", employee "John Doe") predates this fix and still has a 4-digit manager PIN — left as-is per user direction; do not "fix" it without being asked.
+- `POST /api/orders` and `PUT /api/orders/[id]` both accept optional `employeeId`+`pin`, independently re-verified server-side via shared `lib/employee-auth.ts` (never trusts a client-asserted id). Enforcement is conditional: a kitchen with zero employees configured can still operate fully unattributed; the moment it has ≥1 employee, `employeeId`+`pin` become MANDATORY on both routes (missing them is a 400), not just optional-forever. Admin (God Mode) callers bypass this entirely — admin never supplies employeeId/pin, and is treated as a distinct already-logged path.
+- Every order creation AND every forward status transition inserts one row into append-only `order_status_events` (order_id, from_status nullable, to_status, employee_id nullable, employee_name denormalized, created_at) in the same DB transaction as the `orders` INSERT/UPDATE — this is the actual "who added it, who moved it, how fast" audit trail; `orders`' own timestamp columns only ever hold current/first-entry state, not a full history. A creation event has `from_status = NULL`.
+- Same timing-safe dummy-hash precedent as restaurant login (`SECURITY_ATTACK_LOG.md` F4) applied to PIN checks. PIN verification is rate-limited per-restaurant+IP (15/min) — tighter than login, since a PIN has much less entropy than a password.
+- Kitchen dashboard: clicking an order's advance button or Add Order opens `PinPad` (numeric keypad, not a text input) if the kitchen has any employees configured. Employee roster/role management (dashboard `StaffTab`) lives in its own nav tab (not Home), gated behind unlocking with a manager's own PIN — there's no employee session to check `account_type` against server-side beyond the per-request PIN check, so the unlock step exists purely client-side as friction, while every actual mutation is still re-authorized by `requireRestaurantOrAdmin` regardless.
+- Admin-side staff management lives at `/admin/staff` (linked from `/admin/db`'s header) — search a kitchen, view its profile grouped into Managers/Roles/Employees, and add/edit (name, account_type, role, PIN+length)/remove any account. This is the bootstrap path for a kitchen's very first manager, since the kitchen-side Staff tab's manager-PIN-unlock is otherwise a chicken-and-egg lock-out for a kitchen with no employees yet.
+- `PinPad` supports real keyboard input (digits, Backspace, Enter), not just clicks — a `document`-level `keydown` listener, matching `Modal`'s own Escape/Tab handling. `submit()` is guarded by a `useRef` (not the `verifying` state) to stay synchronous against React StrictMode's dev-only double-effect-invocation, which could otherwise let two listener instances both pass a stale `verifying === false` check and fire duplicate `verify-pin` requests for one keypress.
+- Both PINs and the restaurant's own password are bcrypt-hashed before storage (never stored raw) — `pin_hash`/`password` columns only, same as every other credential in this app (see `raw_password` being the one documented, user-approved local-dev exception, which does NOT apply to PINs).
+
+### Credential Strength Meter
+
+- `lib/credential-strength.ts` exports two separate live-scoring functions — `scorePasswordStrength` and `scorePinStrength` — because they model different threats. Passwords are scored on entropy (length, character variety, a small common-password blocklist). PINs have fixed, non-negotiable length (`requiredPinLength`), so scoring instead penalizes the specific patterns a real attacker tries first: sequences (1234), all-same-digit (0000), simple repeats, and plausible years. Both return one of six tiers (`weak` → `s-tier`).
+- `components/ui/StrengthMeter.tsx` renders the live result as a segmented bar + icon + label, one distinct icon per tier (never color alone), matching `StatusBadge`'s approach — this app supports deuteranopia/protanopia/tritanopia palettes where red/amber/green alone can collapse.
+- Wired into every place a user chooses a new password or PIN: restaurant signup, admin's restaurant password-reset modal, and every PIN input in both the kitchen `StaffTab` and `/admin/staff` (add-employee, edit-employee/reset-PIN). This is advisory only — the meter never blocks submission; the actual minimum requirements (8+ char password, PIN length matching `account_type`) are still enforced server-side.
 
 ### Rate limits
 
@@ -149,6 +173,11 @@ Indexes:
 | `/api/orders/[id]/acknowledge` | Public pickup acknowledgement |
 | `/api/orders/[id]/undelete` | Admin restore |
 | `/api/restaurants/by-name/[name]/settings` | Kitchen pickup cap |
+| `/api/restaurants/by-name/[name]/employees` | List/add employees |
+| `/api/restaurants/by-name/[name]/employees/[id]` | Deactivate/reset PIN |
+| `/api/restaurants/by-name/[name]/employees/verify-pin` | Per-action PIN check for attribution |
+| `/api/restaurants/by-name/[name]/roles` | List/add kitchen-defined role labels |
+| `/api/restaurants/by-name/[name]/roles/[roleId]` | Rename/delete a role label |
 | `/api/health` | Authenticated health; infrastructure detail admin-only |
 | `/api/customer-origin` | Authenticated reachable-origin resolver |
 | `/api/dev/db`, `/api/dev/seed` | Admin DB view/Purge and destructive Seed |
