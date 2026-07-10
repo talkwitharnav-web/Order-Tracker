@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, FC } from "react";
 import { Accessibility } from "lucide-react";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
 import { getA11yPref, setA11yPref, getCvdMode, setCvdMode, type A11yPrefKey, type CvdMode } from "@/lib/accessibility-prefs";
-import { getFunnyChef, setFunnyChef } from "@/lib/funny-chef";
 import { useDropdownReveal } from "@/lib/useDropdownReveal";
 
 const OPTIONS: { key: A11yPrefKey; label: string; description: string }[] = [
@@ -48,12 +47,6 @@ export const AccessibilityMenu: FC = () => {
     focus: false,
   });
   const [cvdMode, setCvdModeState] = useState<CvdMode>("off");
-  // Not a true accessibility setting (see lib/funny-chef.ts) -- kept as its
-  // own boolean state rather than folded into `prefs`/A11yPrefKey, since
-  // this menu is simply the one existing place in the toolbar with a
-  // toggle-switch list UI, not because Funny Chef belongs under
-  // "Accessibility" conceptually.
-  const [funnyChef, setFunnyChefState] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { shouldRender: showMenu, animationClass: menuAnimationClass } = useDropdownReveal(open);
 
@@ -64,7 +57,6 @@ export const AccessibilityMenu: FC = () => {
       focus: getA11yPref("focus"),
     });
     setCvdModeState(getCvdMode());
-    setFunnyChefState(getFunnyChef());
   }, []);
 
   useEffect(() => {
@@ -86,12 +78,6 @@ export const AccessibilityMenu: FC = () => {
   const chooseCvdMode = (mode: CvdMode) => {
     setCvdMode(mode);
     setCvdModeState(mode);
-  };
-
-  const toggleFunnyChef = () => {
-    const next = !funnyChef;
-    setFunnyChef(next);
-    setFunnyChefState(next);
   };
 
   return (
@@ -182,33 +168,6 @@ export const AccessibilityMenu: FC = () => {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="px-4 py-3 border-t border-[var(--color-border)]">
-            <button
-              role="menuitemcheckbox"
-              aria-checked={funnyChef}
-              onClick={toggleFunnyChef}
-              className="w-full text-left flex items-start justify-between gap-3 hover:bg-[var(--color-surface-2)] transition-colors rounded-[var(--radius-sm)] -mx-2 px-2 py-1"
-            >
-              <span>
-                <span className="block text-sm font-medium text-[var(--color-text-primary)]">Funny Chef</span>
-                <span className="block text-xs text-[var(--color-text-muted)] mt-0.5">
-                  The chef mascot tells kitchen jokes instead of his usual lines.
-                </span>
-              </span>
-              <span
-                className={`shrink-0 mt-0.5 w-9 h-5 rounded-[var(--radius-full)] transition-colors relative ${
-                  funnyChef ? "bg-[var(--color-brand)]" : "bg-[var(--color-surface-2)] border border-[var(--color-border-strong)]"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 rounded-[var(--radius-full)] shadow transition-transform ${
-                    funnyChef ? "translate-x-[18px] bg-[var(--color-on-brand)]" : "translate-x-0.5 bg-white"
-                  }`}
-                />
-              </span>
-            </button>
           </div>
         </div>
       )}

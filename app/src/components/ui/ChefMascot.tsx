@@ -52,25 +52,40 @@ export const ChefMascot: FC<{
   walk?: boolean;
 }> = ({ walk, lines, ...common }) => {
   // "Funny Chef" (see lib/funny-chef.ts) is an opt-in preference set in the
-  // settings pill's Accessibility menu -- when on, EVERY chef on EVERY page
-  // tells a kitchen joke instead of its usual line, overriding whatever
-  // contextual `lines` the caller passed in (e.g. Dashboard's "no orders
-  // yet" pool, the login portal's sign-in lines). This is the one place
-  // every ChefMascot caller funnels through, so overriding here means no
-  // individual call site needs its own Funny Chef branching logic.
+  // settings pill's toolbar -- when on, EVERY chef on EVERY page tells a
+  // kitchen joke instead of its usual line, overriding whatever contextual
+  // `lines` the caller passed in (e.g. Dashboard's "no orders yet" pool, the
+  // login portal's sign-in lines). This is the one place every ChefMascot
+  // caller funnels through, so overriding here means no individual call site
+  // needs its own Funny Chef branching logic.
   //
-  // Read via a lazy useState initializer (synchronous on the client), NOT
-  // useFunnyChef()'s own effect-based hook -- ChefSprite/ChefSprite3D each
-  // pick their random `line` ONCE in a mount-only effect with `[]` deps, so
-  // if `effectiveLines` were still `undefined` on their FIRST render (which
-  // is what useFunnyChef() returns before its own effect has run one render
-  // later), that stale value would already be locked in as their line pool
-  // forever -- a toggle-then-reload would still show a persisted "on" state
-  // but never actually surface a joke. getFunnyChef() reads the same
-  // data-funny-chef attribute the pre-hydration script in layout.tsx already
-  // set before paint, so it's safe to read synchronously here, same as
-  // MascotStyleToggle's own hydration-safe read.
-  const [funnyChef] = useState(getFunnyChef);
+  // Read synchronously via a lazy useState initializer (matches
+  // MascotStyleToggle's own hydration-safe read of the pre-hydration
+  // script's data-funny-chef attribute) so the FIRST render already has the
+  // right value -- but then ALSO subscribed live via the change event below,
+  // because flipping the toggle should count as a fresh "mount" too: the
+  // toggle itself is the trigger for a new random line, not just a page
+  // load. ChefSprite/ChefSprite3D each pick their random `line` ONCE in a
+  // mount-only effect with `[]` deps, so simply passing a new `lines` array
+  // after the fact would NOT re-pick anything -- the `mountKey` below forces
+  // React to actually unmount+remount the sprite (via `key`) whenever the
+  // preference changes, the same trick ChefMascot already uses on itself for
+  // the 2D/3D swap (see PinPadContent-style `key` pattern elsewhere in this
+  // codebase).
+  const [funnyChef, setFunnyChefState] = useState(getFunnyChef);
+  const [mountKey, setMountKey] = useState(0);
+  useEffect(() => {
+    const onChange = () => {
+      setFunnyChefState(getFunnyChef());
+      setMountKey((k) => k + 1);
+    };
+    window.addEventListener("funnychefchange", onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener("funnychefchange", onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
   const effectiveLines = funnyChef ? KITCHEN_JOKES : lines;
 
   // Start at the SSR default ("3d") so the first client render matches the
@@ -166,6 +181,7 @@ export const ChefMascot: FC<{
         // figure turns via `swap` on the inner 3D element; otherwise honour
         // the caller's `walk`.
         <ChefSprite3D
+          key={mountKey}
           walk={walk && !swapping}
           gait={swapping}
           swap={phase === "idle" ? null : phase}
@@ -173,7 +189,7 @@ export const ChefMascot: FC<{
           {...common}
         />
       ) : (
-        <ChefSprite lines={effectiveLines} {...common} />
+        <ChefSprite key={mountKey} lines={effectiveLines} {...common} />
       )}
     </div>
   );

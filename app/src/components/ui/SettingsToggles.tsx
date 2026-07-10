@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { AccessibilityMenu } from "@/components/ui/AccessibilityMenu";
 import { UiSizeToggle } from "@/components/ui/UiSizeToggle";
 import { MascotStyleToggle } from "@/components/ui/MascotStyleToggle";
+import { FunnyChefToggle } from "@/components/ui/FunnyChefToggle";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
 import { FullscreenToggle } from "@/components/ui/FullscreenToggle";
 import { useReservedTopRight } from "@/lib/useReservedTopRight";
@@ -59,9 +60,14 @@ export const SettingsToggles: FC<{
     <span className="hidden sm:block w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
     <AccessibilityMenu />
     {hasMascot && (
-      <ThemedTooltip label="2D / 3D chef">
-        <MascotStyleToggle />
-      </ThemedTooltip>
+      <>
+        <ThemedTooltip label="2D / 3D chef">
+          <MascotStyleToggle />
+        </ThemedTooltip>
+        <ThemedTooltip label="Funny Chef">
+          <FunnyChefToggle />
+        </ThemedTooltip>
+      </>
     )}
     <ThemedTooltip label="Fullscreen" align="right" className="sm:hidden">
       <FullscreenToggle />
