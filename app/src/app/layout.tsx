@@ -54,6 +54,10 @@ const themeInitScript = `
     }
     var mascot = localStorage.getItem("mascotStyle");
     document.documentElement.setAttribute("data-mascot", mascot === "2d" ? "2d" : "3d");
+    var funnyChef = localStorage.getItem("funnyChef");
+    if (funnyChef === "on") {
+      document.documentElement.setAttribute("data-funny-chef", "on");
+    }
   } catch (e) {}
 })();
 `;

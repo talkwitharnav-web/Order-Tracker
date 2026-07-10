@@ -4,6 +4,8 @@ import { FC, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChefSprite } from "./ChefSprite";
 import { ChefSprite3D } from "./ChefSprite3D";
 import { getMascotStyle, registerMascot, type MascotStyle } from "@/lib/mascot-style";
+import { getFunnyChef } from "@/lib/funny-chef";
+import { KITCHEN_JOKES } from "@/lib/kitchen-jokes";
 
 /**
  * Renders the derpy chef in whichever style (2D SVG or CSS-3D) the user has
@@ -48,7 +50,29 @@ export const ChefMascot: FC<{
   size?: number;
   minSize?: number;
   walk?: boolean;
-}> = ({ walk, ...common }) => {
+}> = ({ walk, lines, ...common }) => {
+  // "Funny Chef" (see lib/funny-chef.ts) is an opt-in preference set in the
+  // settings pill's Accessibility menu -- when on, EVERY chef on EVERY page
+  // tells a kitchen joke instead of its usual line, overriding whatever
+  // contextual `lines` the caller passed in (e.g. Dashboard's "no orders
+  // yet" pool, the login portal's sign-in lines). This is the one place
+  // every ChefMascot caller funnels through, so overriding here means no
+  // individual call site needs its own Funny Chef branching logic.
+  //
+  // Read via a lazy useState initializer (synchronous on the client), NOT
+  // useFunnyChef()'s own effect-based hook -- ChefSprite/ChefSprite3D each
+  // pick their random `line` ONCE in a mount-only effect with `[]` deps, so
+  // if `effectiveLines` were still `undefined` on their FIRST render (which
+  // is what useFunnyChef() returns before its own effect has run one render
+  // later), that stale value would already be locked in as their line pool
+  // forever -- a toggle-then-reload would still show a persisted "on" state
+  // but never actually surface a joke. getFunnyChef() reads the same
+  // data-funny-chef attribute the pre-hydration script in layout.tsx already
+  // set before paint, so it's safe to read synchronously here, same as
+  // MascotStyleToggle's own hydration-safe read.
+  const [funnyChef] = useState(getFunnyChef);
+  const effectiveLines = funnyChef ? KITCHEN_JOKES : lines;
+
   // Start at the SSR default ("3d") so the first client render matches the
   // server HTML; the mount effect below immediately corrects to the persisted
   // style with NO swap animation.
@@ -145,10 +169,11 @@ export const ChefMascot: FC<{
           walk={walk && !swapping}
           gait={swapping}
           swap={phase === "idle" ? null : phase}
+          lines={effectiveLines}
           {...common}
         />
       ) : (
-        <ChefSprite {...common} />
+        <ChefSprite lines={effectiveLines} {...common} />
       )}
     </div>
   );
