@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -45,6 +45,37 @@ type OrderRow = Order & { isDeleted: boolean };
 
 type SortDirection = "asc" | "desc";
 type OrderSortKey = "id" | "created_at";
+
+function orderRowKey(order: OrderRow) {
+  return `order-${order.id}`;
+}
+
+function filteredAndSortedOrders(
+  rows: OrderRow[],
+  search: string,
+  restaurantFilter: string[],
+  statusFilter: string[],
+  sort: { key: OrderSortKey; direction: SortDirection } | null,
+) {
+  return rows
+    .filter((order) => {
+      const query = search.trim().toLowerCase();
+      const matchesSearch = order.order_number.toLowerCase().includes(query);
+      const matchesRestaurant =
+        restaurantFilter.length === 0 || restaurantFilter.includes(order.restaurant_name);
+      const matchesStatus =
+        statusFilter.length === 0 ||
+        (order.isDeleted && statusFilter.includes("Deleted")) ||
+        (!order.isDeleted && statusFilter.includes(order.status));
+      return matchesSearch && matchesRestaurant && matchesStatus;
+    })
+    .sort((first, second) => {
+      if (!sort) return 0;
+      const direction = sort.direction === "asc" ? 1 : -1;
+      if (sort.key === "id") return (first.id - second.id) * direction;
+      return (new Date(first.created_at).getTime() - new Date(second.created_at).getTime()) * direction;
+    });
+}
 
 /** Reusable sortable <th> -- click cycles asc -> desc -> off (no sort). */
 function SortableHeader({
@@ -118,6 +149,9 @@ function AdminDbContent() {
   const [newPassword, setNewPassword] = useState("");
   const [renameTarget, setRenameTarget] = useState<{ id: number; currentName: string } | null>(null);
   const [newName, setNewName] = useState("");
+  const [filterExitingOrderKeys, setFilterExitingOrderKeys] = useState<Set<string>>(() => new Set());
+  const [filterEnteringOrderKeys, setFilterEnteringOrderKeys] = useState<Set<string>>(() => new Set());
+  const filterAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -147,6 +181,10 @@ function AdminDbContent() {
       })
       .catch(() => router.push("/"));
   }, [router, fetchData]);
+
+  useEffect(() => () => {
+    if (filterAnimationTimerRef.current) clearTimeout(filterAnimationTimerRef.current);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -188,7 +226,7 @@ function AdminDbContent() {
     setConfirmState({
       isOpen: true,
       title: "Seed Database",
-      message: "Are you sure you want to seed the database? This will clear existing data.",
+      message: "This clears existing data, then creates 5 sample kitchens and 35 realistic orders across every status and history view. Every sample kitchen uses password123.",
       danger: false,
       confirmationPhrase: "SEED DATABASE",
       onConfirm: () =>
@@ -198,7 +236,7 @@ function AdminDbContent() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ confirmation: "SEED DATABASE" }),
           }),
-          "Database seeded successfully!",
+          "Seeded 5 kitchens and 35 sample orders!",
         ),
     });
   };
@@ -350,29 +388,117 @@ function AdminDbContent() {
   // isDeleted so the table can render them inline (deleted rows visually
   // muted, undelete instead of delete/status-change) rather than needing a
   // separate section -- lets one search/filter/sort apply across both.
-  const allOrderRows: OrderRow[] = [
+  const availableOrderRows: OrderRow[] = [
     ...orders.map((o) => ({ ...o, isDeleted: false })),
-    ...(showDeleted ? deletedOrders.map((o) => ({ ...o, isDeleted: true })) : []),
+    ...deletedOrders.map((o) => ({ ...o, isDeleted: true })),
   ];
+  const allOrderRows = showDeleted
+    ? availableOrderRows
+    : availableOrderRows.filter((order) => !order.isDeleted);
 
-  const visibleOrderRows = allOrderRows
-    .filter((o) => {
-      const q = orderSearch.trim().toLowerCase();
-      const matchesSearch = o.order_number.toLowerCase().includes(q);
-      const matchesRestaurant =
-        orderRestaurantFilter.length === 0 || orderRestaurantFilter.includes(o.restaurant_name);
-      const matchesStatus =
-        orderStatusFilter.length === 0 ||
-        (o.isDeleted && orderStatusFilter.includes("Deleted")) ||
-        (!o.isDeleted && orderStatusFilter.includes(o.status));
-      return matchesSearch && matchesRestaurant && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (!orderSort) return 0;
-      const dir = orderSort.direction === "asc" ? 1 : -1;
-      if (orderSort.key === "id") return (a.id - b.id) * dir;
-      return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
-    });
+  const visibleOrderRows = filteredAndSortedOrders(
+    allOrderRows,
+    orderSearch,
+    orderRestaurantFilter,
+    orderStatusFilter,
+    orderSort,
+  );
+
+  const visibleOrderKeys = visibleOrderRows.length > 0
+    ? visibleOrderRows.map(orderRowKey)
+    : ["empty"];
+  const visibleOrderKeySet = new Set(visibleOrderKeys);
+  const renderedOrderRows = filteredAndSortedOrders(
+    availableOrderRows.filter((order) => {
+      const key = orderRowKey(order);
+      return visibleOrderKeySet.has(key) || filterExitingOrderKeys.has(key);
+    }),
+    "",
+    [],
+    [],
+    orderSort,
+  );
+
+  const runOrderFilterTransition = (nextRows: OrderRow[], update: () => void) => {
+    const nextKeys = nextRows.length > 0 ? nextRows.map(orderRowKey) : ["empty"];
+    const currentKeySet = new Set(visibleOrderKeys);
+    const currentRenderedKeySet = new Set(renderedOrderRows.map(orderRowKey));
+    const nextKeySet = new Set(nextKeys);
+    const exitingKeys = new Set(
+      Array.from(currentRenderedKeySet).filter((key) => !nextKeySet.has(key)),
+    );
+    const enteringKeys = new Set(nextKeys.filter((key) => !currentKeySet.has(key) && key !== "empty"));
+    const root = document.documentElement;
+    const reduceMotion = root.getAttribute("data-motion") === "reduced"
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (reduceMotion || (exitingKeys.size === 0 && enteringKeys.size === 0)) {
+      if (filterAnimationTimerRef.current) clearTimeout(filterAnimationTimerRef.current);
+      setFilterExitingOrderKeys(new Set());
+      setFilterEnteringOrderKeys(new Set());
+      update();
+      return;
+    }
+
+    if (filterAnimationTimerRef.current) clearTimeout(filterAnimationTimerRef.current);
+    setFilterExitingOrderKeys(exitingKeys);
+    setFilterEnteringOrderKeys(enteringKeys);
+    update();
+    filterAnimationTimerRef.current = setTimeout(() => {
+      setFilterExitingOrderKeys(new Set());
+      setFilterEnteringOrderKeys(new Set());
+      filterAnimationTimerRef.current = null;
+    }, ORDER_EXIT_ANIMATION_MS);
+  };
+
+  const handleRestaurantFilterChange = (nextFilter: string[]) => {
+    const nextRows = filteredAndSortedOrders(
+      allOrderRows,
+      orderSearch,
+      nextFilter,
+      orderStatusFilter,
+      orderSort,
+    );
+    runOrderFilterTransition(nextRows, () => setOrderRestaurantFilter(nextFilter));
+  };
+
+  const handleStatusFilterChange = (nextFilter: string[]) => {
+    const nextRows = filteredAndSortedOrders(
+      allOrderRows,
+      orderSearch,
+      orderRestaurantFilter,
+      nextFilter,
+      orderSort,
+    );
+    runOrderFilterTransition(nextRows, () => setOrderStatusFilter(nextFilter));
+  };
+
+  const handleOrderSearchChange = (nextSearch: string) => {
+    const nextRows = filteredAndSortedOrders(
+      allOrderRows,
+      nextSearch,
+      orderRestaurantFilter,
+      orderStatusFilter,
+      orderSort,
+    );
+    runOrderFilterTransition(nextRows, () => setOrderSearch(nextSearch));
+  };
+
+  const handleDeletedVisibilityChange = () => {
+    const nextShowDeleted = !showDeleted;
+    const nextAllRows: OrderRow[] = [
+      ...orders.map((order) => ({ ...order, isDeleted: false })),
+      ...(nextShowDeleted ? deletedOrders.map((order) => ({ ...order, isDeleted: true })) : []),
+    ];
+    const nextRows = filteredAndSortedOrders(
+      nextAllRows,
+      orderSearch,
+      orderRestaurantFilter,
+      orderStatusFilter,
+      orderSort,
+    );
+    runOrderFilterTransition(nextRows, () => setShowDeleted(nextShowDeleted));
+  };
 
   const allRestaurantNames = Array.from(
     new Set([...orders, ...deletedOrders].map((o) => o.restaurant_name)),
@@ -390,30 +516,40 @@ function AdminDbContent() {
     <>
       <BackgroundArt />
       <Modal isOpen={confirmState.isOpen} title={confirmState.title} onClose={closeConfirm} danger={confirmState.danger}>
-        <p className="text-[var(--color-text-secondary)] mb-6">{confirmState.message}</p>
-        {confirmState.confirmationPhrase && (
-          <div className="mb-2">
-            <label htmlFor="destructive-confirmation" className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-              Type <strong>{confirmState.confirmationPhrase}</strong> to continue
-            </label>
-            <Input
-              id="destructive-confirmation"
-              type="text"
-              value={confirmationInput}
-              onChange={(event) => setConfirmationInput(event.target.value)}
-              autoComplete="off"
-            />
-          </div>
-        )}
-        <ModalActions
-          onCancel={closeConfirm}
-          onConfirm={confirmState.onConfirm}
-          danger={confirmState.danger}
-          confirmLabel="Confirm"
-          confirmDisabled={
-            !!confirmState.confirmationPhrase && confirmationInput !== confirmState.confirmationPhrase
-          }
-        />
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!confirmState.confirmationPhrase || confirmationInput === confirmState.confirmationPhrase) {
+              confirmState.onConfirm();
+            }
+          }}
+        >
+          <p className="text-[var(--color-text-secondary)] mb-6">{confirmState.message}</p>
+          {confirmState.confirmationPhrase && (
+            <div className="mb-2">
+              <label htmlFor="destructive-confirmation" className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                Type <strong>{confirmState.confirmationPhrase}</strong> to continue
+              </label>
+              <Input
+                id="destructive-confirmation"
+                type="text"
+                value={confirmationInput}
+                onChange={(event) => setConfirmationInput(event.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          )}
+          <ModalActions
+            onCancel={closeConfirm}
+            onConfirm={confirmState.onConfirm}
+            danger={confirmState.danger}
+            confirmLabel="Confirm"
+            confirmDisabled={
+              !!confirmState.confirmationPhrase && confirmationInput !== confirmState.confirmationPhrase
+            }
+            submit
+          />
+        </form>
       </Modal>
 
       <Modal
@@ -482,7 +618,7 @@ function AdminDbContent() {
                 <Database size={16} />
                 Seed Database
               </Button>
-              <Button variant={showDeleted ? "primary" : "secondary"} onClick={() => setShowDeleted((v) => !v)}>
+              <Button variant={showDeleted ? "primary" : "secondary"} onClick={handleDeletedVisibilityChange}>
                 <RotateCcw size={16} />
                 Deleted ({deletedOrders.length})
               </Button>
@@ -602,7 +738,7 @@ function AdminDbContent() {
                   <Input
                     type="text"
                     value={orderSearch}
-                    onChange={(e) => setOrderSearch(e.target.value)}
+                    onChange={(e) => handleOrderSearchChange(e.target.value)}
                     placeholder="Search order name..."
                     aria-label="Search orders by name"
                     className="pl-9"
@@ -621,7 +757,7 @@ function AdminDbContent() {
                       <RestaurantFilterDropdown
                         restaurantNames={allRestaurantNames}
                         selected={orderRestaurantFilter}
-                        onChange={setOrderRestaurantFilter}
+                        onChange={handleRestaurantFilterChange}
                       />
                     </div>
                   </th>
@@ -633,7 +769,7 @@ function AdminDbContent() {
                       Status
                       <StatusFilterDropdown
                         selected={orderStatusFilter}
-                        onChange={setOrderStatusFilter}
+                        onChange={handleStatusFilterChange}
                         includeDeletedOption={showDeleted}
                       />
                     </div>
@@ -664,19 +800,26 @@ function AdminDbContent() {
                 </tr>
               </thead>
               <tbody>
-                {visibleOrderRows.length === 0 ? (
+                {renderedOrderRows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
                       No orders match your filters.
                     </td>
                   </tr>
                 ) : (
-                  visibleOrderRows.map((o) => (
+                  renderedOrderRows.map((o) => (
                     <tr
                       key={o.id}
+                      aria-hidden={filterExitingOrderKeys.has(orderRowKey(o)) || undefined}
                       className={`border-b border-[var(--color-border)] last:border-0 ${
                         o.isDeleted ? "opacity-60" : ""
-                      } ${exitingOrderIds.has(o.id) ? "animate-order-exit" : ""}`}
+                      } ${
+                        exitingOrderIds.has(o.id) || filterExitingOrderKeys.has(orderRowKey(o))
+                          ? "animate-order-exit"
+                          : filterEnteringOrderKeys.has(orderRowKey(o))
+                            ? "animate-order-filter-enter"
+                            : ""
+                      }`}
                     >
                       <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.id}</td>
                       <td className="py-3 px-4 text-[var(--color-text-primary)]">{o.restaurant_name}</td>

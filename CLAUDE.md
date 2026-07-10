@@ -72,9 +72,9 @@ Technical mechanics are in `SYSTEM_MEMORY.md`; these are the settled judgment ca
 ## Load-Bearing Product and Design Decisions
 
 - **Theme:** warm light/dark bistro. A directional/circular View Transition was tried and rejected as weird; keep the calmer staggered cross-fade, instant under Reduce Motion.
-- **UI size:** root `font-size` transition is intentional. A transform-scale version was tried and rejected for blur and fixed-element misalignment.
+- **UI size:** keep native root `font-size 0.35s ease`; its continuous curve and real layout geometry are the contract. Transform/zoom broke origin and reversals, steps lost the curve, and View Transition/frame-cache approaches stalled, consumed 58–96 MB, or broke handoff. Optimize surrounding work instead.
 - **Mascot:** keep the pleated-toque, cheerful awkwardness, 2D/3D preference, container-aware sizing, and normal-flow speech bubble. Arm/hand-only animations were removed after repeated SVG-direction bugs. If 3D appears flat, check `.chef3d-*` CSS before component logic.
-- **Order motion:** add/delete slide from the right, matching toasts. Delete waits a fixed 300ms rather than `animationend`, because Reduce Motion can disable animation events.
+- **Order motion:** add/delete and filtered-out rows slide right; returning rows play the same keyframe backward. Use the fixed 300ms presence window, not `animationend`; Reduce Motion is instant.
 - **Accessibility:** size, theme, high contrast, motion, focus, and each CVD palette are independent axes; do not bundle them into one mode.
 - **Status Undo:** server-issued one-time token, 8-second deadline, stale/cross-tab/picked-up rejection, and only the mistaken timestamp is cleared. Normal kitchen flow remains forward-only.
 - **Customer handoff:** one reusable restaurant QR/sign, never a per-order QR. On localhost, `/api/customer-origin` substitutes a reachable LAN address.

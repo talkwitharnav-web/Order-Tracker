@@ -11,9 +11,9 @@ function getAppliedTheme(): Theme {
 
 // How long the [data-theme-transitioning] window stays open -- must be >=
 // the longest transition-duration + transition-delay any themed element
-// uses under it in globals.css (currently 0.45s + 0.14s = 0.59s), padded
+// uses under it in globals.css (currently 0.5s + 0.025s), padded
 // slightly so the attribute doesn't get pulled off mid-fade.
-const TRANSITION_WINDOW_MS = 650;
+const TRANSITION_WINDOW_MS = 575;
 
 /**
  * Swaps the theme with a soft, layered color cross-fade (background first,

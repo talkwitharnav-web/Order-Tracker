@@ -216,7 +216,12 @@
  * redefined per [data-theme]) but a custom property's own value change never
  * transitions by itself -- only concrete properties (background-color,
  * border-color, color, fill, stroke) that reference var(...) actually
- * animate, and only if they carry their own `transition`.
+ * animate, and only if they carry their own `transition`. Backgrounds and
+ * borders are not inherited, so they can transition broadly. Text color is
+ * inherited, though: transitioning it on every nested element makes each
+ * child chase its already-transitioning parent and creates a blocky,
+ * depth-dependent lag. Animate color only where a theme color is owned;
+ * descendants then follow that interpolated color directly.
  *
  * Scoped to [data-theme-transitioning] rather than applied permanently to
  * `*` -- a permanent blanket transition-property would also slow down every
@@ -241,18 +246,23 @@
  * "Back to front" staggering (background first, then cards, front-most
  * last) is now: body snaps instantly (no fade to stagger), card-level
  * surfaces (.card-elevated, nav, header) fade first among the animated UI,
- * everything else nested inside follows slightly after -- so the sweep
- * still reads back-to-front across the UI layers that DO fade.
+ * and everything nested inside overlaps almost immediately. Keep this gap
+ * short: a pronounced pause makes the layers read as separate rectangles.
  */
 [data-theme-transitioning] * {
-  transition-property: background-color, border-color, color, fill, stroke !important;
-  transition-duration: 0.4s !important;
-  transition-timing-function: ease !important;
-  transition-delay: 0.1s !important;
+  transition-property: background-color, border-color !important;
+  transition-duration: 0.5s !important;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition-delay: 0.025s !important;
+}
+[data-theme-transitioning] [class^="text-[var(--color-"],
+[data-theme-transitioning] [class*=" text-[var(--color-"],
+[data-theme-transitioning] .chef-speech-bubble {
+  transition-property: background-color, border-color, color !important;
 }
 [data-theme-transitioning] body {
   transition-property: color !important;
-  transition-duration: 0.4s !important;
+  transition-duration: 0.5s !important;
   transition-delay: 0s !important;
 }
 [data-theme-transitioning] .card-elevated,
@@ -624,6 +634,7 @@
     scroll-behavior: auto !important;
   }
 }
+[data-motion="reduced"],
 [data-motion="reduced"] *,
 [data-motion="reduced"] *::before,
 [data-motion="reduced"] *::after {
@@ -1413,6 +1424,14 @@ summary {
   pointer-events: none;
 }
 
+/* Filtering uses the exact same slide/collapse as deleting an order. Rows
+   returning to the result set play that animation backward. */
+.animate-order-filter-enter {
+  animation: order-card-exit 0.3s ease-in reverse both;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 /* --- Status Stepper Advance Pulse (Phase 2, item 2) — already have step-advance-bounce, enhancing --- */
 
 /* --- Health Badge Pulse (Phase 2, item 6) --- */
@@ -1535,6 +1554,7 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .animate-order-enter,
   .animate-order-exit,
+  .animate-order-filter-enter,
   .animate-status-breathe,
   .confetti-particle,
   .live-ripple-ring,
@@ -1544,6 +1564,7 @@ html, body {
 }
 [data-motion="reduced"] .animate-order-enter,
 [data-motion="reduced"] .animate-order-exit,
+[data-motion="reduced"] .animate-order-filter-enter,
 [data-motion="reduced"] .animate-status-breathe,
 [data-motion="reduced"] .confetti-particle,
 [data-motion="reduced"] .live-ripple-ring,

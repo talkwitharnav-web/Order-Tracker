@@ -118,6 +118,8 @@ Indexes:
 - `--color-on-brand` owns text/icon contrast on brand fills. Primary combinations were measured across themes/high-contrast/CVD modes.
 - Fonts: Fraunces display, Nunito Sans body, Geist Mono only where needed.
 - Accessibility axes remain independent: S/M/B size, High Contrast, Reduce Motion, Enhanced Focus, Deuteranopia/Protanopia/Tritanopia, theme.
+- S/M/B uses native root `font-size 0.35s ease`. Admin duration cells share one clock and yield during that transition; Reduce Motion collapses the root transition.
+- Admin status, restaurant, search, and Deleted filters keep removed rows for the 300ms delete slide; returning rows play it in reverse. Reduce Motion is instant.
 - `SettingsToggles` owns the top-right pill; kitchen’s mobile hamburger is inside it. Use `useReservedTopRight` + `.clear-top-right` for nearby UI.
 - Use shared `Button`, `Card`, `Input`, `Select`, `Modal`, `Toast`, status components. No native alert/confirm.
 - Shared Modal traps focus, supports Escape, and restores trigger focus.
@@ -165,7 +167,7 @@ Indexes:
 ### Backups/destructive actions
 
 - Server runs `pg_dump` every 3 hours and keeps 3 files in `backups/`.
-- Seed requires `{ confirmation: "SEED DATABASE" }`; Purge requires `{ confirmation: "PURGE DATABASE" }`.
+- Seed requires `{ confirmation: "SEED DATABASE" }` and transactionally creates 5 sample kitchens plus 30 live/5 deleted lifecycle-rich orders (shared password `password123`); Purge requires `{ confirmation: "PURGE DATABASE" }`.
 - Restore only after loading a dump into a temporary DB and verifying counts/names, then stop app and swap DB names.
 - At this update the user intentionally wants the live database empty. Old snapshots may contain previous kitchens; do not restore without asking.
 

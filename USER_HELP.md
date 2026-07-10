@@ -132,8 +132,8 @@ Status always includes text/icon meaning, not color alone.
 
 ### Destructive actions
 
-- **Seed Database** erases everything, then creates samples. Type `SEED DATABASE` to enable Confirm.
-- **Purge Database** erases everything and leaves the DB empty. Type `PURGE DATABASE` to enable Confirm.
+- **Seed Database** erases everything, then creates five sample kitchens and 35 orders spanning every status, pickup history, deleted history, varied ages, and pickup-window settings. Every sample kitchen uses password `password123`. Type `SEED DATABASE` to enable Confirm, then click the button or press Enter.
+- **Purge Database** erases everything and leaves the DB empty. Type `PURGE DATABASE` to enable Confirm, then click the button or press Enter.
 
 Never use Seed to “add” sample data. The API also rejects missing/wrong phrases.
 

@@ -128,12 +128,18 @@ export const ModalActions: FC<{
   confirmLabel?: string;
   danger?: boolean;
   confirmDisabled?: boolean;
-}> = ({ onCancel, onConfirm, confirmLabel = "Confirm", danger = false, confirmDisabled = false }) => (
+  submit?: boolean;
+}> = ({ onCancel, onConfirm, confirmLabel = "Confirm", danger = false, confirmDisabled = false, submit = false }) => (
   <div className="flex justify-end gap-3 mt-6">
-    <Button variant="secondary" onClick={onCancel}>
+    <Button type="button" variant="secondary" onClick={onCancel}>
       Cancel
     </Button>
-    <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} disabled={confirmDisabled}>
+    <Button
+      type={submit ? "submit" : "button"}
+      variant={danger ? "danger" : "primary"}
+      onClick={submit ? undefined : onConfirm}
+      disabled={confirmDisabled}
+    >
       {confirmLabel}
     </Button>
   </div>
