@@ -4,6 +4,21 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { escapeLikePattern } from "@/lib/validate";
 
+// This route had no LIMIT at all -- fine for a normal kitchen's realistic
+// active-order count (dozens, not thousands), since it only ever returns
+// not-yet-Complete orders plus Complete orders from the last 5 minutes, not
+// admin/db's full cross-restaurant history. But an abandoned/pathological
+// kitchen that never advances orders (or a stress-test account) could still
+// grow this response unboundedly over time, and this endpoint is polled
+// every 5 seconds by the kitchen dashboard -- unlike admin/db, there's no
+// scroll-triggered pagination here (the dashboard is meant to be a live,
+// glanceable, all-on-screen board, not a scrollable archive), so the fix is
+// a generous safety cap server-side rather than client-side windowing.
+// Newest-first by id keeps the most recently created work in view if a
+// kitchen ever somehow exceeds this, rather than silently showing only its
+// oldest, longest-stale orders.
+const MAX_ACTIVE_ORDERS = 1000;
+
 export async function GET(request: Request, { params }: { params: Promise<{ restaurantName: string }> }) {
   const { restaurantName } = await params;
   const { searchParams } = new URL(request.url);
@@ -44,7 +59,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
       queryParams.push(fiveMinutesAgo);
     }
 
-    sql += ` ORDER BY id DESC`;
+    queryParams.push(MAX_ACTIVE_ORDERS);
+    sql += ` ORDER BY id DESC LIMIT $${queryParams.length}`;
 
     const result = await query(sql, queryParams);
     const orders = result.rows;

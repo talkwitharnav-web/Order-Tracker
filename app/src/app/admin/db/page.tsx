@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown, Pencil, Users } from "lucide-react";
+import { Database, Trash2, Key, ShieldAlert, RotateCcw, Search, ArrowUp, ArrowDown, ArrowUpDown, Pencil, Users, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -21,62 +21,12 @@ import { BackgroundArt } from "@/components/ui/BackgroundArt";
 import { StrengthMeter } from "@/components/ui/StrengthMeter";
 import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 import { scorePasswordStrength } from "@/lib/credential-strength";
-
-interface Restaurant {
-  id: number;
-  name: string;
-  password?: string;
-  raw_password?: string;
-  complete_cap_hours?: number;
-}
-
-interface Order {
-  id: number;
-  restaurant_name: string;
-  order_number: string;
-  status: string;
-  created_at: string;
-  received_at: string | null;
-  preparing_at: string | null;
-  complete_at: string | null;
-  acknowledged_at: string | null;
-  deleted_at: string | null;
-}
+import { useWindowedOrders, PREFETCH_ROWS, type Order, type Restaurant, type OrderSortKey, type SortDirection } from "@/lib/useWindowedOrders";
 
 type OrderRow = Order & { isDeleted: boolean };
 
-type SortDirection = "asc" | "desc";
-type OrderSortKey = "id" | "created_at";
-
-function orderRowKey(order: OrderRow) {
-  return `order-${order.id}`;
-}
-
-function filteredAndSortedOrders(
-  rows: OrderRow[],
-  search: string,
-  restaurantFilter: string[],
-  statusFilter: string[],
-  sort: { key: OrderSortKey; direction: SortDirection } | null,
-) {
-  return rows
-    .filter((order) => {
-      const query = search.trim().toLowerCase();
-      const matchesSearch = order.order_number.toLowerCase().includes(query);
-      const matchesRestaurant =
-        restaurantFilter.length === 0 || restaurantFilter.includes(order.restaurant_name);
-      const matchesStatus =
-        statusFilter.length === 0 ||
-        (order.isDeleted && statusFilter.includes("Deleted")) ||
-        (!order.isDeleted && statusFilter.includes(order.status));
-      return matchesSearch && matchesRestaurant && matchesStatus;
-    })
-    .sort((first, second) => {
-      if (!sort) return 0;
-      const direction = sort.direction === "asc" ? 1 : -1;
-      if (sort.key === "id") return (first.id - second.id) * direction;
-      return (new Date(first.created_at).getTime() - new Date(second.created_at).getTime()) * direction;
-    });
+function toOrderRow(o: Order): OrderRow {
+  return { ...o, isDeleted: o.deleted_at !== null };
 }
 
 /** Reusable sortable <th> -- click cycles asc -> desc -> off (no sort). */
@@ -132,15 +82,15 @@ function AdminDbContent() {
   const router = useRouter();
   const showToast = useToast();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [deletedOrders, setDeletedOrders] = useState<Order[]>([]);
+  const [deletedCount, setDeletedCount] = useState(0);
   const [showDeleted, setShowDeleted] = useState(false);
   const [restaurantSearch, setRestaurantSearch] = useState("");
+  const [orderSearchInput, setOrderSearchInput] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const [orderRestaurantFilter, setOrderRestaurantFilter] = useState<string[]>([]);
   const [orderStatusFilter, setOrderStatusFilter] = useState<string[]>([]);
   const [orderSort, setOrderSort] = useState<{ key: OrderSortKey; direction: SortDirection } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
   const [confirmState, setConfirmState] = useState<ConfirmState>(EMPTY_CONFIRM);
   const [confirmationInput, setConfirmationInput] = useState("");
   // Order rows mid-slide-out-to-delete -- see deleteNow below. Restaurants
@@ -151,105 +101,68 @@ function AdminDbContent() {
   const [newPassword, setNewPassword] = useState("");
   const [renameTarget, setRenameTarget] = useState<{ id: number; currentName: string } | null>(null);
   const [newName, setNewName] = useState("");
-  const [filterExitingOrderKeys, setFilterExitingOrderKeys] = useState<Set<string>>(() => new Set());
-  const [filterEnteringOrderKeys, setFilterEnteringOrderKeys] = useState<Set<string>>(() => new Set());
-  const filterAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Optional search/restaurantNames: when the caller passes either, this hits
-  // the server's now-search-aware query instead of relying on the default
-  // capped-at-500-most-recent response -- see /api/dev/db's own comment on
-  // why the plain default silently couldn't find an order older than
-  // whatever's currently in that window (confirmed live: a kitchen's only
-  // order aged out after ~1300 newer orders landed, and neither the search
-  // box nor the restaurant filter could find it, even though it was a
-  // completely live order).
-  const fetchData = useCallback(async (params?: { orderSearch?: string; restaurantNames?: string[] }) => {
-    try {
-      const query = new URLSearchParams();
-      if (params?.orderSearch) query.set("orderSearch", params.orderSearch);
-      if (params?.restaurantNames && params.restaurantNames.length > 0) {
-        query.set("restaurantNames", params.restaurantNames.join(","));
-      }
-      const qs = query.toString();
-      const data = await fetchJson<{
-        restaurants: Restaurant[];
-        orders: Order[];
-        deletedOrders: Order[];
-      }>(`/api/dev/db${qs ? `?${qs}` : ""}`);
-      setRestaurants(data.restaurants);
-      setOrders(data.orders);
-      setDeletedOrders(data.deletedOrders);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [showToast]);
+  // Debounce the search box the same way the old client-side implementation
+  // did -- typing triggers a real Postgres query now (see useWindowedOrders),
+  // so debouncing matters even more here than it did for pure in-memory
+  // filtering.
+  useEffect(() => {
+    const timer = setTimeout(() => setOrderSearch(orderSearchInput), 300);
+    return () => clearTimeout(timer);
+  }, [orderSearchInput]);
+
+  const handleFirstLoad = useCallback((data: { restaurants?: Restaurant[]; deletedCount?: number }) => {
+    if (data.restaurants) setRestaurants(data.restaurants);
+    if (data.deletedCount !== undefined) setDeletedCount(data.deletedCount);
+  }, []);
+
+  const {
+    rows: orderRowsRaw,
+    isLoadingTop,
+    isLoadingBottom,
+    isInitialLoading,
+    loadMoreTop,
+    loadMoreBottom,
+    reload,
+  } = useWindowedOrders(
+    {
+      includeDeleted: showDeleted,
+      orderSearch,
+      restaurantNames: orderRestaurantFilter,
+      statusFilter: orderStatusFilter,
+      sort: orderSort,
+    },
+    handleFirstLoad,
+  );
+
+  const orderRows: OrderRow[] = orderRowsRaw.map(toOrderRow);
 
   useEffect(() => {
     fetchJson<{ authenticated: boolean; type?: string }>("/api/session")
       .then((session) => {
-        if (session.authenticated && session.type === "admin") {
-          fetchData();
-        } else {
+        if (!(session.authenticated && session.type === "admin")) {
           router.push("/");
         }
       })
-      .catch(() => router.push("/"));
-  }, [router, fetchData]);
+      .catch(() => router.push("/"))
+      .finally(() => setIsSessionLoading(false));
+  }, [router]);
 
-  // This page previously only ever fetched once on mount, so any order
-  // created/advanced/deleted elsewhere (a kitchen, another admin tab) never
-  // showed up here without a manual reload. The app already has a WS hub for
-  // exactly this (see lib/ws-hub.ts, used today by the customer tracker) --
-  // it's normally scoped to one restaurant per socket, but this page needs
-  // every restaurant's activity at once, so it connects via the separate
-  // `?admin=1` path (authenticated by the admin_session cookie server-side,
-  // see server.js's /ws upgrade handler) instead of declaring one restaurant
-  // name. Reconnects with the same exponential backoff as the customer
-  // tracker's socket (see app/customer/page.tsx) rather than a fixed
-  // interval, so a real outage doesn't hammer the server with retries.
-  const fetchDataRef = useRef(fetchData);
+  // Every order created/advanced/deleted elsewhere (a kitchen, another admin
+  // tab) should show up here without a manual reload. The app already has a
+  // WS hub for exactly this (see lib/ws-hub.ts, used today by the customer
+  // tracker) -- it's normally scoped to one restaurant per socket, but this
+  // page needs every restaurant's activity at once, so it connects via the
+  // separate `?admin=1` path (authenticated by the admin_session cookie
+  // server-side, see server.js's /ws upgrade handler) instead of declaring
+  // one restaurant name. Reconnects with the same exponential backoff as the
+  // customer tracker's socket rather than a fixed interval, so a real outage
+  // doesn't hammer the server with retries.
+  const reloadRef = useRef(reload);
   useEffect(() => {
-    fetchDataRef.current = fetchData;
-  }, [fetchData]);
-
-  // Every refetch (WS-triggered, modal-close, periodic) should use whatever
-  // search/filter is CURRENTLY active, not always the unfiltered default --
-  // otherwise a background refetch while the user has typed a search term
-  // would silently revert to the capped default query and lose the targeted
-  // match again. Read via a ref (not closed-over state) so these call sites
-  // don't need search/filter in their own dependency arrays.
-  const searchParamsRef = useRef({ orderSearch, restaurantNames: orderRestaurantFilter });
-  useEffect(() => {
-    searchParamsRef.current = { orderSearch, restaurantNames: orderRestaurantFilter };
-  }, [orderSearch, orderRestaurantFilter]);
-
-  // Debounced re-fetch whenever the search box or restaurant filter changes --
-  // this is what actually reaches past the default 500-row cap (see
-  // /api/dev/db's own comment and fetchData above). The instant client-side
-  // filtering in filteredAndSortedOrders still drives the slide animation
-  // immediately; this just backfills `orders`/`deletedOrders` with any real
-  // match the capped default couldn't have contained, shortly after. Skips
-  // the very first render (both start empty, and the initial mount fetch
-  // above already covers that default, unfiltered request).
-  const isFirstSearchEffect = useRef(true);
-  useEffect(() => {
-    if (isFirstSearchEffect.current) {
-      isFirstSearchEffect.current = false;
-      return;
-    }
-    if (!orderSearch && orderRestaurantFilter.length === 0) {
-      // Cleared back to no filter -- go back to the plain default fetch
-      // rather than sending an empty-but-still-"search" request.
-      void fetchData();
-      return;
-    }
-    const timer = setTimeout(() => {
-      void fetchData({ orderSearch, restaurantNames: orderRestaurantFilter });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [orderSearch, orderRestaurantFilter, fetchData]);
+    reloadRef.current = reload;
+  }, [reload]);
 
   // Refetching mid-edit would reset in-progress input under an open
   // destructive-confirm/password/rename modal -- read via a ref (not a
@@ -262,6 +175,7 @@ function AdminDbContent() {
   }, [anyModalOpen]);
 
   useEffect(() => {
+    if (isSessionLoading) return;
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closedByEffect = false;
@@ -281,8 +195,14 @@ function AdminDbContent() {
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          // Windowed pagination means a live insert/delete elsewhere can't be
+          // patched into the loaded window in place (it may belong on a page
+          // that isn't even loaded) -- reload() re-fetches page one of the
+          // current query, same as a fresh mount, which is the correct
+          // behavior since "page one" is exactly where a brand new order
+          // (highest id / most recent) belongs under the default sort anyway.
           if (data.type === "order_updated" || data.type === "order_deleted") {
-            if (!anyModalOpenRef.current) void fetchDataRef.current(searchParamsRef.current);
+            if (!anyModalOpenRef.current) void reloadRef.current();
           }
         } catch {
           // ignore malformed messages
@@ -305,10 +225,41 @@ function AdminDbContent() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, []);
+  }, [isSessionLoading]);
+
+  // Fires on every scroll of the Orders table's own scroll container -- a
+  // fast fling-scroll can dispatch dozens of raw `scroll` events per second,
+  // so the actual edge-distance check is throttled to at most once per
+  // animation frame (rAF), not run on every single event. Requests the next
+  // page once the user is within PREFETCH_ROWS-worth of pixels from either
+  // loaded edge, and the previous page once scrolled back near the top after
+  // some has been evicted. No "Load More" button: this is the same near-edge
+  // auto-load Gmail/Discord/iMessage use for huge lists. A rough
+  // px-per-row estimate is fine here -- it only controls how early prefetch
+  // kicks in, not correctness. loadMoreTop/loadMoreBottom themselves are
+  // additionally guarded against re-entrancy by a synchronous ref inside
+  // useWindowedOrders (see its own comment), so even rapid repeat calls here
+  // can never stack up parallel duplicate requests.
+  const ROW_HEIGHT_PX = 49;
+  const scrollRafRef = useRef<number | null>(null);
+  const handleOrdersScroll = useCallback(() => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      const prefetchDistance = PREFETCH_ROWS * ROW_HEIGHT_PX;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - prefetchDistance) {
+        void loadMoreBottom();
+      }
+      if (el.scrollTop <= prefetchDistance) {
+        void loadMoreTop();
+      }
+    });
+  }, [loadMoreBottom, loadMoreTop]);
 
   useEffect(() => () => {
-    if (filterAnimationTimerRef.current) clearTimeout(filterAnimationTimerRef.current);
+    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
 
   const handleLogout = async () => {
@@ -341,7 +292,7 @@ function AdminDbContent() {
         throw new Error(resJson.error || `Action failed with status: ${res.status}`);
       }
       showToast(successMessage, "success");
-      fetchData(searchParamsRef.current);
+      void reload();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
@@ -394,10 +345,10 @@ function AdminDbContent() {
   const deleteNow = (type: "restaurant" | "order", id: number) => {
     if (type === "order") {
       // Play the slide-out first, then run the real delete (and the
-      // fetchData() refetch performAction triggers) once the animation has
-      // had time to finish -- doing this immediately, as the generic path
-      // still does for restaurants, left no time for any exit animation to
-      // render before the row vanished on the next refetch.
+      // reload() refetch performAction triggers) once the animation has had
+      // time to finish -- doing this immediately, as the generic path still
+      // does for restaurants, left no time for any exit animation to render
+      // before the row vanished on the next refetch.
       setExitingOrderIds((prev) => new Set(prev).add(id));
       setTimeout(() => {
         performAction(
@@ -469,7 +420,7 @@ function AdminDbContent() {
       showToast("Password updated successfully!", "success");
       setNewPassword("");
       setPasswordResetTarget(null);
-      fetchData(searchParamsRef.current);
+      void reload();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
@@ -495,7 +446,7 @@ function AdminDbContent() {
       );
       setNewName("");
       setRenameTarget(null);
-      fetchData(searchParamsRef.current);
+      void reload();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
@@ -509,133 +460,14 @@ function AdminDbContent() {
     });
   };
 
-  // Merged view of live + (optionally) deleted orders, tagged with
-  // isDeleted so the table can render them inline (deleted rows visually
-  // muted, undelete instead of delete/status-change) rather than needing a
-  // separate section -- lets one search/filter/sort apply across both.
-  const availableOrderRows: OrderRow[] = [
-    ...orders.map((o) => ({ ...o, isDeleted: false })),
-    ...deletedOrders.map((o) => ({ ...o, isDeleted: true })),
-  ];
-  const allOrderRows = showDeleted
-    ? availableOrderRows
-    : availableOrderRows.filter((order) => !order.isDeleted);
-
-  const visibleOrderRows = filteredAndSortedOrders(
-    allOrderRows,
-    orderSearch,
-    orderRestaurantFilter,
-    orderStatusFilter,
-    orderSort,
-  );
-
-  const visibleOrderKeys = visibleOrderRows.length > 0
-    ? visibleOrderRows.map(orderRowKey)
-    : ["empty"];
-  const visibleOrderKeySet = new Set(visibleOrderKeys);
-  const renderedOrderRows = filteredAndSortedOrders(
-    availableOrderRows.filter((order) => {
-      const key = orderRowKey(order);
-      return visibleOrderKeySet.has(key) || filterExitingOrderKeys.has(key);
-    }),
-    "",
-    [],
-    [],
-    orderSort,
-  );
-
-  const runOrderFilterTransition = (nextRows: OrderRow[], update: () => void) => {
-    const nextKeys = nextRows.length > 0 ? nextRows.map(orderRowKey) : ["empty"];
-    const currentKeySet = new Set(visibleOrderKeys);
-    const currentRenderedKeySet = new Set(renderedOrderRows.map(orderRowKey));
-    const nextKeySet = new Set(nextKeys);
-    const exitingKeys = new Set(
-      Array.from(currentRenderedKeySet).filter((key) => !nextKeySet.has(key)),
-    );
-    const enteringKeys = new Set(nextKeys.filter((key) => !currentKeySet.has(key) && key !== "empty"));
-    const root = document.documentElement;
-    const reduceMotion = root.getAttribute("data-motion") === "reduced"
-      || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (reduceMotion || (exitingKeys.size === 0 && enteringKeys.size === 0)) {
-      if (filterAnimationTimerRef.current) clearTimeout(filterAnimationTimerRef.current);
-      setFilterExitingOrderKeys(new Set());
-      setFilterEnteringOrderKeys(new Set());
-      update();
-      return;
-    }
-
-    if (filterAnimationTimerRef.current) clearTimeout(filterAnimationTimerRef.current);
-    setFilterExitingOrderKeys(exitingKeys);
-    setFilterEnteringOrderKeys(enteringKeys);
-    update();
-    filterAnimationTimerRef.current = setTimeout(() => {
-      setFilterExitingOrderKeys(new Set());
-      setFilterEnteringOrderKeys(new Set());
-      filterAnimationTimerRef.current = null;
-    }, ORDER_EXIT_ANIMATION_MS);
-  };
-
-  const handleRestaurantFilterChange = (nextFilter: string[]) => {
-    const nextRows = filteredAndSortedOrders(
-      allOrderRows,
-      orderSearch,
-      nextFilter,
-      orderStatusFilter,
-      orderSort,
-    );
-    runOrderFilterTransition(nextRows, () => setOrderRestaurantFilter(nextFilter));
-  };
-
-  const handleStatusFilterChange = (nextFilter: string[]) => {
-    const nextRows = filteredAndSortedOrders(
-      allOrderRows,
-      orderSearch,
-      orderRestaurantFilter,
-      nextFilter,
-      orderSort,
-    );
-    runOrderFilterTransition(nextRows, () => setOrderStatusFilter(nextFilter));
-  };
-
-  const handleOrderSearchChange = (nextSearch: string) => {
-    const nextRows = filteredAndSortedOrders(
-      allOrderRows,
-      nextSearch,
-      orderRestaurantFilter,
-      orderStatusFilter,
-      orderSort,
-    );
-    runOrderFilterTransition(nextRows, () => setOrderSearch(nextSearch));
-  };
-
-  const handleDeletedVisibilityChange = () => {
-    const nextShowDeleted = !showDeleted;
-    const nextAllRows: OrderRow[] = [
-      ...orders.map((order) => ({ ...order, isDeleted: false })),
-      ...(nextShowDeleted ? deletedOrders.map((order) => ({ ...order, isDeleted: true })) : []),
-    ];
-    const nextRows = filteredAndSortedOrders(
-      nextAllRows,
-      orderSearch,
-      orderRestaurantFilter,
-      orderStatusFilter,
-      orderSort,
-    );
-    runOrderFilterTransition(nextRows, () => setShowDeleted(nextShowDeleted));
-  };
-
   // Sourced from the full `restaurants` list (every live kitchen, uncapped),
-  // NOT from `orders`/`deletedOrders` -- those two are capped at the most
-  // recent 500 rows each (see /api/dev/db's own comment), so a kitchen whose
-  // orders have all aged out of that window would otherwise silently
-  // disappear from this filter entirely, even though it's a perfectly live,
-  // valid restaurant (confirmed live: a kitchen with an old order and no
-  // orders in the current top-500 vanished from this dropdown while still
-  // showing up correctly in the Restaurants table above).
+  // NOT from the windowed order rows -- those are only ever a partial slice
+  // of the full history, so a kitchen whose currently-loaded orders don't
+  // include any of its own would otherwise vanish from this filter entirely
+  // even though it's a perfectly live, valid restaurant.
   const allRestaurantNames = Array.from(new Set(restaurants.map((r) => r.name))).sort((a, b) => a.localeCompare(b));
 
-  if (isLoading) {
+  if (isSessionLoading) {
     return (
       <div className="flex justify-center items-center min-h-dvh text-[var(--color-text-secondary)]">
         Loading...
@@ -754,9 +586,9 @@ function AdminDbContent() {
                 <Database size={16} />
                 Seed Database
               </Button>
-              <Button variant={showDeleted ? "primary" : "secondary"} onClick={handleDeletedVisibilityChange}>
+              <Button variant={showDeleted ? "primary" : "secondary"} onClick={() => setShowDeleted((prev) => !prev)}>
                 <RotateCcw size={16} />
-                Deleted ({deletedOrders.length})
+                Deleted ({deletedCount})
               </Button>
               <Button variant="danger" onClick={handlePurge}>
                 <ShieldAlert size={16} />
@@ -865,7 +697,7 @@ function AdminDbContent() {
         </section>
 
         <section>
-          <Card className="!p-0 overflow-hidden max-h-[55vh] flex flex-col">
+          <Card className="!p-0 overflow-hidden max-h-[55vh] flex flex-col relative">
             <div className="flex flex-wrap items-center justify-between px-4 py-3 gap-3 shrink-0 border-b border-[var(--color-border)]">
               <h2 className="font-display text-lg font-semibold text-[var(--color-text-primary)]">Orders</h2>
               <div className="flex items-center gap-2 flex-wrap">
@@ -873,8 +705,8 @@ function AdminDbContent() {
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
                   <Input
                     type="text"
-                    value={orderSearch}
-                    onChange={(e) => handleOrderSearchChange(e.target.value)}
+                    value={orderSearchInput}
+                    onChange={(e) => setOrderSearchInput(e.target.value)}
                     placeholder="Search order name..."
                     aria-label="Search orders by name"
                     className="pl-9"
@@ -882,7 +714,34 @@ function AdminDbContent() {
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto overflow-y-auto flex-1">
+
+            {/* Floating "loading more" pills -- pinned to the top/bottom edge
+                of the scrollable card itself (not the whole page), so they
+                stay visible exactly where the user is scrolling toward
+                regardless of how many rows are currently rendered above/below.
+                Matches the direction the user is actually scrolling: fetching
+                the next page down shows the pill at the bottom edge, fetching
+                the previous page up shows it at the top edge. */}
+            {isLoadingTop && (
+              <div
+                aria-live="polite"
+                className="absolute top-[calc(3.25rem+1px)] left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-md text-xs font-medium text-[var(--color-text-secondary)]"
+              >
+                <Loader2 size={13} className="animate-spin text-[var(--color-brand)]" />
+                Loading earlier orders…
+              </div>
+            )}
+            {isLoadingBottom && (
+              <div
+                aria-live="polite"
+                className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-md text-xs font-medium text-[var(--color-text-secondary)]"
+              >
+                <Loader2 size={13} className="animate-spin text-[var(--color-brand)]" />
+                Loading more orders…
+              </div>
+            )}
+
+            <div ref={scrollContainerRef} onScroll={handleOrdersScroll} className="overflow-x-auto overflow-y-auto flex-1">
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 bg-[var(--color-surface-1)] z-20 shadow-[0_1px_0_var(--color-border)]">
                 <tr className="border-b border-[var(--color-border)]">
@@ -893,7 +752,7 @@ function AdminDbContent() {
                       <RestaurantFilterDropdown
                         restaurantNames={allRestaurantNames}
                         selected={orderRestaurantFilter}
-                        onChange={handleRestaurantFilterChange}
+                        onChange={setOrderRestaurantFilter}
                       />
                     </div>
                   </th>
@@ -905,7 +764,7 @@ function AdminDbContent() {
                       Status
                       <StatusFilterDropdown
                         selected={orderStatusFilter}
-                        onChange={handleStatusFilterChange}
+                        onChange={setOrderStatusFilter}
                         includeDeletedOption={showDeleted}
                       />
                     </div>
@@ -936,26 +795,26 @@ function AdminDbContent() {
                 </tr>
               </thead>
               <tbody>
-                {renderedOrderRows.length === 0 ? (
+                {isInitialLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
+                    <td colSpan={9} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
+                      <Loader2 size={16} className="inline animate-spin mr-2" />
+                      Loading orders…
+                    </td>
+                  </tr>
+                ) : orderRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-6 px-4 text-center text-[var(--color-text-muted)]">
                       No orders match your filters.
                     </td>
                   </tr>
                 ) : (
-                  renderedOrderRows.map((o) => (
+                  orderRows.map((o) => (
                     <tr
                       key={o.id}
-                      aria-hidden={filterExitingOrderKeys.has(orderRowKey(o)) || undefined}
                       className={`border-b border-[var(--color-border)] last:border-0 ${
                         o.isDeleted ? "opacity-60" : ""
-                      } ${
-                        exitingOrderIds.has(o.id) || filterExitingOrderKeys.has(orderRowKey(o))
-                          ? "animate-order-exit"
-                          : filterEnteringOrderKeys.has(orderRowKey(o))
-                            ? "animate-order-filter-enter"
-                            : ""
-                      }`}
+                      } ${exitingOrderIds.has(o.id) ? "animate-order-exit" : ""}`}
                     >
                       <td className="py-3 px-4 text-[var(--color-text-secondary)]">{o.id}</td>
                       <td className="py-3 px-4 text-[var(--color-text-primary)]">{o.restaurant_name}</td>

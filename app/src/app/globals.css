@@ -1577,7 +1577,8 @@ html, body {
   .animate-status-breathe,
   .confetti-particle,
   .live-ripple-ring,
-  .animate-health-pulse {
+  .animate-health-pulse,
+  .animate-spin {
     animation: none !important;
   }
 }
@@ -1587,7 +1588,8 @@ html, body {
 [data-motion="reduced"] .animate-status-breathe,
 [data-motion="reduced"] .confetti-particle,
 [data-motion="reduced"] .live-ripple-ring,
-[data-motion="reduced"] .animate-health-pulse {
+[data-motion="reduced"] .animate-health-pulse,
+[data-motion="reduced"] .animate-spin {
   animation: none !important;
 }
 
