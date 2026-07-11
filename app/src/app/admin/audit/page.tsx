@@ -40,8 +40,10 @@ import { fetchJson, fetchWithRetry } from "@/lib/api-client";
 
 type AuditEventRow = {
   id: number;
-  order_id: number;
-  order_number: string;
+  order_id: number | null;
+  // Nullable: an EmployeeLogout event (see api/restaurants/by-name/
+  // [restaurantName]/employees/logout) has no associated order at all.
+  order_number: string | null;
   restaurant_name: string;
   from_status: string | null;
   to_status: string;
@@ -385,10 +387,26 @@ function AdminAuditContent() {
                         {new Date(event.created_at).toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-[var(--color-text-primary)]">{event.restaurant_name}</td>
-                      <td className="py-3 px-4 text-[var(--color-text-secondary)]">{event.order_number}</td>
+                      <td className="py-3 px-4 text-[var(--color-text-secondary)]">
+                        {event.order_number ?? <span className="text-[var(--color-text-muted)]">—</span>}
+                      </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          {event.to_status === "Deleted" ? (
+                          {event.to_status === "EmployeeLogout" ? (
+                            // A staff sign-out has no order/status transition
+                            // at all -- see the "Logout Staff" flow in
+                            // Dashboard.tsx, distinct from the kitchen itself
+                            // logging out (which never reaches this table).
+                            <span className="text-xs font-medium text-[var(--color-text-muted)]">
+                              {event.employee_name ?? "An employee"} logged out
+                            </span>
+                          ) : event.to_status === "PickedUp" ? (
+                            // Kitchen-side "Mark as Picked Up" -- also a
+                            // lifecycle marker, not a real order status; the
+                            // order's own Complete status is unaffected, this
+                            // just records who confirmed the handoff.
+                            <span className="text-xs font-semibold text-[var(--color-success)]">Picked Up</span>
+                          ) : event.to_status === "Deleted" ? (
                             // "Deleted" is a lifecycle event, not a real order
                             // status -- StatusBadge/normalizeStatus only know
                             // Received/Preparing/Complete (see SYSTEM_MEMORY.md's

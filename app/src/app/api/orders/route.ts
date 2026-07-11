@@ -6,7 +6,7 @@ import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
 import { requireString, requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeOrderLookupKey } from "@/lib/order-naming";
-import { verifyEmployeeForAction } from "@/lib/employee-auth";
+import { resolveOrderActionEmployee } from "@/lib/employee-auth";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
@@ -69,9 +69,13 @@ export async function POST(request: Request) {
     // request came from the kitchen UI with a real verified PIN.
     const isAdmin = await isAdminRequest();
     const isGenuineAdminOverride = isAdmin && employeeId === undefined && pin === undefined;
-    const employeeCheck = isGenuineAdminOverride
-      ? { ok: true as const, employee: null }
-      : await verifyEmployeeForAction(restaurant_name, employeeId, pin, pinLength);
+    const employeeCheck = await resolveOrderActionEmployee(
+      restaurant_name,
+      isGenuineAdminOverride,
+      employeeId,
+      pin,
+      pinLength,
+    );
     if (!employeeCheck.ok) return employeeCheck.response;
     const verifiedEmployee = employeeCheck.employee;
 

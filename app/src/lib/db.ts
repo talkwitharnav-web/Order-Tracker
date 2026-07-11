@@ -320,7 +320,7 @@ async function runInitDb() {
       id SERIAL PRIMARY KEY,
       order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
       restaurant_name TEXT NOT NULL,
-      order_number TEXT NOT NULL,
+      order_number TEXT,
       from_status TEXT,
       to_status TEXT NOT NULL,
       employee_id INTEGER REFERENCES restaurant_employees(id) ON DELETE SET NULL,
@@ -360,6 +360,13 @@ async function runInitDb() {
   await db.query(`DELETE FROM order_status_events WHERE restaurant_name IS NULL OR order_number IS NULL;`);
   await db.query(`ALTER TABLE order_status_events ALTER COLUMN restaurant_name SET NOT NULL;`);
   await db.query(`ALTER TABLE order_status_events ALTER COLUMN order_number SET NOT NULL;`);
+  // Relaxed back to nullable: an EmployeeLogout event (see
+  // api/restaurants/by-name/[restaurantName]/employees/logout) has no order
+  // at all -- restaurant_name still applies (which kitchen the employee
+  // logged out of), but there is no order_number to denormalize. DROP NOT
+  // NULL on an already-nullable column is a no-op, so this runs
+  // unconditionally on every boot like its neighbors, not just fresh installs.
+  await db.query(`ALTER TABLE order_status_events ALTER COLUMN order_number DROP NOT NULL;`);
   // Drop the old CASCADE constraint and recreate as SET NULL, and make
   // order_id itself nullable -- both required for a hard delete to preserve
   // this row instead of destroying it.

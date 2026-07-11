@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback, FormEvent, FC } from "react";
+import { useRouter } from "next/navigation";
 import { Home, Trash2 as TrashIcon, Inbox, Flame, CheckCircle, Menu, X, Search, SearchX, Clock3, Users, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -30,6 +31,7 @@ import { useSideBySideFit, useAutoFitText, useUiSelfCheck } from "@/lib/ui-aware
 import { computeStatusDurationMs, formatOrderAge } from "@/lib/order-duration";
 import { CustomerHandoffCard } from "@/components/ui/CustomerHandoffCard";
 import { sortByPriority, isOrderOverdue, OVERDUE_THRESHOLD_MINUTES } from "@/lib/order-priority";
+import { getEmployeeSession, clearEmployeeSession, type EmployeeSession } from "@/lib/employee-session";
 
 export type OrderStatus = ApiOrderStatus;
 export type Order = {
@@ -95,7 +97,7 @@ const api = {
   async createOrder(
     restName: string,
     orderNum: string,
-    credentials?: { pin: string; pinLength: 4 | 6 },
+    employee?: { employeeId: number } | null,
   ): Promise<Order> {
     // No retries: creating an order isn't idempotent from the client's
     // point of view (a "timed out" request could have actually landed), and
@@ -108,7 +110,7 @@ const api = {
       body: JSON.stringify({
         restaurant_name: restName,
         order_number: orderNum,
-        ...(credentials ? { pin: credentials.pin, pinLength: credentials.pinLength } : {}),
+        ...(employee ? { employeeId: employee.employeeId } : {}),
       }),
     }, { retries: 0 });
   },
@@ -116,7 +118,7 @@ const api = {
     id: number,
     status: OrderStatus,
     undoToken?: string,
-    credentials?: { pin: string; pinLength: 4 | 6 },
+    employee?: { employeeId: number } | null,
   ): Promise<StatusUpdateResult> {
     return fetchJson<StatusUpdateResult>(`/api/orders/${id}`, {
       method: "PUT",
@@ -124,7 +126,7 @@ const api = {
       body: JSON.stringify({
         status,
         ...(undoToken ? { undoToken } : {}),
-        ...(credentials ? { pin: credentials.pin, pinLength: credentials.pinLength } : {}),
+        ...(employee ? { employeeId: employee.employeeId } : {}),
       }),
     });
   },
@@ -153,12 +155,26 @@ const api = {
       throw err;
     }
   },
-  async deleteOrder(id: number, credentials?: { pin: string; pinLength: 4 | 6 }) {
+  async deleteOrder(id: number, employee?: { employeeId: number } | null) {
     return fetchJson(`/api/orders/${id}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(credentials ? { pin: credentials.pin, pinLength: credentials.pinLength } : {}),
+      body: JSON.stringify(employee ? { employeeId: employee.employeeId } : {}),
     });
+  },
+  async markPickedUp(id: number, employee?: { employeeId: number } | null) {
+    return fetchJson(`/api/orders/${id}/acknowledge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(employee ? { employeeId: employee.employeeId } : {}),
+    });
+  },
+  async logoutEmployee(restName: string, employeeId: number) {
+    return fetchJson(`/api/restaurants/by-name/${encodeURIComponent(restName)}/employees/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ employeeId }),
+    }, { retries: 0 });
   },
 };
 
@@ -167,9 +183,10 @@ const Nav: FC<{
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
   onLogout: () => void;
+  onLogoutStaff: (() => void) | null;
   restaurantName: string;
   statusCounts: StatusCounts;
-}> = ({ activeTab, setActiveTab, onLogout, restaurantName, statusCounts }) => {
+}> = ({ activeTab, setActiveTab, onLogout, onLogoutStaff, restaurantName, statusCounts }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   // Guarantees a hover tooltip (and dev logging) whenever the kitchen name is
   // too long for the fixed-width sidebar and gets truncated.
@@ -246,6 +263,17 @@ const Nav: FC<{
             setActiveTab(tab);
             setMobileOpen(false);
           })}
+          {onLogoutStaff && (
+            <button
+              onClick={() => {
+                onLogoutStaff();
+                setMobileOpen(false);
+              }}
+              className="w-full text-left px-4 py-3 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] rounded-[var(--radius-sm)] transition-colors"
+            >
+              Logout Staff
+            </button>
+          )}
           <button
             onClick={onLogout}
             className="w-full text-left px-4 py-3 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-danger)] rounded-[var(--radius-sm)] transition-colors"
@@ -268,9 +296,17 @@ const Nav: FC<{
           <span className="text-sm font-medium text-[var(--color-brand-text)]">Kitchen Dashboard</span>
         </div>
         <nav className="flex-grow space-y-2">{navButtons(setActiveTab)}</nav>
+        {onLogoutStaff && (
+          <button
+            onClick={onLogoutStaff}
+            className="w-full text-left px-4 py-3 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] rounded-[var(--radius-sm)] transition-colors mt-4"
+          >
+            Logout Staff
+          </button>
+        )}
         <button
           onClick={onLogout}
-          className="w-full text-left px-4 py-3 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-danger)] rounded-[var(--radius-sm)] transition-colors mt-4"
+          className={`w-full text-left px-4 py-3 text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-danger)] rounded-[var(--radius-sm)] transition-colors ${onLogoutStaff ? "mt-1" : "mt-4"}`}
         >
           Logout
         </button>
@@ -344,8 +380,10 @@ const OrderCard: FC<{
   isExiting: boolean;
   onAdvance: (id: number, status: OrderStatus) => void;
   onDelete: (id: number, skipConfirm: boolean) => void;
-}> = ({ order, justUpdated, isExiting, onAdvance, onDelete }) => {
+  onMarkPickedUp: (id: number) => void;
+}> = ({ order, justUpdated, isExiting, onAdvance, onDelete, onMarkPickedUp }) => {
   const overdue = useOrderOverdue(order);
+  const showMarkPickedUp = normalizeStatus(order.status) === "complete" && !order.acknowledged_at;
   return (
     <Card
       style={overdue && !justUpdated ? { backgroundColor: "color-mix(in srgb, var(--color-danger) 12%, var(--color-surface-1))" } : undefined}
@@ -364,11 +402,19 @@ const OrderCard: FC<{
           <OverdueBadge status={order.status} />
         </div>
       )}
-      <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+      <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} acknowledgedAt={order.acknowledged_at} />
+      {showMarkPickedUp && (
+        <button
+          onClick={() => onMarkPickedUp(order.id)}
+          className="w-full mt-4 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-success)]/10 text-[var(--color-success)] hover:bg-[var(--color-success)]/20 transition-colors"
+        >
+          Mark as Picked Up
+        </button>
+      )}
       <button
         onClick={(e) => onDelete(order.id, e.shiftKey)}
         title="Hold Shift to skip the confirmation"
-        className="w-full mt-4 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/20 transition-colors"
+        className="w-full mt-2 py-2 text-sm font-medium rounded-[var(--radius-sm)] bg-[var(--color-danger)]/10 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/20 transition-colors"
       >
         Delete
       </button>
@@ -391,9 +437,11 @@ const HomeOrderRow: FC<{
   justUpdated: boolean;
   onAdvance: (id: number, status: OrderStatus) => void;
   onDeleteOrder: (id: number, skipConfirm: boolean) => void;
-}> = ({ order, exiting, justUpdated, onAdvance, onDeleteOrder }) => {
+  onMarkPickedUp: (id: number) => void;
+}> = ({ order, exiting, justUpdated, onAdvance, onDeleteOrder, onMarkPickedUp }) => {
   const { containerRef, aRef, bRef, fits } = useSideBySideFit<HTMLDivElement, HTMLSpanElement, HTMLDivElement>(16);
   const overdue = useOrderOverdue(order);
+  const showMarkPickedUp = normalizeStatus(order.status) === "complete" && !order.acknowledged_at;
   return (
     <div
       ref={containerRef}
@@ -413,8 +461,18 @@ const HomeOrderRow: FC<{
       </span>
       <div ref={bRef} className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="flex-1 min-w-0">
-          <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} />
+          <StatusStepper status={order.status} onAdvance={(next) => onAdvance(order.id, next)} acknowledgedAt={order.acknowledged_at} />
         </div>
+        {showMarkPickedUp && (
+          <button
+            onClick={() => onMarkPickedUp(order.id)}
+            title="Mark as Picked Up"
+            aria-label={`Mark order ${order.order_number} as picked up`}
+            className="text-[var(--color-text-muted)] hover:text-[var(--color-success)] min-w-10 min-h-10 sm:min-w-0 sm:min-h-0 p-0 sm:p-2 flex items-center justify-center rounded-[var(--radius-full)] transition-colors shrink-0"
+          >
+            <CheckCircle className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={(e) => onDeleteOrder(order.id, e.shiftKey)}
           title="Hold Shift to skip the confirmation"
@@ -436,8 +494,9 @@ const HomeTab: FC<{
   onCreateOrder: (orderNumber: string) => Promise<Order | null>;
   onDeleteOrder: (id: number, skipConfirm: boolean) => void;
   onAdvance: (id: number, status: OrderStatus) => void;
+  onMarkPickedUp: (id: number) => void;
   onError: (message: string) => void;
-}> = ({ orders, recentlyUpdatedId, exitingIds, restaurantName, onCreateOrder, onDeleteOrder, onAdvance, onError }) => {
+}> = ({ orders, recentlyUpdatedId, exitingIds, restaurantName, onCreateOrder, onDeleteOrder, onAdvance, onMarkPickedUp, onError }) => {
   const [orderNumber, setOrderNumber] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   // Persisted per-device (localStorage), same pattern as the theme/contrast/
@@ -601,6 +660,7 @@ const HomeTab: FC<{
               justUpdated={recentlyUpdatedId === order.id}
               onAdvance={onAdvance}
               onDeleteOrder={onDeleteOrder}
+              onMarkPickedUp={onMarkPickedUp}
             />
           ))}
           {orders.length === 0 && (
@@ -630,10 +690,15 @@ const HomeTab: FC<{
 
 const COMPLETE_CAP_PRESETS = [
   { label: "1 hour", hours: 1 },
-  { label: "6 hours", hours: 6 },
-  { label: "12 hours", hours: 12 },
-  { label: "24 hours", hours: 24 },
+  { label: "2 hours", hours: 2 },
+  { label: "4 hours", hours: 4 },
 ];
+
+// Mirrors the PUT /settings route's own bounds exactly, so an invalid custom
+// value is rejected instantly client-side rather than round-tripping to a
+// 400 -- see api/restaurants/by-name/[restaurantName]/settings/route.ts.
+const COMPLETE_CAP_MIN_HOURS = 0.1;
+const COMPLETE_CAP_MAX_HOURS = 168;
 
 /**
  * Self-service setting for how long the customer tracker's "time in
@@ -649,12 +714,27 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
 }) => {
   const [hours, setHours] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  // Custom HH:MM entry -- two plain number fields rather than one
+  // colon-parsed text field, for fewer parsing edge cases and a proper
+  // numeric mobile keyboard on each. Shown whenever the loaded/selected
+  // value doesn't match one of the 3 fixed presets, or the user explicitly
+  // opens it via the Custom button.
+  const [showCustom, setShowCustom] = useState(false);
+  const [customH, setCustomH] = useState("");
+  const [customM, setCustomM] = useState("");
 
   useEffect(() => {
     fetchJson<{ completeCapHours: number }>(
       `/api/restaurants/by-name/${encodeURIComponent(restaurantName)}/settings`,
     )
-      .then((data) => setHours(data.completeCapHours))
+      .then((data) => {
+        setHours(data.completeCapHours);
+        if (!COMPLETE_CAP_PRESETS.some((p) => p.hours === data.completeCapHours)) {
+          setShowCustom(true);
+          setCustomH(String(Math.floor(data.completeCapHours)));
+          setCustomM(String(Math.round((data.completeCapHours % 1) * 60)));
+        }
+      })
       .catch(() => setHours(12));
   }, [restaurantName]);
 
@@ -674,6 +754,17 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
     }
   };
 
+  const handleApplyCustom = () => {
+    const h = Number(customH) || 0;
+    const m = Number(customM) || 0;
+    const decimalHours = h + m / 60;
+    if (!Number.isFinite(decimalHours) || decimalHours < COMPLETE_CAP_MIN_HOURS || decimalHours > COMPLETE_CAP_MAX_HOURS) {
+      onError(`Custom pickup window must be between ${COMPLETE_CAP_MIN_HOURS * 60} minutes and ${COMPLETE_CAP_MAX_HOURS} hours`);
+      return;
+    }
+    void handleChange(decimalHours);
+  };
+
   if (hours === null) return null;
 
   return (
@@ -687,11 +778,14 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
         {COMPLETE_CAP_PRESETS.map((preset) => (
           <button
             key={preset.hours}
-            onClick={() => handleChange(preset.hours)}
+            onClick={() => {
+              setShowCustom(false);
+              handleChange(preset.hours);
+            }}
             disabled={saving}
-            aria-pressed={hours === preset.hours}
+            aria-pressed={!showCustom && hours === preset.hours}
             className={`min-h-10 px-4 py-2 rounded-[var(--radius-sm)] text-sm font-medium border transition-colors disabled:opacity-60 ${
-              hours === preset.hours
+              !showCustom && hours === preset.hours
                 ? "bg-[var(--color-brand)] border-[var(--color-brand)] text-[var(--color-on-brand)]"
                 : "bg-[var(--color-surface-2)] border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
             }`}
@@ -699,7 +793,54 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
             {preset.label}
           </button>
         ))}
+        <button
+          onClick={() => setShowCustom(true)}
+          disabled={saving}
+          aria-pressed={showCustom}
+          className={`min-h-10 px-4 py-2 rounded-[var(--radius-sm)] text-sm font-medium border transition-colors disabled:opacity-60 ${
+            showCustom
+              ? "bg-[var(--color-brand)] border-[var(--color-brand)] text-[var(--color-on-brand)]"
+              : "bg-[var(--color-surface-2)] border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          }`}
+        >
+          Custom
+        </button>
       </div>
+      {showCustom && (
+        <div className="flex flex-wrap items-end gap-2 mt-3">
+          <div>
+            <label htmlFor="cap-hours" className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+              Hours
+            </label>
+            <Input
+              id="cap-hours"
+              type="text"
+              inputMode="numeric"
+              value={customH}
+              onChange={(e) => setCustomH(e.target.value.replace(/\D/g, "").slice(0, 3))}
+              placeholder="0"
+              className="w-20"
+            />
+          </div>
+          <div>
+            <label htmlFor="cap-minutes" className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
+              Minutes
+            </label>
+            <Input
+              id="cap-minutes"
+              type="text"
+              inputMode="numeric"
+              value={customM}
+              onChange={(e) => setCustomM(e.target.value.replace(/\D/g, "").slice(0, 2))}
+              placeholder="00"
+              className="w-20"
+            />
+          </div>
+          <Button type="button" onClick={handleApplyCustom} disabled={saving}>
+            Apply
+          </Button>
+        </div>
+      )}
     </Card>
   );
 };
@@ -1099,7 +1240,8 @@ const OrderGrid: FC<{
   exitingIds: Set<number>;
   onAdvance: (id: number, status: OrderStatus) => void;
   onDelete: (id: number, skipConfirm: boolean) => void;
-}> = ({ orders, recentlyUpdatedId, exitingIds, onAdvance, onDelete }) => {
+  onMarkPickedUp: (id: number) => void;
+}> = ({ orders, recentlyUpdatedId, exitingIds, onAdvance, onDelete, onMarkPickedUp }) => {
   if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center py-8">
@@ -1118,6 +1260,7 @@ const OrderGrid: FC<{
           isExiting={exitingIds.has(order.id)}
           onAdvance={onAdvance}
           onDelete={onDelete}
+          onMarkPickedUp={onMarkPickedUp}
         />
       ))}
     </div>
@@ -1131,6 +1274,7 @@ function KitchenDashboardContent({
   restaurantName: string;
   onLogout: () => void;
 }) {
+  const router = useRouter();
   const showToast = useToast();
   const showActionToast = useActionToast();
   const [activeTab, setActiveTab] = useState<Tab>("Home");
@@ -1146,21 +1290,20 @@ function KitchenDashboardContent({
   // `orders`, see deleteOrder below.
   const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Employee roster for PIN-based status-change attribution (see
-  // SYSTEM_MEMORY.md "Employee Attribution"). Empty roster means this
-  // kitchen hasn't set up employees yet -- status changes proceed exactly
-  // as before, unattributed, rather than blocking kitchen operations.
+  // Employee roster -- an empty roster means this kitchen hasn't set up
+  // employees yet, so order actions proceed unattributed and the staff
+  // sign-in step (app/restaurant/staff-login) is skipped entirely (see
+  // restauranthome/page.tsx). A non-empty roster means someone signed in
+  // there before ever reaching this dashboard (see lib/employee-session.ts)
+  // -- every order action for the rest of THIS session is attributed to
+  // that one signed-in employee, with no further per-action PIN prompt.
   const [employees, setEmployees] = useState<PinPadEmployee[]>([]);
-  const [pendingAdvance, setPendingAdvance] = useState<{ id: number; status: OrderStatus } | null>(null);
-  // Order creation's PIN gate resolves the promise HomeTab is awaiting
-  // (see onCreateOrder below), rather than firing a callback like status
-  // advance does -- HomeTab needs to know synchronously (via await) whether
-  // to clear/advance its naming-style input, not just get notified later.
-  const pendingCreateOrderRef = useRef<{
-    orderNumber: string;
-    resolve: (order: Order | null) => void;
-  } | null>(null);
-  const [createOrderPinOpen, setCreateOrderPinOpen] = useState(false);
+  // Lazy initializer (not a setState-in-effect) -- restaurantName is already
+  // known synchronously as a prop by first render, and this component only
+  // ever mounts client-side (KitchenDashboard is rendered from
+  // restauranthome/page.tsx after its own session check resolves), so
+  // there's no SSR/hydration-mismatch risk reading sessionStorage here.
+  const [signedInEmployee] = useState<EmployeeSession | null>(() => getEmployeeSession(restaurantName));
 
   useEffect(() => {
     api.getEmployees(restaurantName)
@@ -1267,18 +1410,19 @@ function KitchenDashboardContent({
     }
   };
 
-  const performAdvanceStatus = async (
-    id: number,
-    status: OrderStatus,
-    credentials?: { pin: string; pinLength: 4 | 6 },
-  ) => {
+  // Attributed to whoever is currently signed in for this shift (see
+  // lib/employee-session.ts) -- null if this kitchen has no employees
+  // configured, matching the previous unattributed-by-default behavior.
+  const currentEmployeeCredential = signedInEmployee ? { employeeId: signedInEmployee.employeeId } : null;
+
+  const performAdvanceStatus = async (id: number, status: OrderStatus) => {
     const previousOrder = orders.find((order) => order.id === id);
     if (!previousOrder) return;
 
     try {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
       flash(id);
-      const response = await api.updateOrderStatus(id, status, undefined, credentials);
+      const response = await api.updateOrderStatus(id, status, undefined, currentEmployeeCredential);
       setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...response.order } : order)));
 
       if (response.undo) {
@@ -1300,23 +1444,16 @@ function KitchenDashboardContent({
     }
   };
 
-  // Entry point every order card actually calls. If this kitchen has any
-  // employees set up, require a PIN tap first so the transition can be
-  // attributed -- otherwise (no roster yet) proceed exactly as before.
+  // Entry point every order card actually calls. PIN attribution already
+  // happened once at staff sign-in (see restauranthome/page.tsx's gate) --
+  // no per-action prompt needed here anymore.
   const handleAdvanceStatus = (id: number, status: OrderStatus) => {
-    if (employees.length === 0) {
-      void performAdvanceStatus(id, status);
-      return;
-    }
-    setPendingAdvance({ id, status });
+    void performAdvanceStatus(id, status);
   };
 
-  const performCreateOrder = async (
-    orderNumber: string,
-    credentials?: { pin: string; pinLength: 4 | 6 },
-  ): Promise<Order | null> => {
+  const performCreateOrder = async (orderNumber: string): Promise<Order | null> => {
     try {
-      const newOrder = await api.createOrder(restaurantName, orderNumber, credentials);
+      const newOrder = await api.createOrder(restaurantName, orderNumber, currentEmployeeCredential);
       handleAddOrder(newOrder);
       return newOrder;
     } catch (error) {
@@ -1325,19 +1462,10 @@ function KitchenDashboardContent({
     }
   };
 
-  // Entry point HomeTab calls (awaited) before creating an order. Same PIN
-  // gate as status advance: no employees set up yet proceeds unattributed;
-  // otherwise a PIN is required. Resolves to null (not created) if the PIN
-  // prompt is cancelled, so HomeTab knows not to advance its naming-style
-  // suggestion.
+  // Entry point HomeTab calls (awaited). No PIN prompt here anymore -- see
+  // handleAdvanceStatus above.
   const requestCreateOrder = (orderNumber: string): Promise<Order | null> => {
-    if (employees.length === 0) {
-      return performCreateOrder(orderNumber);
-    }
-    return new Promise((resolve) => {
-      pendingCreateOrderRef.current = { orderNumber, resolve };
-      setCreateOrderPinOpen(true);
-    });
+    return performCreateOrder(orderNumber);
   };
 
   // 300ms matches .animate-order-exit's own animation duration in
@@ -1347,14 +1475,14 @@ function KitchenDashboardContent({
   // fires and the card would sit deleted-but-still-visible forever.
   const ORDER_EXIT_ANIMATION_MS = 300;
 
-  const deleteOrder = async (id: number, credentials?: { pin: string; pinLength: 4 | 6 }) => {
+  const deleteOrder = async (id: number) => {
     // Play the slide-out first, then actually remove the order from state
     // once the animation has had time to finish -- deleting from `orders`
     // immediately (the old behavior) left no time for any exit animation
     // to render at all.
     setExitingIds((prev) => new Set(prev).add(id));
     try {
-      await api.deleteOrder(id, credentials);
+      await api.deleteOrder(id, currentEmployeeCredential);
       showToast("Order deleted successfully", "success");
       setTimeout(() => {
         setOrders((prev) => prev.filter((o) => o.id !== id));
@@ -1376,36 +1504,13 @@ function KitchenDashboardContent({
     }
   };
 
-  // Deleting is destructive enough to need the same PIN attribution as
-  // create/status-change once this kitchen has any employees configured
-  // (see SYSTEM_MEMORY.md "Employee Attribution") -- otherwise (no roster
-  // yet) it proceeds unattributed exactly as before. Holding Shift while
-  // clicking Delete skips the "are you sure" confirmation modal (an extra
-  // deliberate keypress already signals intent, so that confirmation would
-  // just be friction) but still requires the PIN when employees exist --
-  // shift-click is not a way to bypass attribution, only the "are you sure".
-  const pendingDeleteRef = useRef<number | null>(null);
-  const [deletePinOpen, setDeletePinOpen] = useState(false);
-
-  const startDeletePinFlow = (id: number) => {
-    pendingDeleteRef.current = id;
-    setDeletePinOpen(true);
-  };
-
+  // Deleting is attributed the same way as create/status-change now (see
+  // handleAdvanceStatus above) -- no per-action PIN prompt. Holding Shift
+  // while clicking Delete still skips only the "are you sure" confirmation
+  // modal (an extra deliberate keypress already signals intent).
   const requestDeleteOrder = (id: number, skipConfirm: boolean) => {
-    if (employees.length === 0) {
-      if (skipConfirm) {
-        void deleteOrder(id);
-        return;
-      }
-      setOrderToDelete(id);
-      return;
-    }
-
-    // Employees exist: PIN is mandatory either way. Shift-click only skips
-    // the confirmation modal, going straight to the PIN pad instead.
     if (skipConfirm) {
-      startDeletePinFlow(id);
+      void deleteOrder(id);
       return;
     }
     setOrderToDelete(id);
@@ -1415,16 +1520,48 @@ function KitchenDashboardContent({
     if (orderToDelete === null) return;
     const id = orderToDelete;
     setOrderToDelete(null);
-    if (employees.length === 0) {
-      void deleteOrder(id);
-      return;
-    }
-    startDeletePinFlow(id);
+    void deleteOrder(id);
   };
 
   const handleAddOrder = (newOrder: Order) => {
     setOrders((prev) => [newOrder, ...prev]);
     flash(newOrder.id);
+  };
+
+  // Kitchen-side "Mark as Picked Up" -- previously only the customer's own
+  // tracker page could set acknowledged_at (see api/orders/[id]/acknowledge,
+  // deliberately unauthenticated for that path). Sending employeeId here
+  // opts into that route's newer authenticated branch, which also writes an
+  // audit event, same attribution as any other order action this session.
+  const handleMarkPickedUp = async (id: number) => {
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, acknowledged_at: new Date().toISOString() } : o)));
+    try {
+      await api.markPickedUp(id, currentEmployeeCredential);
+      showToast("Order marked as picked up", "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Failed to mark order as picked up", "error");
+      void fetchOrders();
+    }
+  };
+
+  // Clicking "Logout Staff" signs out only the currently-signed-in employee
+  // -- the kitchen's own restaurant_session/Remember-Me is untouched, so the
+  // next screen is the staff sign-in step (see restauranthome/page.tsx's
+  // gate), not the kitchen login. Best-effort on the audit call (same
+  // resilience pattern as the full kitchen logout below): sessionStorage is
+  // always cleared and the redirect always happens even if the network call
+  // fails, since staying "signed in" client-side after a failed logout
+  // attempt would be worse than a missed audit row.
+  const handleLogoutStaff = async () => {
+    if (signedInEmployee) {
+      try {
+        await api.logoutEmployee(restaurantName, signedInEmployee.employeeId);
+      } catch {
+        // best-effort; still proceed to sign the staff session out locally
+      }
+    }
+    clearEmployeeSession();
+    router.push("/restaurant/staff-login");
   };
 
   const renderContent = () => {
@@ -1440,6 +1577,7 @@ function KitchenDashboardContent({
           onCreateOrder={requestCreateOrder}
           onDeleteOrder={requestDeleteOrder}
           onAdvance={handleAdvanceStatus}
+          onMarkPickedUp={handleMarkPickedUp}
           onError={(message) => showToast(message, "error")}
         />
       );
@@ -1460,6 +1598,7 @@ function KitchenDashboardContent({
         exitingIds={exitingIds}
         onAdvance={handleAdvanceStatus}
         onDelete={requestDeleteOrder}
+        onMarkPickedUp={handleMarkPickedUp}
       />
     );
   };
@@ -1470,6 +1609,7 @@ function KitchenDashboardContent({
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onLogout={onLogout}
+        onLogoutStaff={employees.length > 0 ? handleLogoutStaff : null}
         restaurantName={restaurantName}
         statusCounts={statusCounts}
       />
@@ -1486,66 +1626,6 @@ function KitchenDashboardContent({
         </p>
         <ModalActions onCancel={() => setOrderToDelete(null)} onConfirm={confirmDeleteOrder} danger confirmLabel="Delete" />
       </Modal>
-
-      <PinPad
-        isOpen={pendingAdvance !== null}
-        onClose={() => setPendingAdvance(null)}
-        onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
-        onVerified={(employee, pin) => {
-          if (!pendingAdvance) return;
-          const { id, status } = pendingAdvance;
-          setPendingAdvance(null);
-          // PIN already verified once above just to give fast UI feedback
-          // (wrong-PIN retry without leaving the pad) -- the status route
-          // independently re-verifies the pin itself server-side before
-          // attributing anything, since a client-side "it verified" signal
-          // is never trusted for the actual attribution.
-          void performAdvanceStatus(id, status, { pin, pinLength: employee.accountType === "manager" ? 6 : 4 });
-        }}
-      />
-
-      <PinPad
-        isOpen={createOrderPinOpen}
-        onClose={() => {
-          // Cancelling must resolve (not leave hanging) the promise HomeTab
-          // is awaiting in handleCreateOrder, or its "Add Order" flow would
-          // stall indefinitely with no error and no created order.
-          setCreateOrderPinOpen(false);
-          pendingCreateOrderRef.current?.resolve(null);
-          pendingCreateOrderRef.current = null;
-        }}
-        onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
-        onVerified={(employee, pin) => {
-          const pending = pendingCreateOrderRef.current;
-          if (!pending) return;
-          setCreateOrderPinOpen(false);
-          pendingCreateOrderRef.current = null;
-          // Same trust model as status-change attribution: this client-side
-          // verify is only for fast wrong-PIN UI feedback, the order-create
-          // route independently re-verifies the pin server-side.
-          void performCreateOrder(pending.orderNumber, { pin, pinLength: employee.accountType === "manager" ? 6 : 4 }).then(pending.resolve);
-        }}
-      />
-
-      <PinPad
-        isOpen={deletePinOpen}
-        onClose={() => {
-          setDeletePinOpen(false);
-          pendingDeleteRef.current = null;
-        }}
-        onVerify={(pin, pinLength) => api.verifyPin(restaurantName, pin, pinLength)}
-        onVerified={(employee, pin) => {
-          const id = pendingDeleteRef.current;
-          if (id === null) return;
-          setDeletePinOpen(false);
-          pendingDeleteRef.current = null;
-          // Same trust model as create/status-change attribution: this
-          // client-side verify is only for fast wrong-PIN UI feedback, the
-          // delete route independently re-verifies the pin server-side
-          // before writing the audit event.
-          void deleteOrder(id, { pin, pinLength: employee.accountType === "manager" ? 6 : 4 });
-        }}
-      />
     </div>
   );
 }

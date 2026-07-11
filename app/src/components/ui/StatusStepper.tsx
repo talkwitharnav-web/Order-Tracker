@@ -22,7 +22,17 @@ const NEXT_API_STATUS: Record<StatusKey, ApiOrderStatus | null> = {
 export const StatusStepper: FC<{
   status: string;
   onAdvance: (next: ApiOrderStatus) => void;
-}> = ({ status, onAdvance }) => {
+  /**
+   * Only meaningful for a Complete order -- a Complete step tile renders
+   * with the orange "not yet picked up" tokens instead of the usual done-
+   * green ones until this is set (see globals.css --color-status-complete-
+   * pending-* and lib/order-status.ts's COMPLETE_PENDING_VISUAL, which this
+   * mirrors directly rather than importing, since StatusStepper renders all
+   * 3 steps' tiles from one shared class-string branch, not per-step
+   * getStatusVisual calls).
+   */
+  acknowledgedAt?: string | null;
+}> = ({ status, onAdvance, acknowledgedAt }) => {
   const currentKey = normalizeStatus(status);
   const currentIndex = ORDERED_STATUS_KEYS.indexOf(currentKey);
   const [justAdvanced, setJustAdvanced] = useState(false);
@@ -45,6 +55,14 @@ export const StatusStepper: FC<{
         const isCurrent = index === currentIndex;
         const isNext = index === currentIndex + 1;
         const next = NEXT_API_STATUS[currentKey];
+        // The Complete tile is only ever reached via isCurrent (index 2 can
+        // never be < currentIndex, there's no step after it) -- so ITS OWN
+        // color must distinguish picked-up (green, --color-status-complete-*)
+        // from not-yet-picked-up (orange, --color-status-complete-pending-*)
+        // rather than sharing the same "current step" orange every other
+        // in-progress status uses.
+        const isCompleteTile = key === "complete" && isCurrent;
+        const isPickedUp = isCompleteTile && !!acknowledgedAt;
 
         return (
           <div key={key} className="flex items-center gap-0.5 sm:gap-1 flex-1 min-w-0">
@@ -58,11 +76,15 @@ export const StatusStepper: FC<{
               } ${
                 isDone
                   ? "bg-[var(--color-status-complete-bg)] text-[var(--color-status-complete-text)] border border-[var(--color-status-complete-border)]"
-                  : isCurrent
-                    ? "bg-[var(--color-status-preparing-bg)] text-[var(--color-status-preparing-text)] border border-[var(--color-status-preparing-border)]"
-                    : isNext
-                      ? "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-brand)] hover:text-[var(--color-on-brand)] hover:border-[var(--color-brand)] cursor-pointer"
-                      : "bg-transparent text-[var(--color-text-muted)] border border-[var(--color-border)] cursor-not-allowed opacity-50"
+                  : isPickedUp
+                    ? "bg-[var(--color-status-complete-bg)] text-[var(--color-status-complete-text)] border border-[var(--color-status-complete-border)]"
+                    : isCompleteTile
+                      ? "bg-[var(--color-status-complete-pending-bg)] text-[var(--color-status-complete-pending-text)] border border-[var(--color-status-complete-pending-border)]"
+                      : isCurrent
+                        ? "bg-[var(--color-status-preparing-bg)] text-[var(--color-status-preparing-text)] border border-[var(--color-status-preparing-border)]"
+                        : isNext
+                          ? "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-brand)] hover:text-[var(--color-on-brand)] hover:border-[var(--color-brand)] cursor-pointer"
+                          : "bg-transparent text-[var(--color-text-muted)] border border-[var(--color-border)] cursor-not-allowed opacity-50"
               }`}
             >
               {STEP_LABEL[key]}

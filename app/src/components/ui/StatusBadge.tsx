@@ -1,11 +1,12 @@
 import { FC } from "react";
 import { getStatusVisual, type AnyOrderStatus } from "@/lib/order-status";
 
-export const StatusBadge: FC<{ status: AnyOrderStatus | string; className?: string }> = ({
+export const StatusBadge: FC<{ status: AnyOrderStatus | string; acknowledgedAt?: string | null; className?: string }> = ({
   status,
+  acknowledgedAt,
   className = "",
 }) => {
-  const visual = getStatusVisual(status);
+  const visual = getStatusVisual(status, acknowledgedAt);
   const { Icon } = visual;
   return (
     <span
@@ -17,10 +18,11 @@ export const StatusBadge: FC<{ status: AnyOrderStatus | string; className?: stri
   );
 };
 
-export const StatusIcon: FC<{ status: AnyOrderStatus | string; className?: string }> = ({
+export const StatusIcon: FC<{ status: AnyOrderStatus | string; acknowledgedAt?: string | null; className?: string }> = ({
   status,
+  acknowledgedAt,
   className = "w-5 h-5",
 }) => {
-  const { Icon, icon } = getStatusVisual(status);
+  const { Icon, icon } = getStatusVisual(status, acknowledgedAt);
   return <Icon className={`${className} ${icon}`} />;
 };

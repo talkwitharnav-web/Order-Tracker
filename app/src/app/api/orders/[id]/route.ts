@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
-import { verifyEmployeeForAction } from "@/lib/employee-auth";
+import { resolveOrderActionEmployee } from "@/lib/employee-auth";
 
 // Forward-only lifecycle (see SYSTEM_MEMORY.md §2 status-vocab quirk — this
 // is the API-vocabulary set, unrelated to the customer-facing display
@@ -139,9 +139,9 @@ export async function PUT(
     // attribution any time this coincidence occurred, even though the action
     // came from the kitchen UI with a real verified PIN, not from admin.
     const isGenuineAdminOverride = isAdmin && employeeId === undefined && pin === undefined;
-    const employeeCheck = typeof undoToken === "string" || isGenuineAdminOverride
+    const employeeCheck = typeof undoToken === "string"
       ? { ok: true as const, employee: null }
-      : await verifyEmployeeForAction(currentOrder.restaurant_name, employeeId, pin, pinLength);
+      : await resolveOrderActionEmployee(currentOrder.restaurant_name, isGenuineAdminOverride, employeeId, pin, pinLength);
     if (!employeeCheck.ok) return employeeCheck.response;
     const verifiedEmployee = employeeCheck.employee;
 
@@ -338,9 +338,13 @@ export async function DELETE(
     // admin_session cookie existing alongside a real kitchen session.
     const isAdmin = await isAdminRequest();
     const isGenuineAdminOverride = isAdmin && employeeId === undefined && pin === undefined;
-    const employeeCheck = isGenuineAdminOverride
-      ? { ok: true as const, employee: null }
-      : await verifyEmployeeForAction(existing.rows[0].restaurant_name, employeeId, pin, pinLength);
+    const employeeCheck = await resolveOrderActionEmployee(
+      existing.rows[0].restaurant_name,
+      isGenuineAdminOverride,
+      employeeId,
+      pin,
+      pinLength,
+    );
     if (!employeeCheck.ok) return employeeCheck.response;
     const verifiedEmployee = employeeCheck.employee;
 

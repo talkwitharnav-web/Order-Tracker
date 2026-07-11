@@ -827,7 +827,7 @@ function AdminDbContent() {
                             </span>
                           ) : (
                             <>
-                              <StatusBadge status={o.status} />
+                              <StatusBadge status={o.status} acknowledgedAt={o.acknowledged_at} />
                               <Select
                                 value={o.status}
                                 onChange={(next) => handleStatusChange(o.id, next)}

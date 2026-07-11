@@ -149,6 +149,14 @@ const OrderStatusCard: FC<{ order: Order; onAcknowledge: () => void; acknowledgi
   }, [order.updated_at]);
 
   const statusKey = normalizeStatus(order.status);
+  // Deliberately NOT passing acknowledged_at here -- the pending(orange)/
+  // picked-up(green) split is a KITCHEN-side signal (see StatusStepper on
+  // the dashboard) about whether staff still need to hand the order over.
+  // The customer's own tracker card stays the plain Complete visual the
+  // whole time; it already distinguishes pickup via TEXT ("Enjoy Your
+  // Meal!" + confetti below), not color -- a customer looking at their own
+  // order doesn't need a "not done yet" warning color for an order that,
+  // from their side, IS done and ready.
   const visual = getStatusVisual(order.status);
   const title = STATUS_TITLE[statusKey];
   // "Order Picked Up" only makes sense once the order has actually reached

@@ -49,6 +49,15 @@
   --color-status-complete-text: #55613e;
   --color-status-complete-icon: #6b7a4f;
 
+  /* Complete but not yet picked up -- same orange as Preparing (a Complete
+     order awaiting pickup confirmation reads as "not fully done yet," same
+     as one still on the stove). Distinct token names so a future tweak to
+     either state's exact hue doesn't silently drag the other along. */
+  --color-status-complete-pending-bg: rgba(193, 96, 47, 0.1);
+  --color-status-complete-pending-border: rgba(193, 96, 47, 0.35);
+  --color-status-complete-pending-text: #a34e23;
+  --color-status-complete-pending-icon: #c1602f;
+
   /* Semantic */
   --color-danger: #b3402c;
   --color-danger-hover: #96331f;
@@ -98,6 +107,11 @@
   --color-status-complete-border: rgba(156, 175, 122, 0.4);
   --color-status-complete-text: #b3c493;
   --color-status-complete-icon: #9caf7a;
+
+  --color-status-complete-pending-bg: rgba(224, 122, 69, 0.14);
+  --color-status-complete-pending-border: rgba(224, 122, 69, 0.4);
+  --color-status-complete-pending-text: #f0a276;
+  --color-status-complete-pending-icon: #e07a45;
 
   /* Semantic */
   --color-danger: #d9694c;
@@ -165,6 +179,11 @@
   --color-status-complete-text: #20441a;
   --color-status-complete-icon: #2f3a1f;
 
+  --color-status-complete-pending-bg: #fbe6d2;
+  --color-status-complete-pending-border: #6b3410;
+  --color-status-complete-pending-text: #6b3410;
+  --color-status-complete-pending-icon: #6b3410;
+
   --color-danger: #7a2410;
   --color-danger-hover: #5c1a0a;
   --color-success: #20441a;
@@ -204,6 +223,11 @@
   --color-status-complete-border: #cfe0ad;
   --color-status-complete-text: #cfe0ad;
   --color-status-complete-icon: #cfe0ad;
+
+  --color-status-complete-pending-bg: #402615;
+  --color-status-complete-pending-border: #ffb27a;
+  --color-status-complete-pending-text: #ffb27a;
+  --color-status-complete-pending-icon: #ffb27a;
 
   --color-danger: #ff9478;
   --color-danger-hover: #ffab94;
@@ -494,6 +518,10 @@
   --color-status-complete-border: rgba(0, 158, 115, 0.4);
   --color-status-complete-text: #00694a;
   --color-status-complete-icon: #009E73;
+  --color-status-complete-pending-bg: rgba(230, 159, 0, 0.12);
+  --color-status-complete-pending-border: rgba(230, 159, 0, 0.4);
+  --color-status-complete-pending-text: #8a6000;
+  --color-status-complete-pending-icon: #E69F00;
   --color-danger: #D55E00;
   --color-danger-hover: #a84900;
   --color-success: #CC79A7;
@@ -521,6 +549,10 @@
   --color-status-complete-border: rgba(0, 158, 115, 0.45);
   --color-status-complete-text: #4fd6ae;
   --color-status-complete-icon: #4fd6ae;
+  --color-status-complete-pending-bg: rgba(240, 228, 66, 0.14);
+  --color-status-complete-pending-border: rgba(240, 228, 66, 0.4);
+  --color-status-complete-pending-text: #F0E442;
+  --color-status-complete-pending-icon: #F0E442;
   --color-danger: #ff9d5c;
   --color-danger-hover: #ffb37f;
   --color-success: #e0a8c8;
@@ -546,6 +578,10 @@
   --color-status-complete-border: rgba(0, 158, 115, 0.4);
   --color-status-complete-text: #00694a;
   --color-status-complete-icon: #009E73;
+  --color-status-complete-pending-bg: rgba(191, 172, 22, 0.14);
+  --color-status-complete-pending-border: rgba(191, 172, 22, 0.4);
+  --color-status-complete-pending-text: #6b6013;
+  --color-status-complete-pending-icon: #BFAC16;
   --color-danger: #000000;
   --color-danger-hover: #262626;
   --color-success: #56B4E9;
@@ -572,6 +608,10 @@
   --color-status-complete-border: rgba(0, 158, 115, 0.45);
   --color-status-complete-text: #4fd6ae;
   --color-status-complete-icon: #4fd6ae;
+  --color-status-complete-pending-bg: rgba(240, 228, 66, 0.14);
+  --color-status-complete-pending-border: rgba(240, 228, 66, 0.4);
+  --color-status-complete-pending-text: #F0E442;
+  --color-status-complete-pending-icon: #F0E442;
   --color-danger: #f5f5f5;
   --color-danger-hover: #ffffff;
   --color-success: #9fd6f5;
@@ -597,6 +637,10 @@
   --color-status-complete-border: rgba(0, 158, 115, 0.4);
   --color-status-complete-text: #00694a;
   --color-status-complete-icon: #009E73;
+  --color-status-complete-pending-bg: rgba(213, 94, 0, 0.12);
+  --color-status-complete-pending-border: rgba(213, 94, 0, 0.4);
+  --color-status-complete-pending-text: #8a3f00;
+  --color-status-complete-pending-icon: #D55E00;
   --color-danger: #920000;
   --color-danger-hover: #6e0000;
   --color-success: #5A9E3A;
@@ -624,6 +668,10 @@
   --color-status-complete-border: rgba(0, 158, 115, 0.45);
   --color-status-complete-text: #4fd6ae;
   --color-status-complete-icon: #4fd6ae;
+  --color-status-complete-pending-bg: rgba(255, 148, 84, 0.14);
+  --color-status-complete-pending-border: rgba(255, 148, 84, 0.4);
+  --color-status-complete-pending-text: #ff9454;
+  --color-status-complete-pending-icon: #ff9454;
   --color-danger: #ff5c8a;
   --color-danger-hover: #ff85a6;
   --color-success: #8fcf6e;

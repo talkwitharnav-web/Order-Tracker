@@ -25,6 +25,22 @@ export interface StatusVisual {
   icon: string;
 }
 
+// Complete orders that haven't been picked up yet (acknowledged_at still
+// null) render with this instead of STATUS_VISUALS.complete -- same shape,
+// same label, but the orange tokens (see globals.css --color-status-
+// complete-pending-*) signal "not fully done" the same way Preparing does,
+// distinct token names so tuning either state's exact hue independently
+// never silently drags the other along.
+const COMPLETE_PENDING_VISUAL: StatusVisual = {
+  key: "complete",
+  label: "Complete",
+  Icon: CheckCircle,
+  bg: "bg-[var(--color-status-complete-pending-bg)]",
+  border: "border-[var(--color-status-complete-pending-border)]",
+  text: "text-[var(--color-status-complete-pending-text)]",
+  icon: "text-[var(--color-status-complete-pending-icon)]",
+};
+
 const STATUS_VISUALS: Record<StatusKey, StatusVisual> = {
   received: {
     key: "received",
@@ -76,8 +92,23 @@ export function normalizeStatus(raw: AnyOrderStatus | string): StatusKey {
   return "received";
 }
 
-export function getStatusVisual(raw: AnyOrderStatus | string): StatusVisual {
-  return STATUS_VISUALS[normalizeStatus(raw)];
+/**
+ * `acknowledgedAt` is optional and only meaningful for a Complete order.
+ * Passing it EXPLICITLY as `null` (the order's real, confirmed
+ * `acknowledged_at` from the DB, genuinely not yet picked up) is what
+ * renders COMPLETE_PENDING_VISUAL (orange). Omitting the argument entirely
+ * (`undefined` -- every call site that hasn't opted into this distinction)
+ * keeps the original picked-up/green visual, since `undefined` means "this
+ * caller doesn't track pickup state," not "confirmed still pending." A
+ * three-way `null | string | undefined` distinction, not a plain falsy
+ * check, is required here -- collapsing `undefined` and `null` together
+ * (e.g. via `!acknowledgedAt`) would make every un-migrated caller default
+ * to orange instead of the intended green.
+ */
+export function getStatusVisual(raw: AnyOrderStatus | string, acknowledgedAt?: string | null): StatusVisual {
+  const key = normalizeStatus(raw);
+  if (key === "complete" && acknowledgedAt === null) return COMPLETE_PENDING_VISUAL;
+  return STATUS_VISUALS[key];
 }
 
 export const ORDERED_STATUS_KEYS: StatusKey[] = ["received", "preparing", "complete"];

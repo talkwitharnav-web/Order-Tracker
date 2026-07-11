@@ -186,6 +186,79 @@ export async function verifyEmployeeForAction(
 }
 
 /**
+ * Confirms `employeeId` is an active employee of `restaurantName`, with NO
+ * PIN check -- used only after the one-time staff sign-in (see
+ * app/restaurant/staff-login/page.tsx and lib/employee-session.ts) has
+ * already verified the PIN once for this shift. Every order action for the
+ * rest of that session trusts the CLIENT-asserted employeeId, but this
+ * function is what keeps that trust bounded: it still confirms the id is a
+ * real, active employee who actually belongs to THIS restaurant (not some
+ * other kitchen's id, and not a since-deactivated one), so dropping the
+ * per-action PIN never means dropping server-side verification entirely.
+ */
+export async function verifyActiveEmployee(
+  restaurantName: string,
+  employeeId: number,
+): Promise<VerifiedEmployee> {
+  const result = await query<{ id: number; name: string }>(
+    `SELECT re.id, re.name
+     FROM restaurant_employees re
+     JOIN restaurants r ON r.id = re.restaurant_id
+     WHERE re.id = $1 AND re.deleted_at IS NULL
+       AND LOWER(r.name) = LOWER($2) AND r.deleted_at IS NULL`,
+    [employeeId, restaurantName],
+  );
+  const employee = result.rows[0];
+  return employee ? { id: employee.id, name: employee.name } : null;
+}
+
+/**
+ * Single decision point for the 3 order-mutation routes (create/advance/
+ * delete): resolves who (if anyone) an order action should be attributed
+ * to, across all 3 legitimate shapes a request can arrive in --
+ *
+ * 1. A genuine admin override (isGenuineAdminOverride, computed by the
+ *    caller as `isAdmin && employeeId === undefined && pin === undefined`
+ *    -- see SYSTEM_MEMORY.md's Critical Invariants on why an admin_session
+ *    cookie existing does NOT by itself mean this request is an admin
+ *    action, since a browser can hold both an admin and a restaurant
+ *    session at once): no attribution, admin acts as itself.
+ * 2. A trusted post-sign-in employeeId with no pin (the normal path from
+ *    the kitchen dashboard now that PIN is a one-time sign-in, not a
+ *    per-action prompt): verified via verifyActiveEmployee above, no PIN
+ *    re-check needed since one already happened at sign-in time.
+ * 3. Anything else (a bare pin, or an employeeId+pin pair from some other
+ *    caller): delegates to the existing verifyEmployeeForAction, unchanged
+ *    -- still used by the staff sign-in screen itself and by StaffTab's
+ *    manager-only unlock, both of which verify a PIN directly rather than
+ *    going through this trusted-id shortcut.
+ */
+export async function resolveOrderActionEmployee(
+  restaurantName: string,
+  isGenuineAdminOverride: boolean,
+  employeeId: unknown,
+  pin: unknown,
+  pinLength: unknown,
+): Promise<{ ok: true; employee: VerifiedEmployee } | { ok: false; response: NextResponse }> {
+  if (isGenuineAdminOverride) {
+    return { ok: true, employee: null };
+  }
+
+  if (typeof employeeId === "number" && Number.isSafeInteger(employeeId) && pin === undefined) {
+    const employee = await verifyActiveEmployee(restaurantName, employeeId);
+    if (!employee) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Invalid or inactive employee" }, { status: 401 }),
+      };
+    }
+    return { ok: true, employee };
+  }
+
+  return verifyEmployeeForAction(restaurantName, employeeId, pin, pinLength);
+}
+
+/**
  * True if `pin` (of `pinLength` digits) already belongs to another active
  * employee in this restaurant -- called from employee create/edit so a
  * PIN-only lookup can never be ambiguous (see findEmployeeByPinOnly above).

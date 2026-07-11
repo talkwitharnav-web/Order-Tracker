@@ -27,7 +27,9 @@ import { parseJsonBody } from "@/lib/validate";
 type AuditEventRow = {
   id: number;
   order_id: number | null;
-  order_number: string;
+  // Nullable: an EmployeeLogout event (see api/restaurants/by-name/
+  // [restaurantName]/employees/logout) has no associated order at all.
+  order_number: string | null;
   restaurant_name: string;
   from_status: string | null;
   to_status: string;
