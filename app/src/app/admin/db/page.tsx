@@ -155,13 +155,27 @@ function AdminDbContent() {
   const [filterEnteringOrderKeys, setFilterEnteringOrderKeys] = useState<Set<string>>(() => new Set());
   const filterAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchData = useCallback(async () => {
+  // Optional search/restaurantNames: when the caller passes either, this hits
+  // the server's now-search-aware query instead of relying on the default
+  // capped-at-500-most-recent response -- see /api/dev/db's own comment on
+  // why the plain default silently couldn't find an order older than
+  // whatever's currently in that window (confirmed live: a kitchen's only
+  // order aged out after ~1300 newer orders landed, and neither the search
+  // box nor the restaurant filter could find it, even though it was a
+  // completely live order).
+  const fetchData = useCallback(async (params?: { orderSearch?: string; restaurantNames?: string[] }) => {
     try {
+      const query = new URLSearchParams();
+      if (params?.orderSearch) query.set("orderSearch", params.orderSearch);
+      if (params?.restaurantNames && params.restaurantNames.length > 0) {
+        query.set("restaurantNames", params.restaurantNames.join(","));
+      }
+      const qs = query.toString();
       const data = await fetchJson<{
         restaurants: Restaurant[];
         orders: Order[];
         deletedOrders: Order[];
-      }>("/api/dev/db");
+      }>(`/api/dev/db${qs ? `?${qs}` : ""}`);
       setRestaurants(data.restaurants);
       setOrders(data.orders);
       setDeletedOrders(data.deletedOrders);
@@ -200,6 +214,43 @@ function AdminDbContent() {
     fetchDataRef.current = fetchData;
   }, [fetchData]);
 
+  // Every refetch (WS-triggered, modal-close, periodic) should use whatever
+  // search/filter is CURRENTLY active, not always the unfiltered default --
+  // otherwise a background refetch while the user has typed a search term
+  // would silently revert to the capped default query and lose the targeted
+  // match again. Read via a ref (not closed-over state) so these call sites
+  // don't need search/filter in their own dependency arrays.
+  const searchParamsRef = useRef({ orderSearch, restaurantNames: orderRestaurantFilter });
+  useEffect(() => {
+    searchParamsRef.current = { orderSearch, restaurantNames: orderRestaurantFilter };
+  }, [orderSearch, orderRestaurantFilter]);
+
+  // Debounced re-fetch whenever the search box or restaurant filter changes --
+  // this is what actually reaches past the default 500-row cap (see
+  // /api/dev/db's own comment and fetchData above). The instant client-side
+  // filtering in filteredAndSortedOrders still drives the slide animation
+  // immediately; this just backfills `orders`/`deletedOrders` with any real
+  // match the capped default couldn't have contained, shortly after. Skips
+  // the very first render (both start empty, and the initial mount fetch
+  // above already covers that default, unfiltered request).
+  const isFirstSearchEffect = useRef(true);
+  useEffect(() => {
+    if (isFirstSearchEffect.current) {
+      isFirstSearchEffect.current = false;
+      return;
+    }
+    if (!orderSearch && orderRestaurantFilter.length === 0) {
+      // Cleared back to no filter -- go back to the plain default fetch
+      // rather than sending an empty-but-still-"search" request.
+      void fetchData();
+      return;
+    }
+    const timer = setTimeout(() => {
+      void fetchData({ orderSearch, restaurantNames: orderRestaurantFilter });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [orderSearch, orderRestaurantFilter, fetchData]);
+
   // Refetching mid-edit would reset in-progress input under an open
   // destructive-confirm/password/rename modal -- read via a ref (not a
   // dependency) so the socket effect below doesn't tear down and reopen the
@@ -231,7 +282,7 @@ function AdminDbContent() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "order_updated" || data.type === "order_deleted") {
-            if (!anyModalOpenRef.current) void fetchDataRef.current();
+            if (!anyModalOpenRef.current) void fetchDataRef.current(searchParamsRef.current);
           }
         } catch {
           // ignore malformed messages
@@ -290,7 +341,7 @@ function AdminDbContent() {
         throw new Error(resJson.error || `Action failed with status: ${res.status}`);
       }
       showToast(successMessage, "success");
-      fetchData();
+      fetchData(searchParamsRef.current);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
@@ -418,7 +469,7 @@ function AdminDbContent() {
       showToast("Password updated successfully!", "success");
       setNewPassword("");
       setPasswordResetTarget(null);
-      fetchData();
+      fetchData(searchParamsRef.current);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
@@ -444,7 +495,7 @@ function AdminDbContent() {
       );
       setNewName("");
       setRenameTarget(null);
-      fetchData();
+      fetchData(searchParamsRef.current);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
     }
@@ -574,9 +625,15 @@ function AdminDbContent() {
     runOrderFilterTransition(nextRows, () => setShowDeleted(nextShowDeleted));
   };
 
-  const allRestaurantNames = Array.from(
-    new Set([...orders, ...deletedOrders].map((o) => o.restaurant_name)),
-  );
+  // Sourced from the full `restaurants` list (every live kitchen, uncapped),
+  // NOT from `orders`/`deletedOrders` -- those two are capped at the most
+  // recent 500 rows each (see /api/dev/db's own comment), so a kitchen whose
+  // orders have all aged out of that window would otherwise silently
+  // disappear from this filter entirely, even though it's a perfectly live,
+  // valid restaurant (confirmed live: a kitchen with an old order and no
+  // orders in the current top-500 vanished from this dropdown while still
+  // showing up correctly in the Restaurants table above).
+  const allRestaurantNames = Array.from(new Set(restaurants.map((r) => r.name))).sort((a, b) => a.localeCompare(b));
 
   if (isLoading) {
     return (
