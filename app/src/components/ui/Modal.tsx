@@ -10,9 +10,17 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   danger?: boolean;
+  /**
+   * Swaps the panel's default centered scale+fade for a slide-down-from-top
+   * entrance (and slide-back-up-and-out exit) -- used by PinPad, which reads
+   * more like a dropped-in tray than a centered dialog. Opt-in rather than
+   * the default so existing confirm/delete dialogs (admin/db, admin/audit,
+   * Dashboard's other Modal calls) keep their current scale+fade unchanged.
+   */
+  slideFromTop?: boolean;
 }
 
-export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger = false }) => {
+export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger = false, slideFromTop = false }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -92,7 +100,13 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
   if (!shouldRender) return null;
 
   const backdropClass = isOpen ? "modal-backdrop-reveal" : "modal-backdrop-reveal-out";
-  const panelClass = isOpen ? "modal-panel-reveal" : "modal-panel-reveal-out";
+  const panelClass = slideFromTop
+    ? isOpen
+      ? "modal-panel-reveal-top"
+      : "modal-panel-reveal-top-out"
+    : isOpen
+      ? "modal-panel-reveal"
+      : "modal-panel-reveal-out";
 
   return (
     <div

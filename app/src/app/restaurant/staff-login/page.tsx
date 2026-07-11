@@ -96,6 +96,7 @@ export default function StaffLoginPage() {
       </AuthCard>
       <PinPad
         isOpen
+        title="Staff Login"
         onClose={() => router.push("/restaurant/home")}
         onVerify={(pin, pinLength) => verifyPin(restaurantName, pin, pinLength)}
         onVerified={(employee, pin) => {

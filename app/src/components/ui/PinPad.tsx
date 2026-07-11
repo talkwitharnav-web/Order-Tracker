@@ -51,6 +51,16 @@ export const PinPad: FC<{
    * remembered to tap a toggle that had no reason to exist on that screen.
    */
   forcedPinLength?: 4 | 6;
+  /**
+   * Overrides the modal's default "Enter your PIN" title. The staff-login
+   * page's own "Staff Sign-In" heading sits on the page behind this modal,
+   * which opens immediately on load -- so a first-time user never actually
+   * sees that heading before the pad covers it, and "Enter your PIN" alone
+   * doesn't say whose login this is. Staff-login passes "Staff Login" here;
+   * the Staff-tab's manager-only unlock leaves this unset since its trigger
+   * button/context already makes that clear.
+   */
+  title?: string;
 }> = (props) => (
   // Remounting on each open (via `key`) resets all internal state for free --
   // avoids a setState-in-effect to "reset on open", which would otherwise
@@ -64,7 +74,8 @@ const PinPadContent: FC<{
   onVerify: (pin: string, pinLength: 4 | 6) => Promise<VerifiedPinIdentity | null>;
   onVerified: (employee: VerifiedPinIdentity, pin: string) => void;
   forcedPinLength?: 4 | 6;
-}> = ({ isOpen, onClose, onVerify, onVerified, forcedPinLength }) => {
+  title?: string;
+}> = ({ isOpen, onClose, onVerify, onVerified, forcedPinLength, title }) => {
   const [isManager, setIsManager] = useState(forcedPinLength === 6);
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +162,7 @@ const PinPadContent: FC<{
   }, [isOpen, pin, pinLength, verifying]);
 
   return (
-    <Modal isOpen={isOpen} title="Enter your PIN" onClose={onClose}>
+    <Modal isOpen={isOpen} title={title ?? "Enter your PIN"} onClose={onClose} slideFromTop>
       {!forcedPinLength && (
         <div className="flex justify-center mb-4">
           <button

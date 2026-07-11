@@ -384,6 +384,27 @@
 .modal-panel-reveal-out { animation: modal-panel-out 0.15s ease-in forwards; }
 
 /*
+ * Modal.tsx `slideFromTop` variant (PinPad) -- panel drops in from above the
+ * viewport instead of scaling up from center, and slides back up out of view
+ * on close, rather than the default shrink-in-place. Both directions use an
+ * overshoot cubic-bezier (not a plain ease) so the motion carries real
+ * inertia: the in-keyframe overshoots slightly past resting position before
+ * settling (a spring coming to rest), and the out-keyframe's matching
+ * accelerate-then-launch curve reads as the same spring being pulled back up
+ * rather than just playing the entrance in reverse.
+ */
+@keyframes modal-panel-in-top {
+  from { opacity: 0; transform: translateY(-60px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes modal-panel-out-top {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-60px); }
+}
+.modal-panel-reveal-top { animation: modal-panel-in-top 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.modal-panel-reveal-top-out { animation: modal-panel-out-top 0.22s cubic-bezier(0.55, 0, 0.85, 0.35) forwards; }
+
+/*
  * In-flow slide-down reveal (Dashboard.tsx's mobile hamburger nav panel) --
  * unlike .dropdown-reveal (a floating, absolutely-positioned panel that
  * doesn't affect layout), this content sits in normal flow and pushes
