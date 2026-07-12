@@ -8,6 +8,7 @@ import { MascotStyleToggle } from "@/components/ui/MascotStyleToggle";
 import { FunnyChefToggle } from "@/components/ui/FunnyChefToggle";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
 import { FullscreenToggle } from "@/components/ui/FullscreenToggle";
+import { KitchenClock } from "@/components/ui/KitchenClock";
 import { useReservedTopRight } from "@/lib/useReservedTopRight";
 import { useHasMascot } from "@/lib/mascot-style";
 
@@ -29,7 +30,15 @@ export const SettingsToggles: FC<{
   className?: string;
   health?: ReactNode;
   mobileNavigation?: ReactNode;
-}> = ({ className, health, mobileNavigation }) => {
+  /**
+   * Shows the kitchen-device local clock (KitchenClock) between the health
+   * pin and the S/M/B interface-size toggle -- opt-in the same way `health`
+   * is, since not every SettingsToggles caller is the kitchen dashboard
+   * (see Dashboard.tsx's KitchenDashboardContent, the one place that passes
+   * this true today).
+   */
+  showClock?: boolean;
+}> = ({ className, health, mobileNavigation, showClock = false }) => {
   const ref = useRef<HTMLDivElement>(null);
   useReservedTopRight(ref);
   // The 2D/3D chef toggle only makes sense where a chef is actually rendered.
@@ -49,6 +58,12 @@ export const SettingsToggles: FC<{
     {health && (
       <>
         {health}
+        <span className="w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
+      </>
+    )}
+    {showClock && (
+      <>
+        <KitchenClock />
         <span className="w-px h-5 bg-[var(--color-border)]" aria-hidden="true" />
       </>
     )}

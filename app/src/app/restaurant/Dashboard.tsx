@@ -227,6 +227,7 @@ const Nav: FC<{
     <>
       <SettingsToggles
         health={<HealthPin />}
+        showClock
         mobileNavigation={
           <button
             type="button"
@@ -754,16 +755,26 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
     }
   };
 
-  const handleApplyCustom = () => {
+  // Auto-applies whenever customH/customM change, instead of requiring a
+  // manual Apply tap -- the user found that button "too much work for
+  // staff" for a setting that's just two number fields. Debounced so a
+  // still-typing multi-digit hour/minute value doesn't fire a PUT per
+  // keystroke; skips silently (no error toast) while the value is out of
+  // range mid-edit, since e.g. clearing "10" to type "100" passes through
+  // an empty/invalid intermediate state that isn't a real user mistake yet.
+  useEffect(() => {
+    if (!showCustom) return;
     const h = Number(customH) || 0;
     const m = Number(customM) || 0;
     const decimalHours = h + m / 60;
     if (!Number.isFinite(decimalHours) || decimalHours < COMPLETE_CAP_MIN_HOURS || decimalHours > COMPLETE_CAP_MAX_HOURS) {
-      onError(`Custom pickup window must be between ${COMPLETE_CAP_MIN_HOURS * 60} minutes and ${COMPLETE_CAP_MAX_HOURS} hours`);
       return;
     }
-    void handleChange(decimalHours);
-  };
+    if (decimalHours === hours) return;
+    const timer = setTimeout(() => void handleChange(decimalHours), 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customH, customM, showCustom]);
 
   if (hours === null) return null;
 
@@ -836,9 +847,6 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
               className="w-20"
             />
           </div>
-          <Button type="button" onClick={handleApplyCustom} disabled={saving}>
-            Apply
-          </Button>
         </div>
       )}
     </Card>
@@ -985,7 +993,22 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
         <p className="text-sm text-[var(--color-text-secondary)] mb-4">
           Manage who can be attributed to order actions. A manager PIN is required to open this panel.
         </p>
-        <Button type="button" variant="secondary" onClick={() => setPinPadOpen(true)}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            // Opening the PIN pad when no manager account exists yet would
+            // just lead to a guaranteed "Try again" -- no PIN could ever
+            // unlock this panel, since verification only ever succeeds for
+            // an actual manager (checked again below on success). Catching
+            // it here instead gives a real, actionable message.
+            if (managers.length === 0) {
+              onError("You don't have a registered manager, please ask admin to register one");
+              return;
+            }
+            setPinPadOpen(true);
+          }}
+        >
           Unlock with manager PIN
         </Button>
         <PinPad
@@ -1352,10 +1375,70 @@ function KitchenDashboardContent({
     }
   };
 
+  // fetchOrders is redefined every render (it closes over showToast/state
+  // setters) -- read the latest version via a ref inside the socket effect
+  // below so that effect doesn't need fetchOrders in its own deps (which
+  // would tear down and reopen the WebSocket on every render).
+  const fetchOrdersRef = useRef(fetchOrders);
   useEffect(() => {
-    fetchOrders(true);
-    const interval = setInterval(() => fetchOrders(false), 5000);
-    return () => clearInterval(interval);
+    fetchOrdersRef.current = fetchOrders;
+  });
+
+  // Kitchen-scoped live order updates, same ws-hub broadcast/`?restaurant=`
+  // channel the customer tracker already uses (see customer/page.tsx) --
+  // every order create/status-change/delete/acknowledge route already calls
+  // broadcast() with this restaurant's name, so this was previously getting
+  // that data up to 5s stale for no reason other than nothing was listening
+  // for it here. Replaces the old 5s setInterval poll outright rather than
+  // running both: a WS message always arrives faster than the next poll
+  // tick would have anyway, so there's nothing the interval still adds.
+  useEffect(() => {
+    fetchOrdersRef.current(true);
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closedByEffect = false;
+    let reconnectAttempt = 0;
+
+    const RECONNECT_BASE_MS = 2000;
+    const RECONNECT_MAX_MS = 30000;
+
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const restaurantParam = encodeURIComponent(restaurantName);
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws?restaurant=${restaurantParam}`);
+
+      socket.onopen = () => {
+        reconnectAttempt = 0;
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "order_updated" || data.type === "order_deleted") {
+            void fetchOrdersRef.current(false);
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      socket.onclose = () => {
+        if (!closedByEffect) {
+          const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+          reconnectAttempt += 1;
+          reconnectTimer = setTimeout(connect, delay);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      closedByEffect = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
+    };
   }, [restaurantName]);
 
   // One-time overdue toast per order+status: keyed by `${id}:${status}` so an

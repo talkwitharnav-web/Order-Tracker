@@ -201,7 +201,13 @@ function AdminDbContent() {
           // current query, same as a fresh mount, which is the correct
           // behavior since "page one" is exactly where a brand new order
           // (highest id / most recent) belongs under the default sort anyway.
-          if (data.type === "order_updated" || data.type === "order_deleted") {
+          // restaurant_created has no payload to patch in place with (a
+          // brand new kitchen isn't part of the currently loaded order
+          // window at all) -- same as order_updated/order_deleted, the fix
+          // is just re-running reload(), which already re-fetches BOTH page
+          // one of orders AND the restaurants list in one /api/dev/db
+          // response (see useWindowedOrders' reload() -> onFirstLoad).
+          if (data.type === "order_updated" || data.type === "order_deleted" || data.type === "restaurant_created") {
             if (!anyModalOpenRef.current) void reloadRef.current();
           }
         } catch {

@@ -1,6 +1,7 @@
 "use client";
 
 import { FC, ReactNode, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./Button";
 import { useDropdownReveal } from "@/lib/useDropdownReveal";
 
@@ -108,7 +109,19 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
       ? "modal-panel-reveal"
       : "modal-panel-reveal-out";
 
-  return (
+  // Rendered via a portal straight to document.body rather than in place --
+  // Dashboard.tsx's tab-switch wrapper (.tab-content-enter) carries a CSS
+  // `transform` (even at its animation's resting translateY(0), a `both`
+  // keyframe keeps it computed), and per spec any `transform` on an
+  // ancestor creates a new containing block for `position: fixed`
+  // descendants. That silently shrank this backdrop down to the tab
+  // wrapper's own box instead of the true viewport on the Staff tab,
+  // so clicking the visually-dark backdrop outside that box did nothing
+  // (only Escape or clicking the still-in-box area behind the card closed
+  // it) -- found 2026-07-12 from a real bug report. A portal sidesteps the
+  // whole class of ancestor-transform/overflow/stacking issues for good,
+  // rather than chasing this one wrapper.
+  return createPortal(
     <div
       className={`fixed inset-0 bg-black/70 modal-backdrop-blur flex justify-center items-center z-50 p-4 ${backdropClass}`}
       onClick={onClose}
@@ -132,7 +145,8 @@ export const Modal: FC<ModalProps> = ({ isOpen, title, onClose, children, danger
         </h2>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

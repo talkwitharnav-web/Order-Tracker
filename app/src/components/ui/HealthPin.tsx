@@ -149,11 +149,17 @@ export function HealthPin({
 
     // Fetch immediately whenever the active state flips on, so opening the
     // popover shows a fresh reading rather than waiting for the next tick
-    // of whichever interval was already running.
-    poll();
+    // of whichever interval was already running. Debounced (not fired
+    // synchronously) so rapidly flicking the cursor on/off the pin -- which
+    // re-runs this effect on every single hover toggle -- can't spam an
+    // immediate request per toggle; only a toggle that actually settles for
+    // a moment triggers one. A real hover/tap that stays active long enough
+    // to read the popover always still gets its fresh reading within 250ms.
+    const immediate = setTimeout(poll, 250);
     const interval = setInterval(poll, isActive ? POLL_INTERVAL_ACTIVE_MS : POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
+      clearTimeout(immediate);
       clearInterval(interval);
     };
   }, [isActive]);

@@ -11,6 +11,7 @@ import {
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
+import { broadcastRestaurantCreated } from "@/lib/ws-hub";
 
 const SALT_ROUNDS = 10;
 const MIN_PASSWORD_LENGTH = 8;
@@ -107,6 +108,7 @@ export async function POST(req: Request) {
     logger.info(
       `POST /api/restaurants/register - restaurant "${name}" created successfully`,
     );
+    broadcastRestaurantCreated();
 
     // Registering logs the kitchen straight in — no reason to make a
     // first-time signup immediately re-enter the same credentials they just typed.

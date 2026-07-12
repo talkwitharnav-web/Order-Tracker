@@ -50,6 +50,30 @@ export type OrderEvent =
   | { type: "order_deleted"; payload: { id: number; restaurant_name?: string } };
 
 /**
+ * Registration creates a row no existing socket is scoped to yet (a brand
+ * new restaurant name), so it can't reuse `broadcast()`'s per-restaurant
+ * targeting the way order events do -- there's no restaurant-scoped client
+ * that could even be listening for it. Sent to admin sockets only, the same
+ * "sees every restaurant's activity" channel `broadcast()` already fans
+ * order events out to, so /admin/db's kitchen list can refresh live instead
+ * of needing a manual tab reload.
+ */
+export function broadcastRestaurantCreated() {
+  const message = JSON.stringify({ type: "restaurant_created" });
+  for (const ws of adminClients) {
+    if (ws.readyState === ws.OPEN) {
+      try {
+        ws.send(message);
+      } catch {
+        adminClients.delete(ws);
+      }
+    } else {
+      adminClients.delete(ws);
+    }
+  }
+}
+
+/**
  * Broadcasts to every client subscribed to the event's restaurant_name.
  * `order_deleted` events historically only carried an id (see ws-hub's
  * previous shape) -- callers should pass restaurant_name through for both
