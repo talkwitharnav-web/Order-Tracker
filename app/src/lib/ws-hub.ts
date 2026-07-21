@@ -74,6 +74,30 @@ export function broadcastRestaurantCreated() {
 }
 
 /**
+ * Same no-payload/admin-only shape as broadcastRestaurantCreated() above, for
+ * the identical reason: a submitted issue report isn't part of any
+ * currently-loaded window a client could patch in place, so the fix is just
+ * triggering /admin/issues's existing reload() rather than threading a full
+ * row payload through. Called from POST /api/issues (a PUBLIC, unauthenticated
+ * route) -- safe to call unconditionally since this only ever reaches admin
+ * sockets, never the public reporter's own connection.
+ */
+export function broadcastIssueReported() {
+  const message = JSON.stringify({ type: "issue_reported" });
+  for (const ws of adminClients) {
+    if (ws.readyState === ws.OPEN) {
+      try {
+        ws.send(message);
+      } catch {
+        adminClients.delete(ws);
+      }
+    } else {
+      adminClients.delete(ws);
+    }
+  }
+}
+
+/**
  * Broadcasts to every client subscribed to the event's restaurant_name.
  * `order_deleted` events historically only carried an id (see ws-hub's
  * previous shape) -- callers should pass restaurant_name through for both

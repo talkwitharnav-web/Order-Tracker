@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { errJson, plainJson } from "@/lib/error-response";
+import { broadcastIssueReported } from "@/lib/ws-hub";
 
 /**
  * Public, anonymous "Report an Issue" submission -- reachable from
@@ -58,7 +59,12 @@ export async function POST(req: Request) {
       [description, restaurantName, context, contact],
     );
 
-    return NextResponse.json({ message: "Thanks -- your report was submitted." });
+    // Pushes /admin/issues a live update the instant this lands -- see
+    // ws-hub.ts's broadcastIssueReported() comment for why this is safe to
+    // call unconditionally from a public route (admin-only delivery).
+    broadcastIssueReported();
+
+    return NextResponse.json({ message: "Thanks! Your report was submitted." });
   } catch (err) {
     logger.error("POST /api/issues - error processing request", err);
     return errJson("INTERNAL_ERROR", 500);

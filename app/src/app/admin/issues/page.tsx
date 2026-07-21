@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
@@ -19,13 +17,12 @@ import { fetchJson } from "@/lib/api-client";
  * under or linked from within another admin page's header (same pattern as
  * Audit Log, see CLAUDE.md and app/page.tsx's navExtra comment).
  *
- * No WebSocket live-update here (unlike /admin/audit) -- issue reports don't
- * broadcast over the existing order-events WS channel (they're unrelated to
- * orders), and manual refresh is a perfectly reasonable interaction for a
- * "check for new reports" admin page that isn't watching a live operational
- * feed. A dedicated broadcast channel for this would be new infrastructure
- * for a low-frequency, non-time-sensitive feature -- not worth it unless
- * reports need to be seen in real time later.
+ * Live-updates over the same authenticated admin WS channel (`?admin=1`) as
+ * /admin/db and /admin/audit -- see api/issues/route.ts's
+ * broadcastIssueReported() call and ws-hub.ts's own comment for why this is a
+ * separate no-payload event rather than reusing order_updated/order_deleted.
+ * No manual "Refresh" button: this page must reflect a newly-submitted
+ * report the instant it lands, not on some later manual action.
  */
 type ReportedIssueRow = {
   id: number;
@@ -44,7 +41,6 @@ function AdminIssuesContent() {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadIssues = useCallback(async () => {
-    setIsLoading(true);
     try {
       const data = await fetchJson<{ issues: ReportedIssueRow[] }>("/api/dev/issues");
       setIssues(data.issues);
@@ -68,21 +64,66 @@ function AdminIssuesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
+  // Read via a ref (not a dependency) so the socket effect below doesn't
+  // tear down and reconnect every time loadIssues' identity changes --
+  // identical pattern to admin/audit's selectedKitchenRef/loadEventsRef.
+  const loadIssuesRef = useRef(loadIssues);
+  useEffect(() => {
+    loadIssuesRef.current = loadIssues;
+  }, [loadIssues]);
+
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closedByEffect = false;
+    let reconnectAttempt = 0;
+
+    const RECONNECT_BASE_MS = 2000;
+    const RECONNECT_MAX_MS = 30000;
+
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      socket = new WebSocket(`${protocol}//${window.location.host}/ws?admin=1`);
+
+      socket.onopen = () => {
+        reconnectAttempt = 0;
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "issue_reported") {
+            void loadIssuesRef.current();
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      socket.onclose = () => {
+        if (!closedByEffect) {
+          const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+          reconnectAttempt += 1;
+          reconnectTimer = setTimeout(connect, delay);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      closedByEffect = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, []);
+
   return (
     <div className="h-dvh flex flex-col overflow-hidden p-4 sm:p-8">
       <SettingsToggles health={<HealthPin />} />
 
       <div className="shrink-0">
-        <PageHeader
-          title="Issue Review"
-          backHref="/"
-          actions={
-            <Button variant="secondary" onClick={() => void loadIssues()} disabled={isLoading}>
-              <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-              Refresh
-            </Button>
-          }
-        />
+        <PageHeader title="Issue Review" backHref="/" />
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto relative z-0">
@@ -92,9 +133,9 @@ function AdminIssuesContent() {
               <thead className="sticky top-0 bg-[var(--color-surface-1)] z-10 shadow-[0_1px_0_var(--color-border)]">
                 <tr className="border-b border-[var(--color-border)]">
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">When</th>
-                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">Description</th>
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">Kitchen</th>
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">Context</th>
+                  <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">Issue</th>
                   <th scope="col" className="py-3 px-4 text-left text-[var(--color-text-muted)] font-medium">Contact</th>
                 </tr>
               </thead>
@@ -113,14 +154,14 @@ function AdminIssuesContent() {
                       <td className="py-3 px-4 text-[var(--color-text-primary)] whitespace-nowrap">
                         {new Date(issue.created_at).toLocaleString()}
                       </td>
-                      <td className="py-3 px-4 text-[var(--color-text-primary)] whitespace-pre-wrap max-w-md">
-                        {issue.description}
-                      </td>
                       <td className="py-3 px-4 text-[var(--color-text-secondary)]">
                         {issue.restaurant_name ?? <span className="text-[var(--color-text-muted)]">—</span>}
                       </td>
                       <td className="py-3 px-4 text-[var(--color-text-secondary)] max-w-xs">
                         {issue.context ?? <span className="text-[var(--color-text-muted)]">—</span>}
+                      </td>
+                      <td className="py-3 px-4 text-[var(--color-text-primary)] whitespace-pre-wrap max-w-md">
+                        {issue.description}
                       </td>
                       <td className="py-3 px-4 text-[var(--color-text-secondary)]">
                         {issue.contact ?? <span className="text-[var(--color-text-muted)]">Anonymous</span>}

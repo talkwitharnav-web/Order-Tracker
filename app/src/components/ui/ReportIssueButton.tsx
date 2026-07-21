@@ -57,7 +57,7 @@ export const ReportIssueButton: FC<{ className?: string }> = ({ className }) => 
           contact: contact || undefined,
         }),
       });
-      showToast("Thanks -- your report was submitted.", "success");
+      showToast("Thanks! Your report was submitted.", "success");
       close();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to submit report", "error", err);
@@ -80,18 +80,6 @@ export const ReportIssueButton: FC<{ className?: string }> = ({ className }) => 
             share how to reach you unless you want us to follow up.
           </p>
           <div className="mb-4">
-            <Label htmlFor="issue-description">What happened?</Label>
-            <Textarea
-              id="issue-description"
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the issue or what you'd like to see..."
-              required
-              maxLength={2000}
-            />
-          </div>
-          <div className="mb-4">
             <Label htmlFor="issue-restaurant">Kitchen name (optional)</Label>
             <Input
               id="issue-restaurant"
@@ -111,6 +99,18 @@ export const ReportIssueButton: FC<{ className?: string }> = ({ className }) => 
               onChange={(e) => setContext(e.target.value)}
               placeholder="e.g. the kitchen dashboard, an employee's name, checking out an order..."
               maxLength={500}
+            />
+          </div>
+          <div className="mb-4">
+            <Label htmlFor="issue-description">What happened?</Label>
+            <Textarea
+              id="issue-description"
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the issue or what you'd like to see..."
+              required
+              maxLength={2000}
             />
           </div>
           <div className="mb-2">

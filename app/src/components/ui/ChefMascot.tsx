@@ -57,23 +57,44 @@ export const ChefMascot: FC<{
   // `lines` the caller passed in (e.g. Dashboard's "no orders yet" pool, the
   // login portal's sign-in lines). This is the one place every ChefMascot
   // caller funnels through, so overriding here means no individual call site
-  // needs its own Funny Chef branching logic.
+  // needs its own Funny Chef branching logic. ChefSprite/ChefSprite3D each
+  // pick their random `line` ONCE in a mount-only effect with `[]` deps, so
+  // simply passing a new `lines` array after the fact would NOT re-pick
+  // anything -- `mountKey` forces React to actually unmount+remount the
+  // sprite (via `key`) whenever the preference changes or gets corrected.
   //
-  // Read synchronously via a lazy useState initializer (matches
-  // MascotStyleToggle's own hydration-safe read of the pre-hydration
-  // script's data-funny-chef attribute) so the FIRST render already has the
-  // right value -- but then ALSO subscribed live via the change event below,
-  // because flipping the toggle should count as a fresh "mount" too: the
-  // toggle itself is the trigger for a new random line, not just a page
-  // load. ChefSprite/ChefSprite3D each pick their random `line` ONCE in a
-  // mount-only effect with `[]` deps, so simply passing a new `lines` array
-  // after the fact would NOT re-pick anything -- the `mountKey` below forces
-  // React to actually unmount+remount the sprite (via `key`) whenever the
-  // preference changes, the same trick ChefMascot already uses on itself for
-  // the 2D/3D swap (see PinPadContent-style `key` pattern elsewhere in this
-  // codebase).
-  const [funnyChef, setFunnyChefState] = useState(getFunnyChef);
+  // Start `false` so SSR (no `document`, getFunnyChef() always false there)
+  // and the FIRST client render agree -- matching the mascotStyle/`displayed`
+  // pattern immediately below. The lazy initializer this replaced
+  // (`useState(getFunnyChef)`) read the real `data-funny-chef` attribute
+  // synchronously on the client's very first render -- but that attribute is
+  // set by layout.tsx's pre-hydration <script>, which already runs BEFORE
+  // React hydrates. So a persisted "on" preference made the client's first
+  // render disagree with the server's "off" HTML immediately, correctly
+  // caught by React as a real hydration mismatch (confirmed live 2026-07-21:
+  // the diff showed a KITCHEN_JOKES line replacing the deterministic
+  // server-rendered default the moment Funny Chef was already on). The
+  // useLayoutEffect below now corrects to the real value before paint,
+  // exactly like the mascotStyle sync a few lines down.
+  const [funnyChef, setFunnyChefState] = useState(false);
   const [mountKey, setMountKey] = useState(0);
+  // Runs before paint on the client (see useIsomorphicLayoutEffect above) --
+  // also bumps mountKey here, not just setFunnyChefState, so ChefSprite/
+  // ChefSprite3D's own mount-only ([]) line-picking effect actually re-rolls
+  // against the CORRECTED pool. Without this, the sprite mounts once with
+  // funnyChef still false (this component's first-render value, kept false
+  // on purpose to match SSR), picks its line from the non-funny pool in its
+  // own mount effect, and this correction landing a moment later has nothing
+  // left to re-trigger -- confirmed live 2026-07-21: the attribute read back
+  // "on" correctly, but the bubble still showed a non-joke line after reload.
+  useIsomorphicLayoutEffect(() => {
+    const real = getFunnyChef();
+    if (real !== funnyChef) {
+      setFunnyChefState(real);
+      setMountKey((k) => k + 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     const onChange = () => {
       setFunnyChefState(getFunnyChef());
