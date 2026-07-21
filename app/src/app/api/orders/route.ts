@@ -50,8 +50,25 @@ export async function POST(request: Request) {
     // attacker, but no real kitchen creates orders faster than this
     // sustained (30/min = one every 2s). Admin isn't exempt: if an admin
     // is scripting order creation that fast, it's not a real order either.
+    //
+    // TWO independent checks, not one -- a single 30/min sliding-window
+    // check still lets a burst of 30 requests through in the first couple
+    // seconds before it starts blocking (a sliding window smooths the
+    // COOLDOWN once you're over the limit, it doesn't add burst protection
+    // on its own). Reported live 2026-07-21: rapid manual double/triple-
+    // tapping on a real order-entry form felt "too loose for a few seconds,
+    // then way too strict" -- exactly this shape. The short-window check
+    // below catches genuine rapid-fire spam (far faster than anyone can
+    // actually type a new order's fields) immediately, while the sustained
+    // 30/min check still exists underneath it for a real rush where several
+    // staff are each entering orders continuously over the full minute.
+    // Order matters only for which error logs first; both must pass.
+    if (!checkRateLimit(`orders-create-burst:${restaurant_name.toLowerCase()}`, { windowMs: 5_000, maxAttempts: 5 })) {
+      logger.warn("POST /api/orders - rate limited (burst)", { restaurant_name });
+      return errJson("RATE_LIMITED_ORDERS", 429);
+    }
     if (!checkRateLimit(`orders-create:${restaurant_name.toLowerCase()}`, { windowMs: 60_000, maxAttempts: 30 })) {
-      logger.warn("POST /api/orders - rate limited", { restaurant_name });
+      logger.warn("POST /api/orders - rate limited (sustained)", { restaurant_name });
       return errJson("RATE_LIMITED_ORDERS", 429);
     }
 
