@@ -7,6 +7,7 @@ import { requireString, requireSafeName, escapeLikePattern, parseJsonBody } from
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeOrderLookupKey } from "@/lib/order-naming";
 import { resolveOrderActionEmployee } from "@/lib/employee-auth";
+import { errJson } from "@/lib/error-response";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     await initDb();
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber, employeeId, pin, pinLength } =
       body as { restaurant_name?: unknown; order_number?: unknown; employeeId?: unknown; pin?: unknown; pinLength?: unknown };
@@ -35,10 +36,7 @@ export async function POST(request: Request) {
         restaurant_name: rawRestaurantName,
         order_number: rawOrderNumber,
       });
-      return NextResponse.json(
-        { error: "restaurant_name and order_number are required (letters, numbers, spaces, and basic punctuation only, max 200 chars)" },
-        { status: 400 },
-      );
+      return errJson("MISSING_ORDER_FIELDS", 400);
     }
 
     const auth = await requireRestaurantOrAdmin(restaurant_name);
@@ -51,10 +49,7 @@ export async function POST(request: Request) {
     // is scripting order creation that fast, it's not a real order either.
     if (!checkRateLimit(`orders-create:${restaurant_name.toLowerCase()}`, { windowMs: 60_000, maxAttempts: 30 })) {
       logger.warn("POST /api/orders - rate limited", { restaurant_name });
-      return NextResponse.json(
-        { error: "Too many orders created too quickly. Slow down a moment." },
-        { status: 429 },
-      );
+      return errJson("RATE_LIMITED_ORDERS", 429);
     }
 
     // Admin creating an order directly (e.g. via dev/seed-adjacent tooling)
@@ -121,10 +116,7 @@ export async function POST(request: Request) {
           restaurant_name,
           order_number,
         });
-        return NextResponse.json(
-          { error: `An order named "${order_number}" already exists for this restaurant` },
-          { status: 409 },
-        );
+        return errJson("ORDER_NAME_ALREADY_EXISTS", 409, `An order named "${order_number}" already exists for this restaurant`);
       }
       throw insertErr;
     } finally {
@@ -141,10 +133,7 @@ export async function POST(request: Request) {
     return NextResponse.json(order);
   } catch (err) {
     logger.error("POST /api/orders - error processing request", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }
 
@@ -155,7 +144,7 @@ export async function GET(request: Request) {
   // rate limit as that route and /api/restaurants/suggest, since this is
   // an equally valid way to enumerate order/restaurant names otherwise.
   if (!checkRateLimit(`orders-search:${getClientIp(request)}`, { windowMs: 60_000, maxAttempts: 120 })) {
-    return NextResponse.json({ error: "Too many requests. Slow down a moment." }, { status: 429 });
+    return errJson("RATE_LIMITED_GENERAL", 429);
   }
 
   try {
@@ -175,10 +164,7 @@ export async function GET(request: Request) {
         restaurant_name,
         order_number,
       });
-      return NextResponse.json(
-        { error: "restaurant_name and order_number are required" },
-        { status: 400 },
-      );
+      return errJson("MISSING_RESTAURANT_NAME_ORDER_NUMBER", 400);
     }
 
     // Narrow column list -- this is the anonymous public customer-tracker
@@ -198,16 +184,13 @@ export async function GET(request: Request) {
         restaurant_name,
         order_number,
       });
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      return errJson("ORDER_NOT_FOUND", 404);
     }
 
     logger.info("GET /api/orders - order found", { order });
     return NextResponse.json(order);
   } catch (err) {
     logger.error("GET /api/orders - error processing request", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

@@ -19,7 +19,7 @@ import { Select } from "@/components/ui/Select";
 import { StatusDurationCell, StatusDurationCompleteCell } from "@/components/ui/StatusDurationCell";
 import { BackgroundArt } from "@/components/ui/BackgroundArt";
 import { StrengthMeter } from "@/components/ui/StrengthMeter";
-import { fetchJson, fetchWithRetry } from "@/lib/api-client";
+import { fetchJson, fetchWithRetry, ApiError } from "@/lib/api-client";
 import { scorePasswordStrength } from "@/lib/credential-strength";
 import { useWindowedOrders, PREFETCH_ROWS, type Order, type Restaurant, type OrderSortKey, type SortDirection } from "@/lib/useWindowedOrders";
 
@@ -295,12 +295,12 @@ function AdminDbContent() {
       const res = await action();
       const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(resJson.error || `Action failed with status: ${res.status}`);
+        throw new ApiError(res.status, resJson.error || `Action failed with status: ${res.status}`, resJson.code);
       }
       showToast(successMessage, "success");
       void reload();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
+      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error", err);
     }
   };
 
@@ -422,13 +422,13 @@ function AdminDbContent() {
         body: JSON.stringify({ newPassword }),
       });
       const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(resJson.error || `Action failed with status: ${res.status}`);
+      if (!res.ok) throw new ApiError(res.status, resJson.error || `Action failed with status: ${res.status}`, resJson.code);
       showToast("Password updated successfully!", "success");
       setNewPassword("");
       setPasswordResetTarget(null);
       void reload();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
+      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error", err);
     }
   };
 
@@ -441,7 +441,7 @@ function AdminDbContent() {
         body: JSON.stringify({ newName }),
       });
       const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(resJson.error || `Action failed with status: ${res.status}`);
+      if (!res.ok) throw new ApiError(res.status, resJson.error || `Action failed with status: ${res.status}`, resJson.code);
       // Any currently logged-in kitchen session for this restaurant will
       // stop matching after a rename (its session cookie still has the old
       // name -- see the rename route's own comment) -- surface that here
@@ -454,7 +454,7 @@ function AdminDbContent() {
       setRenameTarget(null);
       void reload();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error");
+      showToast(err instanceof Error ? err.message : "An unknown error occurred", "error", err);
     }
   };
 

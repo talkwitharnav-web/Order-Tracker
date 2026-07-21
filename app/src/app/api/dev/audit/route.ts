@@ -3,6 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 
 /**
  * Read-only view over order_status_events -- the append-only "who did what,
@@ -51,10 +52,7 @@ export async function GET(request: Request) {
     const employeeName = searchParams.get("employeeName")?.trim() || null;
 
     if (employeeName && !restaurantName) {
-      return NextResponse.json(
-        { error: "employeeName filter requires restaurantName (employee names are only unique per kitchen)" },
-        { status: 400 },
-      );
+      return errJson("AUDIT_FILTER_NEEDS_RESTAURANT", 400);
     }
 
     const conditions: string[] = [];
@@ -98,7 +96,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ events, restaurantNames });
   } catch (err) {
     logger.error("GET /api/dev/audit - error processing request", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }
 
@@ -122,7 +120,7 @@ export async function DELETE(request: Request) {
       ? (body as { confirmation?: unknown }).confirmation
       : undefined;
     if (confirmation !== "PURGE AUDIT") {
-      return NextResponse.json({ error: "Type PURGE AUDIT to confirm" }, { status: 400 });
+      return errJson("CONFIRMATION_PHRASE_MISMATCH", 400, "Type PURGE AUDIT to confirm");
     }
 
     await initDb();
@@ -134,6 +132,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ message: "Audit log purged successfully" });
   } catch (err) {
     logger.error("DELETE /api/dev/audit - error processing request", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
+import { errJson } from "@/lib/error-response";
 
 function parseOrderId(id: string): number | null {
   if (!/^\d+$/.test(id)) return null;
@@ -21,7 +22,7 @@ export async function POST(
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return errJson("INVALID_ORDER_ID", 400);
   }
 
   try {
@@ -38,7 +39,7 @@ export async function POST(
     );
     const row = existing.rows[0];
     if (!row) {
-      return NextResponse.json({ error: "Deleted order not found" }, { status: 404 });
+      return errJson("DELETED_ORDER_NOT_FOUND", 404);
     }
 
     const clash = await query(
@@ -46,10 +47,7 @@ export async function POST(
       [row.restaurant_name, row.order_lookup_key],
     );
     if (clash.rows.length > 0) {
-      return NextResponse.json(
-        { error: `Cannot restore -- an order named "${row.order_number}" already exists for this restaurant` },
-        { status: 409 },
-      );
+      return errJson("ORDER_NAME_TAKEN_UNDELETE", 409, `Cannot restore -- an order named "${row.order_number}" already exists for this restaurant`);
     }
 
     const result = await query(
@@ -57,13 +55,13 @@ export async function POST(
       [orderId],
     );
     if (result.rowCount === 0) {
-      return NextResponse.json({ error: "Deleted order not found" }, { status: 404 });
+      return errJson("DELETED_ORDER_NOT_FOUND", 404);
     }
 
     logger.info(`POST /api/orders/${orderId}/undelete - order restored successfully`);
     return NextResponse.json({ message: "Order restored successfully" });
   } catch (err) {
     logger.error(`POST /api/orders/${id}/undelete - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

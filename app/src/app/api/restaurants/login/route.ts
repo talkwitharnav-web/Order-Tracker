@@ -11,6 +11,7 @@ import {
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requireString, escapeLikePattern, parseJsonBody } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 
 // Fixed dummy hash so a not-found lookup still pays bcrypt's cost (see
 // SECURITY_ATTACK_LOG.md F4 — without this, "restaurant not found" returned
@@ -24,13 +25,13 @@ export async function POST(req: Request) {
   logger.info("POST /api/restaurants/login - request received");
 
   if (!checkRateLimit(`restaurant-login:${getClientIp(req)}`)) {
-    return NextResponse.json({ error: "Too many login attempts. Try again in a minute." }, { status: 429 });
+    return errJson("RATE_LIMITED_LOGIN", 429);
   }
 
   try {
     const body = await parseJsonBody(req);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { name: rawName, password: rawPassword, rememberMe } =
       body as { name?: unknown; password?: unknown; rememberMe?: unknown };
@@ -39,10 +40,7 @@ export async function POST(req: Request) {
     const password = typeof rawPassword === "string" ? rawPassword : null;
 
     if (!name || !password) {
-      return NextResponse.json(
-        { error: "Restaurant name and password are required" },
-        { status: 400 },
-      );
+      return errJson("MISSING_LOGIN_FIELDS", 400);
     }
 
     const result = await query(
@@ -59,10 +57,7 @@ export async function POST(req: Request) {
     );
 
     if (!restaurant || !isPasswordValid) {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 },
-      );
+      return errJson("INVALID_CREDENTIALS", 401);
     }
 
     logger.info(
@@ -81,9 +76,6 @@ export async function POST(req: Request) {
     return response;
   } catch (err) {
     logger.error("POST /api/restaurants/login - error processing request", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

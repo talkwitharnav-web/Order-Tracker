@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAnyAuthenticated, isAdminRequest } from "@/lib/auth";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { errJson } from "@/lib/error-response";
 
 export type HealthTier = "healthy" | "ok" | "bad" | "terrible";
 
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
 
   const ip = getClientIp(request);
   if (!checkRateLimit(`health:${ip}`, { windowMs: RATE_LIMIT_WINDOW_MS, maxAttempts: RATE_LIMIT_MAX_REQUESTS })) {
-    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    return errJson("RATE_LIMITED_HEALTH", 429);
   }
 
   const isAdmin = await isAdminRequest();

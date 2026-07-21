@@ -9,6 +9,7 @@ import { FunnyChefToggle } from "@/components/ui/FunnyChefToggle";
 import { ThemedTooltip } from "@/components/ui/ThemedTooltip";
 import { FullscreenToggle } from "@/components/ui/FullscreenToggle";
 import { KitchenClock } from "@/components/ui/KitchenClock";
+import { HelpLink } from "@/components/ui/HelpLink";
 import { useReservedTopRight } from "@/lib/useReservedTopRight";
 import { useHasMascot } from "@/lib/mascot-style";
 
@@ -86,6 +87,9 @@ export const SettingsToggles: FC<{
     )}
     <ThemedTooltip label="Fullscreen" align="right" className="sm:hidden">
       <FullscreenToggle />
+    </ThemedTooltip>
+    <ThemedTooltip label="Help page" align="right">
+      <HelpLink />
     </ThemedTooltip>
     <ThemedTooltip label="Toggle theme" align="right">
       <ThemeToggle />

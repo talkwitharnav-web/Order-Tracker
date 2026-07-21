@@ -3,6 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { escapeLikePattern } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 
 // This route had no LIMIT at all -- fine for a normal kitchen's realistic
 // active-order count (dozens, not thousands), since it only ever returns
@@ -74,9 +75,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
       `GET /api/orders/restaurant/${restaurantName} - error processing request`,
       err,
     );
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

@@ -12,6 +12,7 @@ import {
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 import { broadcastRestaurantCreated } from "@/lib/ws-hub";
+import { errJson } from "@/lib/error-response";
 
 const SALT_ROUNDS = 10;
 const MIN_PASSWORD_LENGTH = 8;
@@ -29,14 +30,14 @@ export async function POST(req: Request) {
   // via the public suggest endpoint) is throttled harder than credential
   // guessing.
   if (!checkRateLimit(`register:${getClientIp(req)}`, { windowMs: 60_000, maxAttempts: 5 })) {
-    return NextResponse.json({ error: "Too many registration attempts. Try again in a minute." }, { status: 429 });
+    return errJson("RATE_LIMITED_REGISTER", 429);
   }
 
   try {
     await initDb();
     const body = await parseJsonBody(req);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { name: rawName, password: rawPassword, rememberMe } =
       body as { name?: unknown; password?: unknown; rememberMe?: unknown };
@@ -59,16 +60,10 @@ export async function POST(req: Request) {
         : null;
 
     if (!name) {
-      return NextResponse.json(
-        { error: "Restaurant name is required (letters, numbers, spaces, and basic punctuation only, max 200 chars)" },
-        { status: 400 },
-      );
+      return errJson("INVALID_ORDER_NAME_REGISTER", 400);
     }
     if (!password) {
-      return NextResponse.json(
-        { error: `Password must be ${MIN_PASSWORD_LENGTH}-200 characters` },
-        { status: 400 },
-      );
+      return errJson("INVALID_PASSWORD_LENGTH", 400, `Password must be ${MIN_PASSWORD_LENGTH}-200 characters`);
     }
 
     // Check if restaurant already exists (case-insensitive, matches how
@@ -78,10 +73,7 @@ export async function POST(req: Request) {
       [escapeLikePattern(name)],
     );
     if (existing.rows[0]) {
-      return NextResponse.json(
-        { error: "Restaurant with this name already exists" },
-        { status: 409 },
-      );
+      return errJson("RESTAURANT_NAME_ALREADY_EXISTS", 409);
     }
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -130,9 +122,6 @@ export async function POST(req: Request) {
       "POST /api/restaurants/register - error processing request",
       err,
     );
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

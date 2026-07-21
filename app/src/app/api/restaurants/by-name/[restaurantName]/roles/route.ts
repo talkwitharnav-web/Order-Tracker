@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { errJson } from "@/lib/error-response";
 
 /**
  * Kitchen-defined role labels ("Chef", "Cashier", "Dishwasher", ...) --
@@ -31,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
   await initDb();
   const restaurantId = await getRestaurantId(restaurantName);
   if (restaurantId === null) {
-    return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+    return errJson("RESTAURANT_NOT_FOUND", 404);
   }
 
   const result = await query<RoleRow>(
@@ -49,24 +50,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
   if (!auth.ok) return auth.response;
 
   if (!checkRateLimit(`role-create:${restaurantName}:${getClientIp(request)}`, { windowMs: 60_000, maxAttempts: 20 })) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
+    return errJson("RATE_LIMITED_STAFF", 429);
   }
 
   await initDb();
   const restaurantId = await getRestaurantId(restaurantName);
   if (restaurantId === null) {
-    return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+    return errJson("RESTAURANT_NOT_FOUND", 404);
   }
 
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { name: rawName } = body as { name?: unknown };
     const name = requireString(rawName, 50);
     if (!name) {
-      return NextResponse.json({ error: "Role name is required" }, { status: 400 });
+      return errJson("ROLE_NAME_REQUIRED", 400);
     }
 
     try {
@@ -82,12 +83,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
         "code" in insertErr &&
         (insertErr as { code?: string }).code === "23505"
       ) {
-        return NextResponse.json({ error: "A role with this name already exists" }, { status: 409 });
+        return errJson("ROLE_NAME_ALREADY_EXISTS", 409);
       }
       throw insertErr;
     }
   } catch (err) {
     logger.error(`POST /api/restaurants/by-name/${restaurantName}/roles - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

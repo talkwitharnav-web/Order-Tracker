@@ -16,6 +16,15 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /**
+     * Numeric error code from lib/error-codes.ts, when the server response
+     * included one (see errJson() -- every API error response does now).
+     * Undefined for a response that predates that convention or came from
+     * something other than errJson (shouldn't happen, but this stays
+     * optional rather than assumed so a missing code fails soft -- Toast.tsx
+     * just doesn't render the code chip -- instead of throwing.
+     */
+    public readonly code?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -93,8 +102,8 @@ export async function fetchJson<T = unknown>(
   }
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}) as { error?: string });
-    throw new ApiError(response.status, body.error || `Request failed (status ${response.status})`);
+    const body = await response.json().catch(() => ({}) as { error?: string; code?: number });
+    throw new ApiError(response.status, body.error || `Request failed (status ${response.status})`, body.code);
   }
 
   return response.json();

@@ -3,6 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody, escapeLikePattern } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 
 type RestaurantRow = { id: number; name: string; password: string; raw_password: string | null; deleted_at: string | null };
 
@@ -174,10 +175,7 @@ export async function GET(request: Request) {
     });
   } catch (err) {
     logger.error("GET /api/dev/db - error processing request", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }
 
@@ -193,7 +191,7 @@ export async function DELETE(request: Request) {
       ? (body as { confirmation?: unknown }).confirmation
       : undefined;
     if (confirmation !== "PURGE DATABASE") {
-      return NextResponse.json({ error: "Type PURGE DATABASE to confirm" }, { status: 400 });
+      return errJson("CONFIRMATION_PHRASE_MISMATCH", 400, "Type PURGE DATABASE to confirm");
     }
 
     await initDb();
@@ -209,9 +207,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ message: "Database purged successfully" });
   } catch (err) {
     logger.error("DELETE /api/dev/db - error processing request", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

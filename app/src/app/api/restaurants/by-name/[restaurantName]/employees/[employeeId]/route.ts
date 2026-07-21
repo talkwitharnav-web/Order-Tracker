@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { requiredPinLength, pinCollidesWithAnotherEmployee } from "@/lib/employee-auth";
+import { errJson } from "@/lib/error-response";
 
 const SALT_ROUNDS = 10;
 
@@ -30,7 +31,7 @@ export async function DELETE(
   const { restaurantName, employeeId: rawId } = await params;
   const employeeId = parseEmployeeId(rawId);
   if (employeeId === null) {
-    return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
+    return errJson("INVALID_EMPLOYEE_ID", 400);
   }
 
   const auth = await requireRestaurantOrAdmin(restaurantName);
@@ -49,7 +50,7 @@ export async function DELETE(
   );
 
   if (result.rowCount === 0) {
-    return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+    return errJson("EMPLOYEE_NOT_FOUND", 404);
   }
 
   logger.info(`DELETE /api/restaurants/by-name/${restaurantName}/employees/${employeeId} - deactivated`);
@@ -70,7 +71,7 @@ export async function PUT(
   const { restaurantName, employeeId: rawId } = await params;
   const employeeId = parseEmployeeId(rawId);
   if (employeeId === null) {
-    return NextResponse.json({ error: "Invalid employee id" }, { status: 400 });
+    return errJson("INVALID_EMPLOYEE_ID", 400);
   }
 
   const auth = await requireRestaurantOrAdmin(restaurantName);
@@ -79,13 +80,13 @@ export async function PUT(
   await initDb();
   const restaurantId = await getRestaurantId(restaurantName);
   if (restaurantId === null) {
-    return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+    return errJson("RESTAURANT_NOT_FOUND", 404);
   }
 
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { name: rawName, accountType: rawAccountType, roleId: rawRoleId, pin: rawPin } = body as {
       name?: unknown;
@@ -108,7 +109,7 @@ export async function PUT(
       [employeeId, restaurantName],
     );
     if (current.rows.length === 0) {
-      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+      return errJson("EMPLOYEE_NOT_FOUND", 404);
     }
 
     // Whitelisted column -> parameterized value. Every branch below either
@@ -119,7 +120,7 @@ export async function PUT(
 
     if (rawName !== undefined) {
       const name = requireString(rawName, 100);
-      if (!name) return NextResponse.json({ error: "Employee name cannot be empty" }, { status: 400 });
+      if (!name) return errJson("EMPLOYEE_NAME_EMPTY", 400);
       values.push(name);
       setClauses.push(`name = $${values.length}`);
     }
@@ -129,7 +130,7 @@ export async function PUT(
 
     if (rawAccountType !== undefined) {
       if (rawAccountType !== "manager" && rawAccountType !== "employee") {
-        return NextResponse.json({ error: "accountType must be 'manager' or 'employee'" }, { status: 400 });
+        return errJson("INVALID_ACCOUNT_TYPE", 400);
       }
       values.push(rawAccountType);
       setClauses.push(`account_type = $${values.length}`);
@@ -140,10 +141,10 @@ export async function PUT(
         setClauses.push(`role_id = NULL`);
       } else {
         const roleId = typeof rawRoleId === "number" && Number.isSafeInteger(rawRoleId) ? rawRoleId : null;
-        if (roleId === null) return NextResponse.json({ error: "Invalid roleId" }, { status: 400 });
+        if (roleId === null) return errJson("INVALID_ROLE_ID", 400);
         const roleCheck = await query("SELECT 1 FROM restaurant_roles WHERE id = $1 AND restaurant_id = $2", [roleId, restaurantId]);
         if (roleCheck.rows.length === 0) {
-          return NextResponse.json({ error: "Role not found for this kitchen" }, { status: 404 });
+          return errJson("ROLE_NOT_FOUND_FOR_KITCHEN", 404);
         }
         values.push(roleId);
         setClauses.push(`role_id = $${values.length}`);
@@ -157,14 +158,11 @@ export async function PUT(
 
     if (rawPin !== undefined) {
       const pin = typeof rawPin === "string" && new RegExp(`^\\d{${effectivePinLength}}$`).test(rawPin) ? rawPin : null;
-      if (!pin) return NextResponse.json({ error: `PIN must be exactly ${effectivePinLength} digits` }, { status: 400 });
+      if (!pin) return errJson("INVALID_PIN_LENGTH", 400, `PIN must be exactly ${effectivePinLength} digits`);
       // Same collision guard as employee creation -- PIN-only lookup stays
       // unambiguous only if no two active employees share a same-length PIN.
       if (await pinCollidesWithAnotherEmployee(restaurantName, pin, effectivePinLength, employeeId)) {
-        return NextResponse.json(
-          { error: "That PIN is already in use by another employee. Choose a different one." },
-          { status: 409 },
-        );
+        return errJson("PIN_ALREADY_IN_USE", 409);
       }
       const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
       values.push(pinHash);
@@ -176,14 +174,11 @@ export async function PUT(
       // rather than silently leaving a manager account with a stale
       // 4-digit PIN, which is exactly the gap that let a 4-digit PIN
       // unlock the Staff tab.
-      return NextResponse.json(
-        { error: "Promoting to manager requires setting a new 6-digit PIN in the same request" },
-        { status: 400 },
-      );
+      return errJson("ACCOUNT_TYPE_REQUIRES_NEW_PIN", 400);
     }
 
     if (setClauses.length === 0) {
-      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+      return errJson("NO_FIELDS_TO_UPDATE", 400);
     }
 
     values.push(employeeId, restaurantName);
@@ -195,7 +190,7 @@ export async function PUT(
     );
 
     if (result.rowCount === 0) {
-      return NextResponse.json({ error: "Employee not found" }, { status: 404 });
+      return errJson("EMPLOYEE_NOT_FOUND", 404);
     }
 
     logger.info(`PUT /api/restaurants/by-name/${restaurantName}/employees/${employeeId} - updated`, {
@@ -208,9 +203,9 @@ export async function PUT(
       "code" in err &&
       (err as { code?: string }).code === "23505"
     ) {
-      return NextResponse.json({ error: "An employee with this name already exists" }, { status: 409 });
+      return errJson("EMPLOYEE_NAME_ALREADY_EXISTS", 409);
     }
     logger.error(`PUT /api/restaurants/by-name/${restaurantName}/employees/${employeeId} - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

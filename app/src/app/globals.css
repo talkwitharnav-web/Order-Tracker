@@ -1592,6 +1592,28 @@ summary {
   -webkit-backdrop-filter: blur(4px);
 }
 
+/*
+ * Toast.tsx's clickable error-code chip ("#123") -- a soft white glow on
+ * hover/focus signals "this is interactive and different from the rest of
+ * the message," matching the app's convention of pairing color with a
+ * non-color cue (this chip already has its own pill background + monospace
+ * font + "#" prefix, so the glow is a hover affordance on top of an already
+ * non-color-dependent signal, not the ONLY way to tell it's clickable --
+ * consistent with StatusBadge's "never color alone" rule elsewhere in this
+ * app). White-based (not --color-brand) because this chip always sits on
+ * top of a toast's own solid color fill (--color-danger/--color-warning),
+ * not the page background, so it needs to read against THOSE colors in
+ * every theme rather than against --color-surface-*.
+ */
+.error-code-chip {
+  transition: box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.error-code-chip:hover,
+.error-code-chip:focus-visible {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 8px 2px rgba(255, 255, 255, 0.5);
+  outline: none;
+}
+
 /* --- Text Selection Color (Phase 7, item 18) --- */
 ::selection {
   background: rgba(193, 96, 47, 0.2);

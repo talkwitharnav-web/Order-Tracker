@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { errJson } from "@/lib/error-response";
 
 /**
  * Verifies a PIN and returns whose it is, for attribution -- deliberately
@@ -50,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
   // affect another's, and per-IP within that so it can't be used to lock out
   // a legitimate shared terminal by itself.
   if (!checkRateLimit(`employee-pin:${restaurantName}:${getClientIp(request)}`, { windowMs: 60_000, maxAttempts: 15 })) {
-    return NextResponse.json({ error: "Too many PIN attempts. Try again in a minute." }, { status: 429 });
+    return errJson("RATE_LIMITED_PIN", 429);
   }
 
   await initDb();
@@ -58,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { pin: rawPin, pinLength: rawPinLength } = body as { pin?: unknown; pinLength?: unknown };
 
@@ -66,7 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     const pinLength: 4 | 6 = rawPinLength === 6 ? 6 : 4;
 
     if (!pin) {
-      return NextResponse.json({ error: "pin is required" }, { status: 400 });
+      return errJson("PIN_REQUIRED", 400);
     }
 
     // Scoped by restaurant NAME and pinLength -- an authenticated kitchen
@@ -92,7 +93,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
 
     if (!employee) {
       logger.warn(`POST /api/restaurants/by-name/${restaurantName}/employees/verify-pin - invalid PIN attempt`);
-      return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
+      return errJson("INVALID_PIN", 401);
     }
 
     return NextResponse.json({
@@ -100,6 +101,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     });
   } catch (err) {
     logger.error(`POST /api/restaurants/by-name/${restaurantName}/employees/verify-pin - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

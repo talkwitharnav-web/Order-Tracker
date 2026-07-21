@@ -11,6 +11,8 @@ import {
   useState,
 } from "react";
 import { CheckCircle2, XCircle, TriangleAlert, X } from "lucide-react";
+import { ApiError } from "@/lib/api-client";
+import { ErrorCodeCard } from "@/components/ui/ErrorCodeCard";
 
 type ToastType = "success" | "error" | "warning";
 interface ToastItem {
@@ -18,6 +20,8 @@ interface ToastItem {
   message: string;
   type: ToastType;
   createdAt: number;
+  /** Numeric error code from lib/error-codes.ts, when the triggering error was an ApiError carrying one. */
+  code?: number;
   durationMs: number;
   action?: {
     label: string;
@@ -32,10 +36,23 @@ type ShowActionToast = (
   action: { label: string; onClick: () => void | Promise<void>; durationMs: number },
 ) => void;
 
+/**
+ * `error` is the raw value from a catch block -- callers already have this
+ * on hand (`catch (err) { showToast(err instanceof Error ? err.message :
+ * "...", "error", err) }`), so passing it through costs one extra argument
+ * at each of the ~28 existing call sites rather than requiring them to
+ * extract a code themselves. Only meaningful when it's an ApiError (see
+ * lib/api-client.ts) carrying a `code` from the shared registry; anything
+ * else (a plain Error, a caught non-Error, or simply omitted) just means no
+ * code chip renders -- this must never throw or change toast behavior
+ * itself, since callers are already inside a catch block.
+ */
+type ShowToast = (message: string, type: ToastType, error?: unknown) => void;
+
 const AUTO_DISMISS_MS = 4000;
 const REMOVE_ANIMATION_MS = 250;
 
-const ToastContext = createContext<((message: string, type: ToastType) => void) | null>(null);
+const ToastContext = createContext<ShowToast | null>(null);
 const ToastActionContext = createContext<ShowActionToast | null>(null);
 
 let nextId = 1;
@@ -44,11 +61,13 @@ const ToastCard: FC<{
   item: ToastItem;
   onDismiss: () => void;
   onAction: () => void;
+  onOpenCode: () => void;
   style?: React.CSSProperties;
 }> = ({
   item,
   onDismiss,
   onAction,
+  onOpenCode,
   style,
 }) => (
   <div
@@ -68,7 +87,26 @@ const ToastCard: FC<{
     ) : (
       <XCircle className="w-5 h-5 shrink-0" />
     )}
-    <span className="flex-1 text-sm">{item.message}</span>
+    <span className="flex-1 text-sm">
+      {item.message}
+      {item.code !== undefined && !item.removing && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenCode();
+            }}
+            className="error-code-chip inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-white/15 hover:bg-white/25 font-mono font-bold text-xs align-middle transition-colors"
+            aria-label={`Error code ${item.code}. Click for details.`}
+            title={`Error ${item.code} — click for details`}
+          >
+            #{item.code}
+          </button>
+        </>
+      )}
+    </span>
     {item.action && !item.removing && (
       <button
         type="button"
@@ -97,6 +135,11 @@ const ToastCard: FC<{
 export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<ToastItem[]>([]);
   const [expanded, setExpanded] = useState(false);
+  // Which toast's error-code card is currently open -- a code (not a
+  // boolean) so the card survives its OWN toast auto-dismissing/being
+  // removed from `items` while still open (the user is actively reading it,
+  // shouldn't vanish just because the originating toast's 4s timer elapsed).
+  const [openCode, setOpenCode] = useState<number | null>(null);
   const timeoutsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   const removeImmediately = useCallback((id: number) => {
@@ -120,10 +163,11 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
     [removeImmediately],
   );
 
-  const showToast = useCallback(
-    (message: string, type: ToastType) => {
+  const showToast = useCallback<ShowToast>(
+    (message, type, error) => {
       const id = nextId++;
-      setItems((prev) => [...prev, { id, message, type, createdAt: Date.now(), durationMs: AUTO_DISMISS_MS }]);
+      const code = error instanceof ApiError ? error.code : undefined;
+      setItems((prev) => [...prev, { id, message, type, code, createdAt: Date.now(), durationMs: AUTO_DISMISS_MS }]);
       // Only auto-dismiss while collapsed — if the user has the group open,
       // don't yank things away while they're reading (matches macOS).
       if (!expanded) startAutoDismiss(id, AUTO_DISMISS_MS);
@@ -226,6 +270,7 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
                   item={item}
                   onDismiss={() => dismissOne(item.id)}
                   onAction={() => runAction(item)}
+                  onOpenCode={() => item.code !== undefined && setOpenCode(item.code)}
                 />
               ))}
               {activeCount > 1 && (
@@ -259,6 +304,7 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
                     // Collapsed stack: "x" clears the whole group, not just this one.
                     onDismiss={dismissAll}
                     onAction={() => runAction(item)}
+                    onOpenCode={() => item.code !== undefined && setOpenCode(item.code)}
                     style={{
                       position: "absolute",
                       top: depth * 8,
@@ -279,6 +325,7 @@ export const ToastProvider: FC<{ children: ReactNode }> = ({ children }) => {
           )}
         </div>
         )}
+        <ErrorCodeCard code={openCode} onClose={() => setOpenCode(null)} />
       </ToastActionContext.Provider>
     </ToastContext.Provider>
   );

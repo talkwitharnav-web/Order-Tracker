@@ -3,6 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 
 const MIN_HOURS = 0.1; // 6 minutes -- a real floor, not effectively "off"
 const MAX_HOURS = 168; // 1 week -- generous upper bound, still finite
@@ -32,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
     [restaurantName],
   );
   if (result.rows.length === 0) {
-    return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+    return errJson("RESTAURANT_NOT_FOUND", 404);
   }
 
   return NextResponse.json({ completeCapHours: result.rows[0].complete_cap_hours });
@@ -50,15 +51,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ rest
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { completeCapHours: rawHours } = body as { completeCapHours?: unknown };
 
     if (typeof rawHours !== "number" || !Number.isFinite(rawHours) || rawHours < MIN_HOURS || rawHours > MAX_HOURS) {
-      return NextResponse.json(
-        { error: `completeCapHours must be a number between ${MIN_HOURS} and ${MAX_HOURS}` },
-        { status: 400 },
-      );
+      return errJson("INVALID_PICKUP_WINDOW", 400, `completeCapHours must be a number between ${MIN_HOURS} and ${MAX_HOURS}`);
     }
 
     const result = await query(
@@ -66,13 +64,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ rest
       [rawHours, restaurantName],
     );
     if (result.rowCount === 0) {
-      return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+      return errJson("RESTAURANT_NOT_FOUND", 404);
     }
 
     logger.info(`PUT /api/restaurants/by-name/${restaurantName}/settings - complete_cap_hours set to ${rawHours}`);
     return NextResponse.json({ message: "Settings updated", completeCapHours: rawHours });
   } catch (err) {
     logger.error(`PUT /api/restaurants/by-name/${restaurantName}/settings - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

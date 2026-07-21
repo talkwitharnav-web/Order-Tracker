@@ -6,6 +6,7 @@ import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { resolveOrderActionEmployee } from "@/lib/employee-auth";
+import { errJson } from "@/lib/error-response";
 
 // Forward-only lifecycle (see SYSTEM_MEMORY.md §2 status-vocab quirk — this
 // is the API-vocabulary set, unrelated to the customer-facing display
@@ -72,14 +73,14 @@ export async function PUT(
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return errJson("INVALID_ORDER_ID", 400);
   }
 
   try {
     await initDb();
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { status, undoToken, employeeId, pin, pinLength } = body as {
       status?: unknown;
@@ -99,11 +100,11 @@ export async function PUT(
 
     if (!canonicalStatus) {
       logger.warn(`PUT /api/orders/${orderId} - validation error: Invalid status "${status}"`);
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      return errJson("INVALID_STATUS", 400);
     }
 
     if (undoToken !== undefined && (typeof undoToken !== "string" || !/^[0-9a-f-]{36}$/i.test(undoToken))) {
-      return NextResponse.json({ error: "Invalid undo token" }, { status: 400 });
+      return errJson("INVALID_UNDO_TOKEN", 400);
     }
 
     const existing = await query<UpdatedOrder>(
@@ -114,7 +115,7 @@ export async function PUT(
       [orderId],
     );
     if (existing.rows.length === 0) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      return errJson("ORDER_NOT_FOUND", 404);
     }
 
     const auth = await requireRestaurantOrAdmin(existing.rows[0].restaurant_name);
@@ -148,7 +149,7 @@ export async function PUT(
     if (typeof undoToken === "string") {
       const previousStatus = PREVIOUS_STATUS[currentStatus];
       if (!previousStatus || previousStatus.toLowerCase() !== nextStatus) {
-        return NextResponse.json({ error: "This status change cannot be undone" }, { status: 409 });
+        return errJson("UNDO_NOT_ALLOWED", 409);
       }
 
       // Undo removes only the timestamp created by the mistaken step. Earlier
@@ -175,10 +176,7 @@ export async function PUT(
       );
 
       if (undoResult.rows.length === 0) {
-        return NextResponse.json(
-          { error: "Undo expired or the order changed in another tab" },
-          { status: 409 },
-        );
+        return errJson("UNDO_EXPIRED_OR_STALE", 409);
       }
 
       const undoneOrder = undoResult.rows[0];
@@ -195,10 +193,7 @@ export async function PUT(
       logger.warn(
         `PUT /api/orders/${orderId} - rejected out-of-order transition "${currentOrder.status}" -> "${canonicalStatus}"`,
       );
-      return NextResponse.json(
-        { error: `Cannot change status from "${currentOrder.status}" to "${canonicalStatus}"` },
-        { status: 409 },
-      );
+      return errJson("INVALID_STATUS_TRANSITION", 409, `Cannot change status from "${currentOrder.status}" to "${canonicalStatus}"`);
     }
 
     if (currentStatus === nextStatus) {
@@ -240,10 +235,7 @@ export async function PUT(
 
       if (result.rows.length === 0) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Order changed in another tab. Refreshing the latest status." },
-          { status: 409 },
-        );
+        return errJson("ORDER_CHANGED_ELSEWHERE", 409);
       }
 
       await client.query(
@@ -290,10 +282,7 @@ export async function PUT(
     });
   } catch (err) {
     logger.error(`PUT /api/orders/${id} - error processing request`, err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }
 
@@ -306,7 +295,7 @@ export async function DELETE(
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return errJson("INVALID_ORDER_ID", 400);
   }
 
   try {
@@ -324,7 +313,7 @@ export async function DELETE(
       [orderId],
     );
     if (existing.rows.length === 0) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      return errJson("ORDER_NOT_FOUND", 404);
     }
 
     const auth = await requireRestaurantOrAdmin(existing.rows[0].restaurant_name);
@@ -395,7 +384,7 @@ export async function DELETE(
       if (result.rowCount === 0) {
         await client.query("ROLLBACK");
         logger.warn(`DELETE /api/orders/${orderId} - order not found`);
-        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+        return errJson("ORDER_NOT_FOUND", 404);
       }
 
       await client.query("COMMIT");
@@ -416,9 +405,6 @@ export async function DELETE(
     return NextResponse.json({ message: "Order deleted successfully" });
   } catch (err) {
     logger.error(`DELETE /api/orders/${id} - error processing request`, err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

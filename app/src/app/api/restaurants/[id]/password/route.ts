@@ -3,6 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
@@ -15,14 +16,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!auth.ok) return auth.response;
 
   if (!/^\d+$/.test(id)) {
-    return NextResponse.json({ error: "Invalid restaurant id" }, { status: 400 });
+    return errJson("INVALID_RESTAURANT_ID", 400);
   }
 
   try {
     await initDb();
     const body = await parseJsonBody(req);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { newPassword: rawNewPassword } = body as { newPassword?: unknown };
     // Null-byte check: this value is inserted raw into raw_password (a
@@ -37,10 +38,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         : null;
 
     if (!newPassword) {
-      return NextResponse.json(
-        { error: "New password is required (non-empty string, max 200 chars)" },
-        { status: 400 },
-      );
+      return errJson("MISSING_NEW_PASSWORD", 400);
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
@@ -51,10 +49,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     );
 
     if (result.rowCount === 0) {
-        return NextResponse.json(
-            { error: "Restaurant not found" },
-            { status: 404 },
-        );
+        return errJson("RESTAURANT_NOT_FOUND", 404);
     }
 
     logger.info(
@@ -69,9 +64,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       `PUT /api/restaurants/${id}/password - error processing request`,
       err,
     );
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

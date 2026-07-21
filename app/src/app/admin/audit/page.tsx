@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { HealthPin } from "@/components/ui/HealthPin";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
-import { fetchJson, fetchWithRetry } from "@/lib/api-client";
+import { fetchJson, fetchWithRetry, ApiError } from "@/lib/api-client";
 
 /**
  * History of every order status transition across every kitchen -- "who
@@ -79,7 +79,7 @@ function AdminAuditContent() {
         setEvents(data.events);
         setRestaurantNames(data.restaurantNames);
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "Failed to load audit log", "error");
+        showToast(err instanceof Error ? err.message : "Failed to load audit log", "error", err);
       } finally {
         setIsLoading(false);
       }
@@ -180,7 +180,7 @@ function AdminAuditContent() {
         body: JSON.stringify({ confirmation: "PURGE AUDIT" }),
       });
       const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(resJson.error || `Action failed with status: ${res.status}`);
+      if (!res.ok) throw new ApiError(res.status, resJson.error || `Action failed with status: ${res.status}`, resJson.code);
       closePurgeModal();
       showToast("Audit log purged successfully!", "success");
       setSelectedKitchen(null);
@@ -188,7 +188,7 @@ function AdminAuditContent() {
       setEmployeeFilter("");
       void loadEvents(null);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to purge audit log", "error");
+      showToast(err instanceof Error ? err.message : "Failed to purge audit log", "error", err);
     } finally {
       setPurging(false);
     }

@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { escapeLikePattern, requireString } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeOrderLookupKey } from "@/lib/order-naming";
+import { errJson } from "@/lib/error-response";
 
 export async function GET(req: Request) {
   logger.info("GET /api/orders/search - request received");
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
   // itself) -- rate-limited like /api/restaurants/suggest so it can't be
   // used to enumerate order numbers/restaurant names at unlimited speed.
   if (!checkRateLimit(`orders-search:${getClientIp(req)}`, { windowMs: 60_000, maxAttempts: 120 })) {
-    return NextResponse.json({ error: "Too many requests. Slow down a moment." }, { status: 429 });
+    return errJson("RATE_LIMITED_GENERAL", 429);
   }
 
   try {
@@ -23,10 +24,7 @@ export async function GET(req: Request) {
     const orderLookupKey = orderNumber ? normalizeOrderLookupKey(orderNumber) : "";
 
     if (!restaurantName || !orderNumber || !orderLookupKey) {
-      return NextResponse.json(
-        { error: "Restaurant name and order number are required" },
-        { status: 400 },
-      );
+      return errJson("MISSING_SEARCH_FIELDS", 400);
     }
 
     // Narrow column list -- anonymous public lookup, only ship what the
@@ -39,15 +37,12 @@ export async function GET(req: Request) {
     const order = result.rows[0];
 
     if (!order) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      return errJson("ORDER_NOT_FOUND", 404);
     }
 
     return NextResponse.json(order);
   } catch (err) {
     logger.error("GET /api/orders/search - error processing request", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

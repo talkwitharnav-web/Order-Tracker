@@ -137,7 +137,7 @@ const KitchenProfile: FC<{ restaurantName: string; onBack: () => void }> = ({ re
       setEmployees(empData.employees);
       setRoles(roleData.roles);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load kitchen staff", "error");
+      showToast(err instanceof Error ? err.message : "Failed to load kitchen staff", "error", err);
     } finally {
       setLoading(false);
     }
@@ -161,7 +161,7 @@ const KitchenProfile: FC<{ restaurantName: string; onBack: () => void }> = ({ re
       showToast(`Removed ${name}`, "success");
       void loadAll();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to remove employee", "error");
+      showToast(err instanceof Error ? err.message : "Failed to remove employee", "error", err);
     }
   };
 
@@ -175,7 +175,7 @@ const KitchenProfile: FC<{ restaurantName: string; onBack: () => void }> = ({ re
       showToast("Updated", "success");
       void loadAll();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update employee", "error");
+      showToast(err instanceof Error ? err.message : "Failed to update employee", "error", err);
     }
   };
 
@@ -185,7 +185,7 @@ const KitchenProfile: FC<{ restaurantName: string; onBack: () => void }> = ({ re
       showToast(`Deleted role "${name}"`, "success");
       void loadAll();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to delete role", "error");
+      showToast(err instanceof Error ? err.message : "Failed to delete role", "error", err);
     }
   };
 
@@ -276,7 +276,7 @@ const AccountSection: FC<{
       showToast(`Added ${newName.trim()}`, "success");
       onCreated();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to add account", "error");
+      showToast(err instanceof Error ? err.message : "Failed to add account", "error", err);
     } finally {
       setSaving(false);
     }
@@ -447,7 +447,7 @@ const RolesSection: FC<{
       setNewRoleName("");
       onCreated();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to add role", "error");
+      showToast(err instanceof Error ? err.message : "Failed to add role", "error", err);
     } finally {
       setSaving(false);
     }

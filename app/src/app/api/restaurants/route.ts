@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { errJson } from "@/lib/error-response";
 
 export async function GET() {
   try {
@@ -10,6 +11,6 @@ export async function GET() {
     return NextResponse.json({ count });
   } catch (err) {
     logger.error("GET /api/restaurants - error processing request", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

@@ -496,7 +496,7 @@ const HomeTab: FC<{
   onDeleteOrder: (id: number, skipConfirm: boolean) => void;
   onAdvance: (id: number, status: OrderStatus) => void;
   onMarkPickedUp: (id: number) => void;
-  onError: (message: string) => void;
+  onError: (message: string, error?: unknown) => void;
 }> = ({ orders, recentlyUpdatedId, exitingIds, restaurantName, onCreateOrder, onDeleteOrder, onAdvance, onMarkPickedUp, onError }) => {
   const [orderNumber, setOrderNumber] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -560,7 +560,7 @@ const HomeTab: FC<{
         setOrderNumber(suggestNextOrderName(namingStyle, [...orders.map((o) => o.order_number), newOrder.order_number]));
       }
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Failed to create order");
+      onError(error instanceof Error ? error.message : "Failed to create order", error);
     }
   };
 
@@ -709,7 +709,7 @@ const COMPLETE_CAP_MAX_HOURS = 168;
  * see api/restaurants/by-name/[restaurantName]/settings, which is
  * kitchen-authenticated for exactly this reason.
  */
-const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: string) => void }> = ({
+const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: string, error?: unknown) => void }> = ({
   restaurantName,
   onError,
 }) => {
@@ -749,7 +749,7 @@ const CompleteCapSettingCard: FC<{ restaurantName: string; onError: (message: st
         body: JSON.stringify({ completeCapHours: newHours }),
       });
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to update setting");
+      onError(err instanceof Error ? err.message : "Failed to update setting", err);
     } finally {
       setSaving(false);
     }
@@ -865,7 +865,7 @@ type RoleApiRow = { id: number; name: string; created_at: string };
  * per-employee session to check accountType against, so this reuses the
  * same PinPad and restricts which employees can unlock it to managers.
  */
-const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void }> = ({
+const StaffTab: FC<{ restaurantName: string; onError: (message: string, error?: unknown) => void }> = ({
   restaurantName,
   onError,
 }) => {
@@ -929,7 +929,7 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
       setNewRoleId("");
       loadAll();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to add employee");
+      onError(err instanceof Error ? err.message : "Failed to add employee", err);
     } finally {
       setSaving(false);
     }
@@ -942,7 +942,7 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
       });
       loadAll();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to deactivate employee");
+      onError(err instanceof Error ? err.message : "Failed to deactivate employee", err);
     }
   };
 
@@ -955,7 +955,7 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
       });
       loadAll();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to update employee");
+      onError(err instanceof Error ? err.message : "Failed to update employee", err);
     }
   };
 
@@ -971,7 +971,7 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
       setNewRoleName("");
       loadAll();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to add role");
+      onError(err instanceof Error ? err.message : "Failed to add role", err);
     }
   };
 
@@ -982,7 +982,7 @@ const StaffTab: FC<{ restaurantName: string; onError: (message: string) => void 
       });
       loadAll();
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to delete role");
+      onError(err instanceof Error ? err.message : "Failed to delete role", err);
     }
   };
 
@@ -1488,7 +1488,7 @@ function KitchenDashboardContent({
       setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, ...response.order } : order)));
       showToast("Status change undone", "success");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not undo status change", "error");
+      showToast(error instanceof Error ? error.message : "Could not undo status change", "error", error);
       void fetchOrders();
     }
   };
@@ -1522,7 +1522,7 @@ function KitchenDashboardContent({
       }
     } catch (error) {
       console.error("Failed to update status", error);
-      showToast(error instanceof Error ? error.message : "Failed to update status", "error");
+      showToast(error instanceof Error ? error.message : "Failed to update status", "error", error);
       void fetchOrders();
     }
   };
@@ -1540,7 +1540,7 @@ function KitchenDashboardContent({
       handleAddOrder(newOrder);
       return newOrder;
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Failed to create order", "error");
+      showToast(error instanceof Error ? error.message : "Failed to create order", "error", error);
       return null;
     }
   };
@@ -1577,7 +1577,7 @@ function KitchenDashboardContent({
       }, ORDER_EXIT_ANIMATION_MS);
     } catch (error) {
       console.error("Failed to delete order", error);
-      showToast(error instanceof Error ? error.message : "Failed to delete order", "error");
+      showToast(error instanceof Error ? error.message : "Failed to delete order", "error", error);
       setExitingIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -1622,7 +1622,7 @@ function KitchenDashboardContent({
       await api.markPickedUp(id, currentEmployeeCredential);
       showToast("Order marked as picked up", "success");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Failed to mark order as picked up", "error");
+      showToast(error instanceof Error ? error.message : "Failed to mark order as picked up", "error", error);
       void fetchOrders();
     }
   };
@@ -1661,13 +1661,13 @@ function KitchenDashboardContent({
           onDeleteOrder={requestDeleteOrder}
           onAdvance={handleAdvanceStatus}
           onMarkPickedUp={handleMarkPickedUp}
-          onError={(message) => showToast(message, "error")}
+          onError={(message, error) => showToast(message, "error", error)}
         />
       );
     }
 
     if (activeTab === "Staff") {
-      return <StaffTab restaurantName={restaurantName} onError={(message) => showToast(message, "error")} />;
+      return <StaffTab restaurantName={restaurantName} onError={(message, error) => showToast(message, "error", error)} />;
     }
 
     const displayedOrders = sortByPriority(

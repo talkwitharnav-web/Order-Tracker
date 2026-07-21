@@ -9,6 +9,7 @@ import {
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 
 // Hardcoded admin credentials — same dev-only setup already used by the
 // client-side gate this route replaces (see SYSTEM_MEMORY.md admin section).
@@ -41,19 +42,19 @@ export async function POST(req: Request) {
   logger.info("POST /api/admin/login - request received");
 
   if (!checkRateLimit(`admin-login:${getClientIp(req)}`)) {
-    return NextResponse.json({ error: "Too many login attempts. Try again in a minute." }, { status: 429 });
+    return errJson("RATE_LIMITED_LOGIN", 429);
   }
 
   try {
     const body = await parseJsonBody(req);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { username, password, rememberMe } =
       body as { username?: unknown; password?: unknown; rememberMe?: unknown };
 
     if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      return errJson("INVALID_CREDENTIALS", 401);
     }
 
     const token = createSessionToken({ type: "admin" });
@@ -68,6 +69,6 @@ export async function POST(req: Request) {
     return response;
   } catch (err) {
     logger.error("POST /api/admin/login - error processing request", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

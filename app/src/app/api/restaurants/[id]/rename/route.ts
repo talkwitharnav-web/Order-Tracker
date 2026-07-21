@@ -3,6 +3,7 @@ import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { requireSafeName, parseJsonBody } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 
 export async function PUT(
   request: Request,
@@ -15,7 +16,7 @@ export async function PUT(
   if (!auth.ok) return auth.response;
 
   if (!/^\d+$/.test(id)) {
-    return NextResponse.json({ error: "Invalid restaurant id" }, { status: 400 });
+    return errJson("INVALID_RESTAURANT_ID", 400);
   }
 
   await initDb();
@@ -24,16 +25,13 @@ export async function PUT(
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { newName: rawNewName } = body as { newName?: unknown };
     const newName = requireSafeName(rawNewName);
 
     if (!newName) {
-      return NextResponse.json(
-        { error: "New name is required (letters, numbers, spaces, and basic punctuation only, max 200 chars)" },
-        { status: 400 },
-      );
+      return errJson("MISSING_NEW_NAME", 400);
     }
 
     const existingResult = await client.query<{ name: string }>(
@@ -42,7 +40,7 @@ export async function PUT(
     );
     const existing = existingResult.rows[0];
     if (!existing) {
-      return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+      return errJson("RESTAURANT_NOT_FOUND", 404);
     }
 
     const oldName = existing.name;
@@ -56,7 +54,7 @@ export async function PUT(
         [newName, id],
       );
       if (result.rowCount === 0) {
-        return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+        return errJson("RESTAURANT_NOT_FOUND", 404);
       }
       // Orders keep the old casing until touched again -- purely cosmetic
       // (ILIKE lookups are already case-insensitive), so no cascade needed
@@ -69,10 +67,7 @@ export async function PUT(
       [newName, id],
     );
     if (clash.rows.length > 0) {
-      return NextResponse.json(
-        { error: `A restaurant named "${newName}" already exists` },
-        { status: 409 },
-      );
+      return errJson("RESTAURANT_NAME_TAKEN_RENAME", 409, `A restaurant named "${newName}" already exists`);
     }
 
     await client.query("BEGIN");
@@ -98,7 +93,7 @@ export async function PUT(
     await client.query("COMMIT");
 
     if (result.rowCount === 0) {
-      return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+      return errJson("RESTAURANT_NOT_FOUND", 404);
     }
 
     logger.info(`PUT /api/restaurants/${id}/rename - renamed "${oldName}" to "${newName}"`);
@@ -116,7 +111,7 @@ export async function PUT(
   } catch (err) {
     await client.query("ROLLBACK");
     logger.error(`PUT /api/restaurants/${id}/rename - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   } finally {
     client.release();
   }

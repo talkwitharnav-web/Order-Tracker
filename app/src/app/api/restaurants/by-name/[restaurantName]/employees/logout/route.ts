@@ -5,6 +5,7 @@ import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { verifyActiveEmployee } from "@/lib/employee-auth";
+import { errJson } from "@/lib/error-response";
 
 /**
  * Records that a signed-in employee tapped "Logout Staff" (see
@@ -36,12 +37,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
 
     const parsedId = typeof employeeId === "number" && Number.isSafeInteger(employeeId) ? employeeId : null;
     if (parsedId === null) {
-      return NextResponse.json({ error: "employeeId is required" }, { status: 400 });
+      return errJson("EMPLOYEE_ID_REQUIRED", 400);
     }
 
     const employee = await verifyActiveEmployee(restaurantName, parsedId);
     if (!employee) {
-      return NextResponse.json({ error: "Invalid or inactive employee" }, { status: 401 });
+      return errJson("INVALID_OR_INACTIVE_EMPLOYEE", 401);
     }
 
     // restaurant_name is denormalized directly (not looked up per-order,
@@ -60,6 +61,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     return NextResponse.json({ message: "Logged out" });
   } catch (err) {
     logger.error(`POST /api/restaurants/by-name/${restaurantName}/employees/logout - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

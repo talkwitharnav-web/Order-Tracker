@@ -3,6 +3,7 @@ import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
+import { errJson } from "@/lib/error-response";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
       ? (body as { confirmation?: unknown }).confirmation
       : undefined;
     if (confirmation !== "SEED DATABASE") {
-      return NextResponse.json({ error: "Type SEED DATABASE to confirm" }, { status: 400 });
+      return errJson("CONFIRMATION_PHRASE_MISMATCH", 400, "Type SEED DATABASE to confirm");
     }
 
     await initDb();
@@ -186,9 +187,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     logger.error("POST /api/dev/seed - error processing request", err);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

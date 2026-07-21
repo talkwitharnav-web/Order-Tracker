@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { escapeLikePattern, requireString, isSafeName } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { errJson } from "@/lib/error-response";
 
 // Suggestion list is capped server-side regardless of what a caller asks
 // for, purely to bound response size/DB work per request.
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
   // typing a whole name rarely fires more than a handful of requests) while
   // meaningfully slowing a scripted enumeration sweep.
   if (!checkRateLimit(`restaurant-suggest:${getClientIp(req)}`, { windowMs: 60_000, maxAttempts: 30 })) {
-    return NextResponse.json({ error: "Too many requests. Slow down a moment." }, { status: 429 });
+    return errJson("RATE_LIMITED_GENERAL", 429);
   }
 
   const { searchParams } = new URL(req.url);
@@ -101,6 +102,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ suggestions });
   } catch (err) {
     logger.error("GET /api/restaurants/suggest - error processing request", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

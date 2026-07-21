@@ -6,6 +6,7 @@ import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requiredPinLength, pinCollidesWithAnotherEmployee } from "@/lib/employee-auth";
+import { errJson } from "@/lib/error-response";
 
 /**
  * Employee roster management for a kitchen's own account (or admin, for
@@ -52,11 +53,11 @@ async function resolveRoleId(
   if (rawRoleId === undefined || rawRoleId === null) return { ok: true, roleId: null };
   const roleId = typeof rawRoleId === "number" && Number.isSafeInteger(rawRoleId) ? rawRoleId : null;
   if (roleId === null) {
-    return { ok: false, response: NextResponse.json({ error: "Invalid roleId" }, { status: 400 }) };
+    return { ok: false, response: errJson("INVALID_ROLE_ID", 400) };
   }
   const result = await query("SELECT 1 FROM restaurant_roles WHERE id = $1 AND restaurant_id = $2", [roleId, restaurantId]);
   if (result.rows.length === 0) {
-    return { ok: false, response: NextResponse.json({ error: "Role not found for this kitchen" }, { status: 404 }) };
+    return { ok: false, response: errJson("ROLE_NOT_FOUND_FOR_KITCHEN", 404) };
   }
   return { ok: true, roleId };
 }
@@ -70,7 +71,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ rest
   await initDb();
   const restaurantId = await getRestaurantId(restaurantName);
   if (restaurantId === null) {
-    return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+    return errJson("RESTAURANT_NOT_FOUND", 404);
   }
 
   const result = await query<EmployeeRow>(
@@ -91,19 +92,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
   // the frequent PIN-verify path) -- still throttled per restaurant+IP so a
   // compromised kitchen session can't be scripted into mass-creating rows.
   if (!checkRateLimit(`employee-create:${restaurantName}:${getClientIp(request)}`, { windowMs: 60_000, maxAttempts: 20 })) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
+    return errJson("RATE_LIMITED_STAFF", 429);
   }
 
   await initDb();
   const restaurantId = await getRestaurantId(restaurantName);
   if (restaurantId === null) {
-    return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+    return errJson("RESTAURANT_NOT_FOUND", 404);
   }
 
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+      return errJson("MALFORMED_JSON", 400);
     }
     const { name: rawName, pin: rawPin, accountType: rawAccountType, roleId: rawRoleId } = body as {
       name?: unknown;
@@ -122,10 +123,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     const pin = typeof rawPin === "string" && new RegExp(`^\\d{${pinLength}}$`).test(rawPin) ? rawPin : null;
 
     if (!name) {
-      return NextResponse.json({ error: "Employee name is required" }, { status: 400 });
+      return errJson("EMPLOYEE_NAME_REQUIRED", 400);
     }
     if (!pin) {
-      return NextResponse.json({ error: `PIN must be exactly ${pinLength} digits` }, { status: 400 });
+      return errJson("INVALID_PIN_LENGTH", 400, `PIN must be exactly ${pinLength} digits`);
     }
 
     const roleCheck = await resolveRoleId(restaurantId, rawRoleId);
@@ -136,10 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     // length -- reject here rather than let a real collision silently
     // attribute actions to whichever employee bcrypt happens to check first.
     if (await pinCollidesWithAnotherEmployee(restaurantName, pin, pinLength)) {
-      return NextResponse.json(
-        { error: "That PIN is already in use by another employee. Choose a different one." },
-        { status: 409 },
-      );
+      return errJson("PIN_ALREADY_IN_USE", 409);
     }
 
     const pinHash = await bcrypt.hash(pin, SALT_ROUNDS);
@@ -160,12 +158,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
         "code" in insertErr &&
         (insertErr as { code?: string }).code === "23505"
       ) {
-        return NextResponse.json({ error: "An employee with this name already exists" }, { status: 409 });
+        return errJson("EMPLOYEE_NAME_ALREADY_EXISTS", 409);
       }
       throw insertErr;
     }
   } catch (err) {
     logger.error(`POST /api/restaurants/by-name/${restaurantName}/employees - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

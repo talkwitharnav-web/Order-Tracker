@@ -6,6 +6,7 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { verifyActiveEmployee } from "@/lib/employee-auth";
+import { errJson } from "@/lib/error-response";
 
 function parseOrderId(id: string): number | null {
   if (!/^\d+$/.test(id)) return null;
@@ -41,12 +42,12 @@ export async function POST(
   logger.info(`POST /api/orders/${id}/acknowledge - request received`);
 
   if (!checkRateLimit(`orders-acknowledge:${getClientIp(request)}`, { windowMs: 60_000, maxAttempts: 120 })) {
-    return NextResponse.json({ error: "Too many requests. Slow down a moment." }, { status: 429 });
+    return errJson("RATE_LIMITED_GENERAL", 429);
   }
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return NextResponse.json({ error: "Invalid order id" }, { status: 400 });
+    return errJson("INVALID_ORDER_ID", 400);
   }
 
   try {
@@ -60,10 +61,7 @@ export async function POST(
       [orderId],
     );
     if (existing.rows.length === 0 || existing.rows[0].complete_at === null) {
-      return NextResponse.json(
-        { error: "Order not found, not yet complete, or has been deleted" },
-        { status: 404 },
-      );
+      return errJson("ACKNOWLEDGE_TARGET_NOT_FOUND", 404);
     }
     const order = existing.rows[0];
 
@@ -74,11 +72,11 @@ export async function POST(
 
       const parsedId = typeof employeeId === "number" && Number.isSafeInteger(employeeId) ? employeeId : null;
       if (parsedId === null) {
-        return NextResponse.json({ error: "Invalid employeeId" }, { status: 400 });
+        return errJson("INVALID_EMPLOYEE_ID", 400, "Invalid employeeId");
       }
       verifiedEmployee = await verifyActiveEmployee(order.restaurant_name, parsedId);
       if (!verifiedEmployee) {
-        return NextResponse.json({ error: "Invalid or inactive employee" }, { status: 401 });
+        return errJson("INVALID_OR_INACTIVE_EMPLOYEE", 401);
       }
     }
 
@@ -134,6 +132,6 @@ export async function POST(
     return NextResponse.json({ message: "Order acknowledged" });
   } catch (err) {
     logger.error(`POST /api/orders/${id}/acknowledge - error processing request`, err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return errJson("INTERNAL_ERROR", 500);
   }
 }

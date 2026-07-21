@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
+import { errJson } from "@/lib/error-response";
 
 export async function DELETE(
   request: Request,
@@ -14,7 +15,7 @@ export async function DELETE(
   if (!auth.ok) return auth.response;
 
   if (!/^\d+$/.test(id)) {
-    return NextResponse.json({ error: "Invalid restaurant id" }, { status: 400 });
+    return errJson("INVALID_RESTAURANT_ID", 400);
   }
 
   await initDb();
@@ -29,10 +30,7 @@ export async function DELETE(
 
     if (!restaurant) {
       logger.warn(`DELETE /api/restaurants/${id} - restaurant not found`);
-      return NextResponse.json(
-        { error: "Restaurant not found" },
-        { status: 404 }
-      );
+      return errJson("RESTAURANT_NOT_FOUND", 404);
     }
 
     const restaurantName = restaurant.name;
@@ -61,10 +59,7 @@ export async function DELETE(
 
     if (result.rowCount === 0) {
       logger.warn(`DELETE /api/restaurants/${id} - restaurant not found during deletion`);
-      return NextResponse.json(
-        { error: "Restaurant not found" },
-        { status: 404 }
-      );
+      return errJson("RESTAURANT_NOT_FOUND", 404);
     }
 
     logger.info(`DELETE /api/restaurants/${id} - restaurant and associated orders permanently deleted`);
@@ -75,10 +70,7 @@ export async function DELETE(
       `DELETE /api/restaurants/${id} - error processing request`,
       err
     );
-    return NextResponse.json(
-      { error: "Failed to delete restaurant and associated orders." },
-      { status: 500 }
-    );
+    return errJson("RESTAURANT_DELETE_FAILED", 500);
   } finally {
     client.release();
   }
