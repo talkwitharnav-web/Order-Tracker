@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, ChevronRight } from "lucide-react";
 import { CATEGORIES, listErrorCodesByCategory, type ErrorCodeEntry } from "@/lib/error-codes";
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
@@ -33,6 +33,25 @@ const MASCOT_LINES = [
 export default function ErrorCodesHelpPage() {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  // Tracks whether the hero's own search box has scrolled out of view, so
+  // the floating sticky bar below can animate in/out to take over -- an
+  // IntersectionObserver on the hero box itself (rather than a scrollY
+  // threshold) stays correct regardless of hero height, viewport size, or
+  // future copy changes that shift where the hero actually ends.
+  const heroSearchRef = useRef<HTMLDivElement>(null);
+  const [heroSearchVisible, setHeroSearchVisible] = useState(true);
+
+  useEffect(() => {
+    const el = heroSearchRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => setHeroSearchVisible(entry.isIntersecting), {
+      threshold: 0,
+      rootMargin: "-1px 0px 0px 0px",
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const groups = useMemo(() => listErrorCodesByCategory(), []);
 
@@ -89,7 +108,7 @@ export default function ErrorCodesHelpPage() {
               <span className="font-mono font-semibold text-[var(--color-text-primary)]">#300</span>. Search or
               browse below to find out what one means and what to check.
             </p>
-            <div className="relative max-w-md">
+            <div ref={heroSearchRef} className="relative max-w-md">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
                 aria-hidden="true"
@@ -103,6 +122,39 @@ export default function ErrorCodesHelpPage() {
                 className="pl-10"
               />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating sticky search -- takes over the moment the hero's own
+          search box scrolls out of view, so the search bar always stays
+          reachable without a second scroll to the top. Slides/fades in from
+          just above its resting spot rather than popping in, and reverses
+          the same way once the hero box scrolls back into view, so it reads
+          as one search box "detaching" from the hero and re-attaching to it
+          rather than two independent inputs. aria-hidden + tabIndex -1 while
+          hidden so it can't steal keyboard focus behind the scenes. */}
+      <div
+        className={`fixed top-0 inset-x-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]/95 backdrop-blur-sm shadow-sm transition-[transform,opacity] duration-300 ease-out ${
+          heroSearchVisible ? "-translate-y-full opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+        }`}
+        aria-hidden={heroSearchVisible}
+      >
+        <div className="max-w-5xl mx-auto px-4 py-2.5 pr-[calc(var(--reserved-top-right-w,0px)+2rem)]">
+          <div className="relative max-w-md">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by code or keyword..."
+              aria-label="Search error codes"
+              className="pl-10"
+              tabIndex={heroSearchVisible ? -1 : 0}
+            />
           </div>
         </div>
       </div>
@@ -218,7 +270,7 @@ function ErrorEntryCard({ entry }: { entry: ErrorCodeEntry }) {
               className={`w-3.5 h-3.5 transition-transform ${expanded ? "rotate-90" : ""}`}
               aria-hidden="true"
             />
-            {expanded ? "Hide" : "Show"} likely causes &amp; what to check
+            {expanded ? "Hide" : "Show"}{" "}likely causes and what to check
           </button>
           {expanded && (
             <ul className="px-4 pb-4 pt-1 space-y-2 list-disc list-inside">

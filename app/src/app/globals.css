@@ -1645,11 +1645,24 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--color-brand);
 }
 
-/* --- iOS Overscroll Fix (Phase 7, item 21) + prevent horizontal overflow --- */
+/* --- Prevent horizontal overflow ---
+   This used to also set `overscroll-behavior: none` (plus a redundant
+   `max-width: 100vw`) to stop the iOS bounce/rubber-band effect. Root-caused
+   a real "can't scroll at all" report (2026-07-21): `overscroll-behavior:
+   none` -- and even the less aggressive `contain` -- on `html, body` made
+   this app's Chrome/Chromium build swallow ALL vertical wheel/trackpad
+   input app-wide, not just the rubber-band chain past the scroll boundary.
+   Confirmed via real (non-synthetic) CDP wheel-event dispatch on the live
+   page, bisecting property-by-property: forcing `overscroll-behavior: auto`
+   was the ONLY change (of several tried, including removing fixed-position
+   overlays) that restored scrolling. `overflow-x: hidden` alone already
+   fully prevents horizontal scroll/bounce, so removing `overscroll-behavior`
+   here costs nothing but the (untested) iOS vertical-bounce suppression.
+   Do not re-add `overscroll-behavior: none|contain` on `html`/`body` without
+   re-verifying real wheel scroll still works, not just scrollHeight/scrollTo
+   -- those succeed even when this bug is fully present. */
 html, body {
-  overscroll-behavior: none;
   overflow-x: hidden;
-  max-width: 100vw;
 }
 
 /* --- Background Art Parallax Container (Phase 6 — desktop only) --- */
