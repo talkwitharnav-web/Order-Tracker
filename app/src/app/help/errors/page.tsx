@@ -35,23 +35,50 @@ export default function ErrorCodesHelpPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   // Tracks whether the hero's own search box has scrolled out of view, so
-  // the floating sticky bar below can animate in/out to take over -- an
+  // the floating sticky bar below can pop in to take over -- an
   // IntersectionObserver on the hero box itself (rather than a scrollY
   // threshold) stays correct regardless of hero height, viewport size, or
   // future copy changes that shift where the hero actually ends.
   const heroSearchRef = useRef<HTMLDivElement>(null);
-  const [heroSearchVisible, setHeroSearchVisible] = useState(true);
+  // Explicit phase machine (mirrors ChefMascot's swap Phase) rather than a
+  // single boolean: a plain "hide the moment isIntersecting flips back to
+  // true" boolean can only ever animate IN, because the element has to stay
+  // mounted through its own exit animation before it's actually removed --
+  // the earlier version was missing this, which is why scrolling back up
+  // made the bar vanish instantly with no fade-out at all.
+  const [stickyPhase, setStickyPhase] = useState<"hidden" | "entering" | "visible" | "exiting">("hidden");
+  const EXIT_MS = 260;
 
   useEffect(() => {
     const el = heroSearchRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(([entry]) => setHeroSearchVisible(entry.isIntersecting), {
-      threshold: 0,
-      rootMargin: "-1px 0px 0px 0px",
-    });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          setStickyPhase("entering");
+        } else {
+          setStickyPhase((phase) => (phase === "hidden" ? "hidden" : "exiting"));
+        }
+      },
+      { threshold: 0, rootMargin: "-1px 0px 0px 0px" },
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (stickyPhase === "entering") {
+      const t = setTimeout(() => setStickyPhase("visible"), 10);
+      return () => clearTimeout(t);
+    }
+    if (stickyPhase === "exiting") {
+      const t = setTimeout(() => setStickyPhase("hidden"), EXIT_MS);
+      return () => clearTimeout(t);
+    }
+  }, [stickyPhase]);
+
+  const stickyMounted = stickyPhase !== "hidden";
+  const stickyInteractive = stickyPhase === "visible";
 
   const groups = useMemo(() => listErrorCodesByCategory(), []);
 
@@ -128,36 +155,55 @@ export default function ErrorCodesHelpPage() {
 
       {/* Floating sticky search -- takes over the moment the hero's own
           search box scrolls out of view, so the search bar always stays
-          reachable without a second scroll to the top. Slides/fades in from
-          just above its resting spot rather than popping in, and reverses
-          the same way once the hero box scrolls back into view, so it reads
-          as one search box "detaching" from the hero and re-attaching to it
-          rather than two independent inputs. aria-hidden + tabIndex -1 while
-          hidden so it can't steal keyboard focus behind the scenes. */}
-      <div
-        className={`fixed top-0 inset-x-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-surface-1)]/95 backdrop-blur-sm shadow-sm transition-[transform,opacity] duration-300 ease-out ${
-          heroSearchVisible ? "-translate-y-full opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
-        }`}
-        aria-hidden={heroSearchVisible}
-      >
-        <div className="max-w-5xl mx-auto px-4 py-2.5 pr-[calc(var(--reserved-top-right-w,0px)+2rem)]">
-          <div className="relative max-w-md">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by code or keyword..."
-              aria-label="Search error codes"
-              className="pl-10"
-              tabIndex={heroSearchVisible ? -1 : 0}
-            />
+          reachable without a second scroll to the top, and hands back off
+          with a real fade-out (not an instant disappearance) the moment the
+          hero box scrolls back into view. Pops in/out with this app's
+          signature springy overshoot easing (see step-advance-bounce /
+          notification-pop-in in globals.css) instead of a flat slide, so it
+          reads as a playful little arrival rather than a plain UI mechanism.
+          Only actually removed from the DOM once the exit animation
+          finishes (stickyMounted), so the CSS animation has time to play.
+          aria-hidden + non-interactive until fully popped in so it can't
+          steal keyboard focus mid-animation. This bar is a distinct row
+          BELOW SettingsToggles (not sharing its horizontal space), so unlike
+          PageHeader's in-flow action row it does NOT need
+          `--reserved-top-right-w` clearance -- an earlier version added it
+          anyway "to be safe," which just shifted the centered search box
+          295px left of true-center for no reason. Background is a heavier
+          `backdrop-blur-xl` over a translucent (not solid) surface color --
+          the BackgroundArt food-icon watermarks and page content scrolling
+          underneath should read as genuinely frosted/glassy, not just have a
+          faint blur that's masked by an almost-opaque bar. */}
+      {stickyMounted && (
+        <div
+          className={`fixed top-0 inset-x-0 z-30 border-b border-[var(--color-border)]/60 bg-[var(--color-surface-1)]/25 backdrop-blur-xl shadow-sm ${
+            stickyInteractive ? "" : "pointer-events-none"
+          }`}
+          aria-hidden={!stickyInteractive}
+        >
+          <div
+            className={`max-w-5xl mx-auto px-4 py-2.5 ${
+              stickyPhase === "exiting" ? "animate-sticky-search-pop-out" : "animate-sticky-search-pop-in"
+            }`}
+          >
+            <div className="relative max-w-md mx-auto">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by code or keyword..."
+                aria-label="Search error codes"
+                className="pl-10"
+                tabIndex={stickyInteractive ? 0 : -1}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <main className="max-w-5xl mx-auto px-4 py-8 sm:py-10 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-8">
         {/* Sidebar category nav -- sticky so it stays reachable while

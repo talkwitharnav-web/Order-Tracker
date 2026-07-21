@@ -1045,6 +1045,42 @@ summary {
   animation: notification-pop-out 0.25s ease-in forwards;
 }
 
+/* Whimsy: the /help/errors floating sticky search bar's pop-in/pop-out --
+   see app/help/errors/page.tsx. Same springy overshoot easing as
+   notification-pop-in below, scaled down a bit since this one plays every
+   time the user scrolls past the hero, not just once. */
+@keyframes sticky-search-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.94);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(3px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-sticky-search-pop-in {
+  animation: sticky-search-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes sticky-search-pop-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+}
+.animate-sticky-search-pop-out {
+  animation: sticky-search-pop-out 0.26s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 /* Whimsy: small bounce when a StatusStepper step advances */
 @keyframes step-advance-bounce {
   0% {
