@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 /**
  * Verifies a PIN and returns whose it is, for attribution -- deliberately
@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { pin: rawPin, pinLength: rawPinLength } = body as { pin?: unknown; pinLength?: unknown };
 
@@ -67,7 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     const pinLength: 4 | 6 = rawPinLength === 6 ? 6 : 4;
 
     if (!pin) {
-      return errJson("PIN_REQUIRED", 400);
+      return plainJson("pin is required", 400);
     }
 
     // Scoped by restaurant NAME and pinLength -- an authenticated kitchen

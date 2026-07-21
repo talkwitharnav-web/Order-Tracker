@@ -6,7 +6,7 @@ import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin, isAdminRequest } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { resolveOrderActionEmployee } from "@/lib/employee-auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 // Forward-only lifecycle (see SYSTEM_MEMORY.md §2 status-vocab quirk — this
 // is the API-vocabulary set, unrelated to the customer-facing display
@@ -73,14 +73,14 @@ export async function PUT(
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return errJson("INVALID_ORDER_ID", 400);
+    return plainJson("Invalid order id", 400);
   }
 
   try {
     await initDb();
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { status, undoToken, employeeId, pin, pinLength } = body as {
       status?: unknown;
@@ -100,11 +100,11 @@ export async function PUT(
 
     if (!canonicalStatus) {
       logger.warn(`PUT /api/orders/${orderId} - validation error: Invalid status "${status}"`);
-      return errJson("INVALID_STATUS", 400);
+      return plainJson("Invalid status", 400);
     }
 
     if (undoToken !== undefined && (typeof undoToken !== "string" || !/^[0-9a-f-]{36}$/i.test(undoToken))) {
-      return errJson("INVALID_UNDO_TOKEN", 400);
+      return plainJson("Invalid undo token", 400);
     }
 
     const existing = await query<UpdatedOrder>(
@@ -295,7 +295,7 @@ export async function DELETE(
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return errJson("INVALID_ORDER_ID", 400);
+    return plainJson("Invalid order id", 400);
   }
 
   try {

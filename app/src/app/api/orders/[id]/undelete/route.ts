@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 function parseOrderId(id: string): number | null {
   if (!/^\d+$/.test(id)) return null;
@@ -22,7 +22,7 @@ export async function POST(
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return errJson("INVALID_ORDER_ID", 400);
+    return plainJson("Invalid order id", 400);
   }
 
   try {

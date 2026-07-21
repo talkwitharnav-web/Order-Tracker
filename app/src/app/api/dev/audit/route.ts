@@ -3,7 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 /**
  * Read-only view over order_status_events -- the append-only "who did what,
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     const employeeName = searchParams.get("employeeName")?.trim() || null;
 
     if (employeeName && !restaurantName) {
-      return errJson("AUDIT_FILTER_NEEDS_RESTAURANT", 400);
+      return plainJson("employeeName filter requires restaurantName (employee names are only unique per kitchen)", 400);
     }
 
     const conditions: string[] = [];
@@ -120,7 +120,7 @@ export async function DELETE(request: Request) {
       ? (body as { confirmation?: unknown }).confirmation
       : undefined;
     if (confirmation !== "PURGE AUDIT") {
-      return errJson("CONFIRMATION_PHRASE_MISMATCH", 400, "Type PURGE AUDIT to confirm");
+      return plainJson("Type PURGE AUDIT to confirm", 400);
     }
 
     await initDb();

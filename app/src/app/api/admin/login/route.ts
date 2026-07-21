@@ -9,7 +9,7 @@ import {
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 // Hardcoded admin credentials — same dev-only setup already used by the
 // client-side gate this route replaces (see SYSTEM_MEMORY.md admin section).
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { username, password, rememberMe } =
       body as { username?: unknown; password?: unknown; rememberMe?: unknown };

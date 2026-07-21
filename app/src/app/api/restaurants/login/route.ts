@@ -11,7 +11,7 @@ import {
 } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requireString, escapeLikePattern, parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 // Fixed dummy hash so a not-found lookup still pays bcrypt's cost (see
 // SECURITY_ATTACK_LOG.md F4 — without this, "restaurant not found" returned
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   try {
     const body = await parseJsonBody(req);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { name: rawName, password: rawPassword, rememberMe } =
       body as { name?: unknown; password?: unknown; rememberMe?: unknown };
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     const password = typeof rawPassword === "string" ? rawPassword : null;
 
     if (!name || !password) {
-      return errJson("MISSING_LOGIN_FIELDS", 400);
+      return plainJson("Restaurant name and password are required", 400);
     }
 
     const result = await query(

@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 /**
  * Kitchen-defined role labels ("Chef", "Cashier", "Dishwasher", ...) --
@@ -62,12 +62,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { name: rawName } = body as { name?: unknown };
     const name = requireString(rawName, 50);
     if (!name) {
-      return errJson("ROLE_NAME_REQUIRED", 400);
+      return plainJson("Role name is required", 400);
     }
 
     try {

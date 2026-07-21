@@ -3,7 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 const MIN_HOURS = 0.1; // 6 minutes -- a real floor, not effectively "off"
 const MAX_HOURS = 168; // 1 week -- generous upper bound, still finite
@@ -51,12 +51,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ rest
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { completeCapHours: rawHours } = body as { completeCapHours?: unknown };
 
     if (typeof rawHours !== "number" || !Number.isFinite(rawHours) || rawHours < MIN_HOURS || rawHours > MAX_HOURS) {
-      return errJson("INVALID_PICKUP_WINDOW", 400, `completeCapHours must be a number between ${MIN_HOURS} and ${MAX_HOURS}`);
+      return plainJson(`completeCapHours must be a number between ${MIN_HOURS} and ${MAX_HOURS}`, 400);
     }
 
     const result = await query(

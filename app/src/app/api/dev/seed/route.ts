@@ -3,7 +3,7 @@ import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
       ? (body as { confirmation?: unknown }).confirmation
       : undefined;
     if (confirmation !== "SEED DATABASE") {
-      return errJson("CONFIRMATION_PHRASE_MISMATCH", 400, "Type SEED DATABASE to confirm");
+      return plainJson("Type SEED DATABASE to confirm", 400);
     }
 
     await initDb();

@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { escapeLikePattern, requireString } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeOrderLookupKey } from "@/lib/order-naming";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 export async function GET(req: Request) {
   logger.info("GET /api/orders/search - request received");
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     const orderLookupKey = orderNumber ? normalizeOrderLookupKey(orderNumber) : "";
 
     if (!restaurantName || !orderNumber || !orderLookupKey) {
-      return errJson("MISSING_SEARCH_FIELDS", 400);
+      return plainJson("Restaurant name and order number are required", 400);
     }
 
     // Narrow column list -- anonymous public lookup, only ship what the

@@ -22,3 +22,18 @@ export function errJson(key: ErrorCodeKey, status: number, message?: string) {
   const entry = ERROR_CODES[key];
   return NextResponse.json({ error: message ?? entry.defaultMessage, code: entry.code }, { status });
 }
+
+/**
+ * Plain `{ error }` response with NO code -- for the class of error a user
+ * can already self-diagnose from the message alone (a required field was
+ * empty, a PIN was the wrong length, a confirmation phrase didn't match
+ * what was typed). These are still real, still shown as a toast, but
+ * looking them up on /help/errors would add a step for something the
+ * message already fully explains -- codes exist for errors where the
+ * "why" isn't obvious from the text alone (not-found, auth, conflict,
+ * rate-limit, internal), not every possible 400. See error-codes.ts's own
+ * comment for the full validation-vs-coded split.
+ */
+export function plainJson(message: string, status: number) {
+  return NextResponse.json({ error: message }, { status });
+}

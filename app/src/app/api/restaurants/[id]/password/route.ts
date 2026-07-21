@@ -3,7 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 import bcrypt from "bcrypt";
 
 const SALT_ROUNDS = 10;
@@ -16,14 +16,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!auth.ok) return auth.response;
 
   if (!/^\d+$/.test(id)) {
-    return errJson("INVALID_RESTAURANT_ID", 400);
+    return plainJson("Invalid restaurant id", 400);
   }
 
   try {
     await initDb();
     const body = await parseJsonBody(req);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { newPassword: rawNewPassword } = body as { newPassword?: unknown };
     // Null-byte check: this value is inserted raw into raw_password (a
@@ -38,7 +38,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         : null;
 
     if (!newPassword) {
-      return errJson("MISSING_NEW_PASSWORD", 400);
+      return plainJson("New password is required (non-empty string, max 200 chars)", 400);
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);

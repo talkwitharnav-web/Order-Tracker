@@ -5,7 +5,7 @@ import { broadcast } from "@/lib/ws-hub";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { verifyActiveEmployee } from "@/lib/employee-auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 /**
  * Records that a signed-in employee tapped "Logout Staff" (see
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
 
     const parsedId = typeof employeeId === "number" && Number.isSafeInteger(employeeId) ? employeeId : null;
     if (parsedId === null) {
-      return errJson("EMPLOYEE_ID_REQUIRED", 400);
+      return plainJson("employeeId is required", 400);
     }
 
     const employee = await verifyActiveEmployee(restaurantName, parsedId);

@@ -6,7 +6,7 @@ import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/validate";
 import { verifyActiveEmployee } from "@/lib/employee-auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 function parseOrderId(id: string): number | null {
   if (!/^\d+$/.test(id)) return null;
@@ -47,7 +47,7 @@ export async function POST(
 
   const orderId = parseOrderId(id);
   if (orderId === null) {
-    return errJson("INVALID_ORDER_ID", 400);
+    return plainJson("Invalid order id", 400);
   }
 
   try {
@@ -72,7 +72,7 @@ export async function POST(
 
       const parsedId = typeof employeeId === "number" && Number.isSafeInteger(employeeId) ? employeeId : null;
       if (parsedId === null) {
-        return errJson("INVALID_EMPLOYEE_ID", 400, "Invalid employeeId");
+        return plainJson("Invalid employeeId", 400);
       }
       verifiedEmployee = await verifyActiveEmployee(order.restaurant_name, parsedId);
       if (!verifiedEmployee) {
@@ -95,10 +95,7 @@ export async function POST(
         );
         if (result.rowCount === 0) {
           await client.query("ROLLBACK");
-          return NextResponse.json(
-            { error: "Order not found, not yet complete, or has been deleted" },
-            { status: 404 },
-          );
+          return errJson("ACKNOWLEDGE_TARGET_NOT_FOUND", 404);
         }
         await client.query(
           `INSERT INTO order_status_events (order_id, restaurant_name, order_number, from_status, to_status, employee_id, employee_name)
@@ -120,10 +117,7 @@ export async function POST(
         [orderId],
       );
       if (result.rowCount === 0) {
-        return NextResponse.json(
-          { error: "Order not found, not yet complete, or has been deleted" },
-          { status: 404 },
-        );
+        return errJson("ACKNOWLEDGE_TARGET_NOT_FOUND", 404);
       }
     }
 

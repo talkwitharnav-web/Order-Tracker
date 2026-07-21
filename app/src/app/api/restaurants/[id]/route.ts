@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 export async function DELETE(
   request: Request,
@@ -15,7 +15,7 @@ export async function DELETE(
   if (!auth.ok) return auth.response;
 
   if (!/^\d+$/.test(id)) {
-    return errJson("INVALID_RESTAURANT_ID", 400);
+    return plainJson("Invalid restaurant id", 400);
   }
 
   await initDb();

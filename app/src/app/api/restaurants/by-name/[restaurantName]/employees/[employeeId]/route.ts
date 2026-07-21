@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { requiredPinLength, pinCollidesWithAnotherEmployee } from "@/lib/employee-auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 const SALT_ROUNDS = 10;
 
@@ -31,7 +31,7 @@ export async function DELETE(
   const { restaurantName, employeeId: rawId } = await params;
   const employeeId = parseEmployeeId(rawId);
   if (employeeId === null) {
-    return errJson("INVALID_EMPLOYEE_ID", 400);
+    return plainJson("Invalid employee id", 400);
   }
 
   const auth = await requireRestaurantOrAdmin(restaurantName);
@@ -71,7 +71,7 @@ export async function PUT(
   const { restaurantName, employeeId: rawId } = await params;
   const employeeId = parseEmployeeId(rawId);
   if (employeeId === null) {
-    return errJson("INVALID_EMPLOYEE_ID", 400);
+    return plainJson("Invalid employee id", 400);
   }
 
   const auth = await requireRestaurantOrAdmin(restaurantName);
@@ -86,7 +86,7 @@ export async function PUT(
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { name: rawName, accountType: rawAccountType, roleId: rawRoleId, pin: rawPin } = body as {
       name?: unknown;
@@ -120,7 +120,7 @@ export async function PUT(
 
     if (rawName !== undefined) {
       const name = requireString(rawName, 100);
-      if (!name) return errJson("EMPLOYEE_NAME_EMPTY", 400);
+      if (!name) return plainJson("Employee name cannot be empty", 400);
       values.push(name);
       setClauses.push(`name = $${values.length}`);
     }
@@ -130,7 +130,7 @@ export async function PUT(
 
     if (rawAccountType !== undefined) {
       if (rawAccountType !== "manager" && rawAccountType !== "employee") {
-        return errJson("INVALID_ACCOUNT_TYPE", 400);
+        return plainJson("accountType must be 'manager' or 'employee'", 400);
       }
       values.push(rawAccountType);
       setClauses.push(`account_type = $${values.length}`);
@@ -141,7 +141,7 @@ export async function PUT(
         setClauses.push(`role_id = NULL`);
       } else {
         const roleId = typeof rawRoleId === "number" && Number.isSafeInteger(rawRoleId) ? rawRoleId : null;
-        if (roleId === null) return errJson("INVALID_ROLE_ID", 400);
+        if (roleId === null) return plainJson("Invalid roleId", 400);
         const roleCheck = await query("SELECT 1 FROM restaurant_roles WHERE id = $1 AND restaurant_id = $2", [roleId, restaurantId]);
         if (roleCheck.rows.length === 0) {
           return errJson("ROLE_NOT_FOUND_FOR_KITCHEN", 404);
@@ -158,7 +158,7 @@ export async function PUT(
 
     if (rawPin !== undefined) {
       const pin = typeof rawPin === "string" && new RegExp(`^\\d{${effectivePinLength}}$`).test(rawPin) ? rawPin : null;
-      if (!pin) return errJson("INVALID_PIN_LENGTH", 400, `PIN must be exactly ${effectivePinLength} digits`);
+      if (!pin) return plainJson(`PIN must be exactly ${effectivePinLength} digits`, 400);
       // Same collision guard as employee creation -- PIN-only lookup stays
       // unambiguous only if no two active employees share a same-length PIN.
       if (await pinCollidesWithAnotherEmployee(restaurantName, pin, effectivePinLength, employeeId)) {
@@ -174,11 +174,11 @@ export async function PUT(
       // rather than silently leaving a manager account with a stale
       // 4-digit PIN, which is exactly the gap that let a 4-digit PIN
       // unlock the Staff tab.
-      return errJson("ACCOUNT_TYPE_REQUIRES_NEW_PIN", 400);
+      return plainJson("Promoting to manager requires setting a new 6-digit PIN in the same request", 400);
     }
 
     if (setClauses.length === 0) {
-      return errJson("NO_FIELDS_TO_UPDATE", 400);
+      return plainJson("No fields to update", 400);
     }
 
     values.push(employeeId, restaurantName);

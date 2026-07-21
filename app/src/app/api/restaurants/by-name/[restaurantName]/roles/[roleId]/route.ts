@@ -3,7 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 function parseRoleId(id: string): number | null {
   if (!/^\d+$/.test(id)) return null;
@@ -19,7 +19,7 @@ export async function PUT(
   const { restaurantName, roleId: rawId } = await params;
   const roleId = parseRoleId(rawId);
   if (roleId === null) {
-    return errJson("INVALID_ROLE_ID", 400);
+    return plainJson("Invalid role id", 400);
   }
 
   const auth = await requireRestaurantOrAdmin(restaurantName);
@@ -30,12 +30,12 @@ export async function PUT(
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { name: rawName } = body as { name?: unknown };
     const name = requireString(rawName, 50);
     if (!name) {
-      return errJson("ROLE_NAME_EMPTY", 400);
+      return plainJson("Role name cannot be empty", 400);
     }
 
     const result = await query(
@@ -77,7 +77,7 @@ export async function DELETE(
   const { restaurantName, roleId: rawId } = await params;
   const roleId = parseRoleId(rawId);
   if (roleId === null) {
-    return errJson("INVALID_ROLE_ID", 400);
+    return plainJson("Invalid role id", 400);
   }
 
   const auth = await requireRestaurantOrAdmin(restaurantName);

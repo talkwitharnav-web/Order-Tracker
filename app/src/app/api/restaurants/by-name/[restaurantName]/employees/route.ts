@@ -6,7 +6,7 @@ import { requireRestaurantOrAdmin } from "@/lib/auth";
 import { requireString, parseJsonBody } from "@/lib/validate";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requiredPinLength, pinCollidesWithAnotherEmployee } from "@/lib/employee-auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 /**
  * Employee roster management for a kitchen's own account (or admin, for
@@ -53,7 +53,7 @@ async function resolveRoleId(
   if (rawRoleId === undefined || rawRoleId === null) return { ok: true, roleId: null };
   const roleId = typeof rawRoleId === "number" && Number.isSafeInteger(rawRoleId) ? rawRoleId : null;
   if (roleId === null) {
-    return { ok: false, response: errJson("INVALID_ROLE_ID", 400) };
+    return { ok: false, response: plainJson("Invalid roleId", 400) };
   }
   const result = await query("SELECT 1 FROM restaurant_roles WHERE id = $1 AND restaurant_id = $2", [roleId, restaurantId]);
   if (result.rows.length === 0) {
@@ -104,7 +104,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { name: rawName, pin: rawPin, accountType: rawAccountType, roleId: rawRoleId } = body as {
       name?: unknown;
@@ -123,10 +123,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ res
     const pin = typeof rawPin === "string" && new RegExp(`^\\d{${pinLength}}$`).test(rawPin) ? rawPin : null;
 
     if (!name) {
-      return errJson("EMPLOYEE_NAME_REQUIRED", 400);
+      return plainJson("Employee name is required", 400);
     }
     if (!pin) {
-      return errJson("INVALID_PIN_LENGTH", 400, `PIN must be exactly ${pinLength} digits`);
+      return plainJson(`PIN must be exactly ${pinLength} digits`, 400);
     }
 
     const roleCheck = await resolveRoleId(restaurantId, rawRoleId);

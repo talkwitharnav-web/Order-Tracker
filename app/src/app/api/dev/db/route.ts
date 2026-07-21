@@ -3,7 +3,7 @@ import { query, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody, escapeLikePattern } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 type RestaurantRow = { id: number; name: string; password: string; raw_password: string | null; deleted_at: string | null };
 
@@ -191,7 +191,7 @@ export async function DELETE(request: Request) {
       ? (body as { confirmation?: unknown }).confirmation
       : undefined;
     if (confirmation !== "PURGE DATABASE") {
-      return errJson("CONFIRMATION_PHRASE_MISMATCH", 400, "Type PURGE DATABASE to confirm");
+      return plainJson("Type PURGE DATABASE to confirm", 400);
     }
 
     await initDb();

@@ -12,7 +12,7 @@ import {
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { requireSafeName, escapeLikePattern, parseJsonBody } from "@/lib/validate";
 import { broadcastRestaurantCreated } from "@/lib/ws-hub";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 const SALT_ROUNDS = 10;
 const MIN_PASSWORD_LENGTH = 8;
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     await initDb();
     const body = await parseJsonBody(req);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { name: rawName, password: rawPassword, rememberMe } =
       body as { name?: unknown; password?: unknown; rememberMe?: unknown };
@@ -60,10 +60,13 @@ export async function POST(req: Request) {
         : null;
 
     if (!name) {
-      return errJson("INVALID_ORDER_NAME_REGISTER", 400);
+      return plainJson(
+        "Restaurant name is required (letters, numbers, spaces, and basic punctuation only, max 200 chars)",
+        400,
+      );
     }
     if (!password) {
-      return errJson("INVALID_PASSWORD_LENGTH", 400, `Password must be ${MIN_PASSWORD_LENGTH}-200 characters`);
+      return plainJson(`Password must be ${MIN_PASSWORD_LENGTH}-200 characters`, 400);
     }
 
     // Check if restaurant already exists (case-insensitive, matches how
@@ -89,10 +92,7 @@ export async function POST(req: Request) {
         "code" in insertErr &&
         (insertErr as { code?: string }).code === "23505"
       ) {
-        return NextResponse.json(
-          { error: "Restaurant with this name already exists" },
-          { status: 409 },
-        );
+        return errJson("RESTAURANT_NAME_ALREADY_EXISTS", 409);
       }
       throw insertErr;
     }

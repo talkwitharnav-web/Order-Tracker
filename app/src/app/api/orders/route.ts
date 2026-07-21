@@ -7,7 +7,7 @@ import { requireString, requireSafeName, escapeLikePattern, parseJsonBody } from
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { normalizeOrderLookupKey } from "@/lib/order-naming";
 import { resolveOrderActionEmployee } from "@/lib/employee-auth";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 export async function POST(request: Request) {
   logger.info("POST /api/orders - request received");
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     await initDb();
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { restaurant_name: rawRestaurantName, order_number: rawOrderNumber, employeeId, pin, pinLength } =
       body as { restaurant_name?: unknown; order_number?: unknown; employeeId?: unknown; pin?: unknown; pinLength?: unknown };
@@ -36,7 +36,10 @@ export async function POST(request: Request) {
         restaurant_name: rawRestaurantName,
         order_number: rawOrderNumber,
       });
-      return errJson("MISSING_ORDER_FIELDS", 400);
+      return plainJson(
+        "restaurant_name and order_number are required (letters, numbers, spaces, and basic punctuation only, max 200 chars)",
+        400,
+      );
     }
 
     const auth = await requireRestaurantOrAdmin(restaurant_name);
@@ -164,7 +167,7 @@ export async function GET(request: Request) {
         restaurant_name,
         order_number,
       });
-      return errJson("MISSING_RESTAURANT_NAME_ORDER_NUMBER", 400);
+      return plainJson("restaurant_name and order_number are required", 400);
     }
 
     // Narrow column list -- this is the anonymous public customer-tracker

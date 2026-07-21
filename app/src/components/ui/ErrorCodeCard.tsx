@@ -21,7 +21,13 @@ export const ErrorCodeCard: FC<{ code: number | null; onClose: () => void }> = (
       {entry ? (
         <div className="space-y-3">
           <p className="text-sm font-semibold text-[var(--color-text-primary)]">{entry.title}</p>
-          <p className="text-sm text-[var(--color-text-secondary)]">{entry.meaning}</p>
+          {/* max-h + overflow-y-auto here (not just relying on Modal's own
+              outer scroll) so a long `meaning` string scrolls on its own
+              without the title/link getting pushed off-screen too on a
+              short viewport. */}
+          <p className="text-sm text-[var(--color-text-secondary)] max-h-64 overflow-y-auto pr-1">
+            {entry.meaning}
+          </p>
           <Link
             href={`/help/errors#${entry.code}`}
             target="_blank"

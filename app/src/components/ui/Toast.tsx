@@ -98,9 +98,9 @@ const ToastCard: FC<{
               event.stopPropagation();
               onOpenCode();
             }}
-            className="error-code-chip inline-flex items-center px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-white/15 hover:bg-white/25 font-mono font-bold text-xs align-middle transition-colors"
-            aria-label={`Error code ${item.code}. Click for details.`}
-            title={`Error ${item.code} — click for details`}
+            className="error-code-chip inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--radius-sm)] bg-white/15 hover:bg-white/25 font-mono font-bold text-xs align-middle transition-colors"
+            aria-label={`Error code ${item.code}. Tap for details.`}
+            title={`#${item.code} — tap for details`}
           >
             #{item.code}
           </button>

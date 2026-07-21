@@ -3,7 +3,7 @@ import { getPool, initDb } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { requireAdmin } from "@/lib/auth";
 import { requireSafeName, parseJsonBody } from "@/lib/validate";
-import { errJson } from "@/lib/error-response";
+import { errJson, plainJson } from "@/lib/error-response";
 
 export async function PUT(
   request: Request,
@@ -16,7 +16,7 @@ export async function PUT(
   if (!auth.ok) return auth.response;
 
   if (!/^\d+$/.test(id)) {
-    return errJson("INVALID_RESTAURANT_ID", 400);
+    return plainJson("Invalid restaurant id", 400);
   }
 
   await initDb();
@@ -25,13 +25,16 @@ export async function PUT(
   try {
     const body = await parseJsonBody(request);
     if (body === null) {
-      return errJson("MALFORMED_JSON", 400);
+      return plainJson("Malformed JSON body", 400);
     }
     const { newName: rawNewName } = body as { newName?: unknown };
     const newName = requireSafeName(rawNewName);
 
     if (!newName) {
-      return errJson("MISSING_NEW_NAME", 400);
+      return plainJson(
+        "New name is required (letters, numbers, spaces, and basic punctuation only, max 200 chars)",
+        400,
+      );
     }
 
     const existingResult = await client.query<{ name: string }>(
