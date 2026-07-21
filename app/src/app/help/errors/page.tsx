@@ -64,8 +64,10 @@ export default function ErrorCodesHelpPage() {
       {/* Hero -- mirrors a typical vendor help-center's "How can we help
           you?" search-first landing, scaled to this app's warm bistro
           identity (chef mascot, brand-tinted radial background) instead of
-          a generic corporate one. */}
-      <div className="relative overflow-hidden border-b border-[var(--color-border)] px-4 py-10 sm:py-14">
+          a generic corporate one. Mascot sits beside the heading (not
+          stacked above it) so the hero stays compact and leaves more
+          vertical room for the actual reference content below. */}
+      <div className="relative overflow-hidden border-b border-[var(--color-border)] px-4 py-6 sm:py-8">
         <div
           className="absolute inset-0 -z-10"
           style={{
@@ -74,31 +76,33 @@ export default function ErrorCodesHelpPage() {
           }}
           aria-hidden="true"
         />
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="flex justify-center mb-3">
-            <ChefMascot size={84} lines={MASCOT_LINES} />
+        <div className="max-w-3xl mx-auto flex items-center gap-4 sm:gap-6">
+          <div className="shrink-0">
+            <ChefMascot size={64} lines={MASCOT_LINES} />
           </div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-[var(--color-text-primary)] mb-2">
-            Error Code Reference
-          </h1>
-          <p className="text-sm sm:text-base text-[var(--color-text-secondary)] mb-6">
-            Some errors in this app carry a short code, like{" "}
-            <span className="font-mono font-semibold text-[var(--color-text-primary)]">#300</span>. Search or browse
-            below to find out what one means and what to check.
-          </p>
-          <div className="relative max-w-md mx-auto">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by code or keyword..."
-              aria-label="Search error codes"
-              className="pl-10"
-            />
+          <div className="flex-1 min-w-0 text-left">
+            <h1 className="font-display text-2xl sm:text-3xl font-semibold text-[var(--color-text-primary)] mb-1">
+              Error Code Reference
+            </h1>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-3">
+              Some errors carry a short code, like{" "}
+              <span className="font-mono font-semibold text-[var(--color-text-primary)]">#300</span>. Search or
+              browse below to find out what one means and what to check.
+            </p>
+            <div className="relative max-w-md">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by code or keyword..."
+                aria-label="Search error codes"
+                className="pl-10"
+              />
+            </div>
           </div>
         </div>
       </div>
