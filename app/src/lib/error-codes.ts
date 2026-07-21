@@ -484,6 +484,14 @@ export const ERROR_CODES = {
     causes: ["This should resolve on its own within seconds -- if it keeps happening, something outside the normal app (an extra open tab, a script) is repeatedly checking system status."],
     devNotes: ["HealthPin's own polling is capped well under this limit -- if a real user hits this, something is polling /api/health outside the normal HealthPin component (a stray extra tab, a script)."],
   },
+  RATE_LIMITED_ISSUES: {
+    code: 507,
+    title: "Too many reports submitted",
+    defaultMessage: "Too many reports submitted too quickly. Try again in a minute.",
+    meaning: "Too many issue reports were submitted too quickly from this network. Wait a minute and try again.",
+    causes: ["A normal person reporting a bug or leaving feedback should never come close to this limit -- it exists to stop the report form from being spammed."],
+    devNotes: ["Deliberately low ceiling (see rate-limit.ts call site in api/issues/route.ts) -- this is a low-frequency human action (submitting a report), not autocomplete-as-you-type, so a tight cap doesn't cost real users anything."],
+  },
 
   // ---- 900-999: Internal ----
   INTERNAL_ERROR: {

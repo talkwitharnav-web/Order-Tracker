@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Database, ScrollText } from "lucide-react";
+import { Lock, Database, ScrollText, MessageSquareWarning } from "lucide-react";
 import { AuthCard } from "@/components/ui/AuthCard";
 import { Input, Label } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -84,6 +84,13 @@ export default function GatewayCommandCenter() {
         <ScrollText size={18} />
         Audit Log
       </a>
+      <a
+        href="/admin/issues"
+        className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-primary)] transition-colors"
+      >
+        <MessageSquareWarning size={18} />
+        Issue Review
+      </a>
     </>
   ) : null;
 
@@ -132,6 +139,12 @@ export default function GatewayCommandCenter() {
                 className="w-full text-center px-4 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold border border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] transition-colors"
               >
                 Audit Log
+              </a>
+              <a
+                href="/admin/issues"
+                className="w-full text-center px-4 py-2.5 rounded-[var(--radius-sm)] text-sm font-semibold border border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] transition-colors"
+              >
+                Issue Review
               </a>
             </div>
           </div>

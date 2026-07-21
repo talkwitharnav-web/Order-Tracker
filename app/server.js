@@ -127,6 +127,12 @@ const PUBLIC_ALLOWED_PREFIXES = [
   "/api/session",
   "/api/logout",
   "/api/health",
+  // Public submission endpoint for /help/errors's "Report an Issue" button --
+  // reachable by anonymous kitchen staff, same trust level as /api/orders.
+  // Deliberately does NOT cover /api/dev/issues (the admin-only review list)
+  // since that path doesn't start with this prefix at all -- same separation
+  // as /api/orders (public) vs. /api/dev/db (admin-only) today.
+  "/api/issues",
   "/_next",
   "/favicon.ico",
 ];

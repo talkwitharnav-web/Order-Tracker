@@ -204,6 +204,15 @@ Per-kitchen employee roster and append-only status-change audit trail; see "Empl
 - **User has floated a bigger "Liquid Glass"-style UI direction (per-segment dynamic-opacity overlays reacting to what's behind them) as a future exploration, not a current task** — discussed 2026-07-21, user plans to prototype it separately (possibly with another model) before bringing it back into this codebase. True optical Liquid Glass (real-time framebuffer sampling/refraction) has no browser equivalent; a cheap approximation (segment an overlay into N cells, fake per-cell opacity from known-in-advance page content like `BackgroundArt` icon positions/theme tokens, since this is a closed design system not arbitrary content) is realistically buildable if/when the user returns to it. Do not start building this speculatively — wait for explicit direction.
 - Reachable from `SettingsToggles`' universal (not opt-in, unlike `health`/`showClock`) `HelpLink` icon (`components/ui/HelpLink.tsx`, a `CircleHelp` icon button, `target="_blank"`) placed immediately before the theme toggle in every instance of the toolbar app-wide.
 
+## Issue Reporting
+
+- **`reported_issues`** table (added 2026-07-21): `id`, `description` NOT NULL, nullable `restaurant_name`/`context`/`contact`, `status` (defaults `'open'`, not yet surfaced in any UI -- exists for a future "mark reviewed" pass), `created_at`. Deliberately NOT tied to any restaurant/order/session FK, including `restaurant_name` -- it's plain free text a reporter types, not a lookup against the live `restaurants` table, so a report about a misspelled, renamed, or already-deleted kitchen is still captured rather than rejected or silently dropped.
+- **`components/ui/ReportIssueButton.tsx`** is a self-contained button+Modal+form (description required; kitchen name, context, and contact all optional so reporting never requires identifying yourself or your kitchen), reusable from any page, not just `/help/errors` (currently the only page that uses it, in its hero). "Kitchen name" is its own dedicated field (added 2026-07-21 per user request, since issues can be kitchen- or employee-specific) rather than folded into the general "where were you" context field, so it renders as its own filterable column on `/admin/issues` instead of buried in free text -- the adjacent context field's placeholder was updated to explicitly mention employee names too, rather than adding a second dedicated field for that rarer case. Requires a `ToastProvider` ancestor. POSTs to `/api/issues`.
+- **`POST /api/issues`** is public/anonymous, same trust level as `/api/orders/search` -- no auth, rate-limited (`issues-report:<ip>`, 10/min, `RATE_LIMITED_ISSUES` code 507). Added to `server.js`'s `PUBLIC_ALLOWED_PREFIXES` as its own `/api/issues` entry so it's reachable by kitchen staff with no session.
+- **`GET /api/dev/issues`** is admin-only (`requireAdmin()`), capped at 500 rows, same shape as `/api/dev/audit`. Deliberately NOT added to `PUBLIC_ALLOWED_PREFIXES` -- 404s for non-localhost hosts, same gating as every other `/api/dev/*` route.
+- **`/admin/issues`** ("Issue Review" in the gateway sidebar, directly under "Audit Log") is a read-only table of submitted reports -- a SIBLING of `/admin/db`/`/admin/audit`/`/admin/staff`, reachable only from the gateway (`/`) sidebar, same non-nesting rule as the others. No WebSocket live-update (unlike `/admin/audit`) -- issue reports aren't part of the existing order-events broadcast channel, and a plain manual "Refresh" button is a reasonable interaction for a non-time-sensitive review page; add a dedicated broadcast only if this ever needs to be seen in real time.
+- No delete/resolve UI exists yet for `reported_issues` rows -- `status` is the seam for that if/when it's asked for.
+
 ## API Map
 
 | API | Purpose |
@@ -228,6 +237,8 @@ Per-kitchen employee roster and append-only status-change audit trail; see "Empl
 | `/api/customer-origin` | Authenticated reachable-origin resolver |
 | `/api/dev/db`, `/api/dev/seed` | Admin DB view (real keyset-paginated infinite scroll)/Purge and destructive Seed — see "keyset-paginated infinite scroll" below for `GET` params |
 | `/api/dev/audit` | Admin audit-log view (optional `restaurantName`/`employeeName` filters) and `DELETE` Purge (`PURGE AUDIT` phrase) |
+| `/api/issues` | Public (unauthenticated) issue/feedback report submission, rate-limited |
+| `/api/dev/issues` | Admin-only view of submitted issue reports |
 
 ## Operations
 

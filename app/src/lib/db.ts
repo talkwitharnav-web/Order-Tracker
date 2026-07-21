@@ -385,4 +385,40 @@ async function runInitDb() {
         FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
     END $$;
   `);
+
+  // Free-text bug/feedback reports submitted from /help/errors's "Report an
+  // Issue" button (see api/issues/route.ts) and reviewed at /admin/issues
+  // (see api/dev/issues/route.ts, mirroring admin/audit's shape). Deliberately
+  // NOT tied to any restaurant/order FK -- a reporter may be anonymous kitchen
+  // staff with no admin session, and the issue itself is about the APP, not
+  // about a specific order/restaurant row that could later be deleted out
+  // from under it. `restaurant_name` is a plain free-text column (not a FK)
+  // for the same reason -- a reporter types whatever kitchen name they know,
+  // which may be misspelled, for a kitchen that's since been renamed/deleted,
+  // or entirely made up; the report should never be silently dropped or
+  // orphaned just because that name doesn't resolve to a live restaurants
+  // row. `context` is free text the reporter can optionally use to note
+  // which page/what they were doing (no automatic page-URL capture -- this
+  // is a plain textarea field, not client-side tracking). `contact` is
+  // optional so a reporter isn't forced to identify themselves to report a
+  // bug. `status` starts 'open' and exists so a future pass could let an
+  // admin mark one reviewed/resolved without deleting it -- not yet wired
+  // into any UI, but the column costs nothing to add now vs. a later migration.
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS reported_issues (
+      id SERIAL PRIMARY KEY,
+      description TEXT NOT NULL,
+      restaurant_name TEXT,
+      context TEXT,
+      contact TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  // Pre-existing installs from before restaurant_name existed on this table.
+  await db.query(`ALTER TABLE reported_issues ADD COLUMN IF NOT EXISTS restaurant_name TEXT;`);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_reported_issues_created_at
+    ON reported_issues (created_at DESC);
+  `);
 }

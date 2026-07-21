@@ -6,6 +6,8 @@ import { CATEGORIES, listErrorCodesByCategory, type ErrorCodeEntry } from "@/lib
 import { SettingsToggles } from "@/components/ui/SettingsToggles";
 import { ChefMascot } from "@/components/ui/ChefMascot";
 import { Input } from "@/components/ui/Input";
+import { ReportIssueButton } from "@/components/ui/ReportIssueButton";
+import { ToastProvider } from "@/components/ui/Toast";
 
 const MASCOT_LINES = [
   "Every code in the book, right here.",
@@ -31,6 +33,14 @@ const MASCOT_LINES = [
  * gated the same as /admin/db rather than exposed on a public LAN host.
  */
 export default function ErrorCodesHelpPage() {
+  return (
+    <ToastProvider>
+      <ErrorCodesHelpContent />
+    </ToastProvider>
+  );
+}
+
+function ErrorCodesHelpContent() {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -148,6 +158,9 @@ export default function ErrorCodesHelpPage() {
                 aria-label="Search error codes"
                 className="pl-10"
               />
+            </div>
+            <div className="mt-3">
+              <ReportIssueButton />
             </div>
           </div>
         </div>
