@@ -55,6 +55,12 @@ const REMOVE_ANIMATION_MS = 250;
 const ToastContext = createContext<ShowToast | null>(null);
 const ToastActionContext = createContext<ShowActionToast | null>(null);
 
+const BISTRO_TOAST_STYLE = {
+  "--notification-glaze-backdrop-filter": "blur(1.5px) saturate(145%)",
+  backdropFilter: "var(--notification-glaze-backdrop-filter)",
+  WebkitBackdropFilter: "var(--notification-glaze-backdrop-filter)",
+} as React.CSSProperties;
+
 let nextId = 1;
 
 const ToastCard: FC<{
@@ -71,14 +77,13 @@ const ToastCard: FC<{
   style,
 }) => (
   <div
-    style={style}
-    className={`flex items-center gap-3 rounded-[var(--radius-sm)] shadow-lg p-4 text-white w-80 max-w-[90vw] ${
-      item.type === "success"
-        ? "bg-[var(--color-success)]"
-        : item.type === "warning"
-          ? "bg-[var(--color-warning)]"
-          : "bg-[var(--color-danger)]"
-    } ${item.removing ? "animate-notification-pop-out" : "animate-notification-pop-in"}`}
+    style={{ ...BISTRO_TOAST_STYLE, ...style }}
+    data-toast-type={item.type}
+    role={item.type === "error" ? "alert" : "status"}
+    aria-atomic="true"
+    className={`bistro-toast flex items-center gap-3 rounded-[var(--radius-sm)] p-4 w-80 max-w-[90vw] ${
+      item.removing ? "animate-notification-pop-out" : "animate-notification-pop-in"
+    }`}
   >
     {item.type === "success" ? (
       <CheckCircle2 className="w-5 h-5 shrink-0" />

@@ -1,0 +1,221 @@
+.loading {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-0);
+  font-size: 0.875rem;
+}
+
+.loadingDot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--color-brand);
+  box-shadow: 0 0 0 0.3rem color-mix(in oklab, var(--color-brand) 16%, transparent);
+}
+
+.lab {
+  min-height: 100dvh;
+  color: var(--color-text-primary);
+  background: var(--color-surface-0);
+}
+
+.header,
+.lightSection,
+.darkSection,
+.gridSection {
+  padding: 3rem 1.25rem;
+}
+
+.header {
+  min-height: 28rem;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  background:
+    radial-gradient(ellipse 65% 90% at 84% 0%, color-mix(in oklab, var(--color-brand) 18%, transparent), transparent 70%),
+    radial-gradient(ellipse 55% 80% at 4% 100%, color-mix(in oklab, var(--color-accent-olive) 15%, transparent), transparent 70%);
+}
+
+.headerInner,
+.sectionInner {
+  width: min(64rem, 100%);
+  margin-inline: auto;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 2.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--color-brand-text);
+}
+
+.eyebrow,
+.sectionInner > span {
+  color: var(--color-brand-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.header h1,
+.sectionInner h2 {
+  margin: 0.45rem 0 0;
+  font-family: var(--font-fraunces), serif;
+  line-height: 1.05;
+}
+
+.header h1 {
+  max-width: 15ch;
+  font-size: clamp(2.4rem, 7vw, 4.8rem);
+}
+
+.sectionInner h2 {
+  font-size: clamp(1.65rem, 4vw, 2.5rem);
+}
+
+.intro,
+.darkSection p {
+  max-width: 42rem;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.successButton {
+  background: var(--color-success);
+}
+
+.warningButton {
+  background: var(--color-warning);
+}
+
+.dangerButton {
+  background: var(--color-danger);
+}
+
+.lightSection {
+  min-height: 29rem;
+  display: flex;
+  align-items: center;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.cardGrid article {
+  padding: 1.25rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+}
+
+.cardGrid strong {
+  font-family: var(--font-fraunces), serif;
+  font-size: 2rem;
+}
+
+.cardGrid p {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-secondary);
+}
+
+.colorSection {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  min-height: 15rem;
+}
+
+.colorSection > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.colorStripeBrand {
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+}
+
+.colorStripeOlive {
+  background: var(--color-accent-olive);
+  color: var(--color-surface-0);
+}
+
+.colorStripeWarning {
+  background: var(--color-warning);
+  color: #1a1512;
+}
+
+.darkSection {
+  min-height: 33rem;
+  display: flex;
+  align-items: center;
+  background: #271c16;
+  color: #fff8ef;
+}
+
+.darkSection span,
+.darkSection p {
+  color: #d7c5b2;
+}
+
+.darkRows {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.darkRows i {
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg, #f0a276, transparent 75%);
+}
+
+.gridSection {
+  min-height: 28rem;
+  display: flex;
+  align-items: center;
+  background-color: var(--color-surface-0);
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-border-strong) 48%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-border-strong) 48%, transparent) 1px, transparent 1px);
+  background-size: 2rem 2rem;
+}
+
+@media (max-width: 680px) {
+  .buttonRow,
+  .cardGrid,
+  .colorSection {
+    grid-template-columns: 1fr;
+  }
+
+  .buttonRow {
+    display: grid;
+  }
+}

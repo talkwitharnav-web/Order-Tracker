@@ -91,6 +91,7 @@ function AdminDbContent() {
   const [orderStatusFilter, setOrderStatusFilter] = useState<string[]>([]);
   const [orderSort, setOrderSort] = useState<{ key: OrderSortKey; direction: SortDirection } | null>(null);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState>(EMPTY_CONFIRM);
   const [confirmationInput, setConfirmationInput] = useState("");
   // Order rows mid-slide-out-to-delete -- see deleteNow below. Restaurants
@@ -134,6 +135,7 @@ function AdminDbContent() {
       sort: orderSort,
     },
     handleFirstLoad,
+    isAdminAuthenticated,
   );
 
   const orderRows: OrderRow[] = orderRowsRaw.map(toOrderRow);
@@ -141,7 +143,9 @@ function AdminDbContent() {
   useEffect(() => {
     fetchJson<{ authenticated: boolean; type?: string }>("/api/session")
       .then((session) => {
-        if (!(session.authenticated && session.type === "admin")) {
+        if (session.authenticated && session.type === "admin") {
+          setIsAdminAuthenticated(true);
+        } else {
           router.push("/");
         }
       })
@@ -175,7 +179,7 @@ function AdminDbContent() {
   }, [anyModalOpen]);
 
   useEffect(() => {
-    if (isSessionLoading) return;
+    if (isSessionLoading || !isAdminAuthenticated) return;
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let closedByEffect = false;
@@ -231,7 +235,7 @@ function AdminDbContent() {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, [isSessionLoading]);
+  }, [isAdminAuthenticated, isSessionLoading]);
 
   // Fires on every scroll of the Orders table's own scroll container -- a
   // fast fling-scroll can dispatch dozens of raw `scroll` events per second,
@@ -473,7 +477,7 @@ function AdminDbContent() {
   // even though it's a perfectly live, valid restaurant.
   const allRestaurantNames = Array.from(new Set(restaurants.map((r) => r.name))).sort((a, b) => a.localeCompare(b));
 
-  if (isSessionLoading) {
+  if (isSessionLoading || !isAdminAuthenticated) {
     return (
       <div className="flex justify-center items-center min-h-dvh text-[var(--color-text-secondary)]">
         Loading...

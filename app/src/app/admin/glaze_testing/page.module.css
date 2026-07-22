@@ -1,0 +1,713 @@
+.loading {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-0);
+  font-size: 0.875rem;
+}
+
+.loadingDot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 0.3rem color-mix(in oklab, var(--color-brand) 16%, transparent);
+}
+
+.lab {
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  color: var(--color-text-primary);
+  background: var(--color-surface-0);
+  isolation: isolate;
+}
+
+.backdropArt {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.backdropArt span {
+  position: absolute;
+  display: block;
+}
+
+.artDiscOne {
+  width: 31rem;
+  height: 31rem;
+  top: 34rem;
+  right: -10rem;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--color-brand) 14%, transparent);
+  filter: blur(1px);
+}
+
+.artDiscTwo {
+  width: 24rem;
+  height: 24rem;
+  top: 90rem;
+  left: -9rem;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--color-accent-olive) 16%, transparent);
+}
+
+.artGrid {
+  inset: 0;
+  opacity: 0.26;
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-border) 38%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-border) 38%, transparent) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+  mask-image: linear-gradient(to bottom, transparent, black 18%, black 86%, transparent);
+}
+
+.glazeSpecimen {
+  --specimen-body: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--color-surface-1) 88%, var(--color-brand) 12%) 34%,
+    transparent
+  );
+  --specimen-backdrop-filter: blur(9px) saturate(145%);
+  position: fixed;
+  top: 2.25rem;
+  left: 50%;
+  z-index: 45;
+  width: clamp(8.5rem, 21vw, 13.5rem);
+  height: 3.25rem;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--color-border-strong) 62%, var(--color-brand) 20%);
+  border-radius: 999px;
+  background:
+    radial-gradient(85% 72% at 24% -18%, rgb(255 255 255 / 0.32), transparent 58%),
+    radial-gradient(65% 90% at 92% 118%, color-mix(in oklab, var(--color-brand) 17%, transparent), transparent 72%),
+    linear-gradient(115deg, color-mix(in oklab, var(--color-accent-olive) 5%, transparent), transparent 42%),
+    var(--specimen-body);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.38),
+    inset 0 -1px 0 color-mix(in oklab, var(--color-brand) 18%, transparent),
+    inset 1px 0 0 rgb(255 255 255 / 0.12),
+    0 2px 3px color-mix(in oklab, #000 14%, transparent),
+    0 9px 24px -9px color-mix(in oklab, #000 28%, var(--color-brand) 8%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.glazeSpecimenDragging {
+  cursor: grabbing;
+}
+
+.glazeSpecimen::before,
+.glazeSpecimen::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.glazeSpecimen::before {
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(48% 130% at 8% 52%, color-mix(in oklab, var(--color-brand) 11%, transparent), transparent 76%),
+    radial-gradient(42% 120% at 72% 28%, rgb(255 248 234 / 0.08), transparent 78%);
+}
+
+.glazeSpecimen::after {
+  inset: 1px;
+  border-radius: inherit;
+  background:
+    linear-gradient(100deg, transparent 7%, rgb(255 255 255 / 0.2) 24%, transparent 46%),
+    radial-gradient(100% 82% at 28% -18%, rgb(255 255 255 / 0.22), transparent 47%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+.hero {
+  padding: 8.5rem 1.25rem 5rem;
+  border-bottom: 1px solid var(--color-border);
+  background:
+    radial-gradient(ellipse 60% 90% at 76% 4%, color-mix(in oklab, var(--color-brand) 22%, transparent), transparent 72%),
+    radial-gradient(ellipse 48% 72% at 12% 105%, color-mix(in oklab, var(--color-accent-olive) 18%, transparent), transparent 72%);
+}
+
+.heroInner,
+.content {
+  width: min(70rem, calc(100% - 1rem));
+  margin-inline: auto;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 3rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--color-brand-text);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+  color: var(--color-brand-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  max-width: 13ch;
+  margin: 0;
+  font-family: var(--font-fraunces), serif;
+  font-size: clamp(2.5rem, 7vw, 5.7rem);
+  font-weight: 650;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.hero p {
+  max-width: 45rem;
+  margin: 1.4rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.7;
+}
+
+.heroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.heroMeta span,
+.liveIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-1);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.content {
+  display: grid;
+  gap: 3.5rem;
+  padding: 3rem 0 8rem;
+}
+
+.controlBand {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.searchField {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0 1rem;
+  min-height: 3rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  color: var(--color-text-muted);
+}
+
+.searchField input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.filterButton,
+.primaryButton,
+.sectionHeading button,
+.notePanel button,
+.activityRow button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.filterButton,
+.sectionHeading button,
+.activityRow button {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+}
+
+.primaryButton,
+.notePanel button {
+  border: 1px solid var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.metricCard,
+.orderCard,
+.schedulePanel,
+.activityList,
+.longRead {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.06);
+}
+
+.metricCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  padding: 1.2rem;
+}
+
+.metricIcon,
+.activityIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-status-received-bg);
+  color: var(--color-status-received-icon);
+}
+
+.metricWarm {
+  background: var(--color-status-preparing-bg);
+  color: var(--color-status-preparing-icon);
+}
+
+.metricOlive {
+  background: var(--color-status-complete-bg);
+  color: var(--color-status-complete-icon);
+}
+
+.metricCard strong {
+  display: block;
+  font-family: var(--font-fraunces), serif;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.metricCard div span,
+.metricCard small {
+  display: block;
+  color: var(--color-text-secondary);
+}
+
+.metricCard div span {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.metricCard small {
+  grid-column: 1 / -1;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.72rem;
+}
+
+.section {
+  display: grid;
+  gap: 1rem;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sectionHeading span,
+.notePanel > span,
+.longRead > span {
+  color: var(--color-brand-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sectionHeading h2,
+.schedulePanel h2,
+.notePanel h2,
+.longRead h2 {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-fraunces), serif;
+  font-size: clamp(1.55rem, 3vw, 2.1rem);
+  line-height: 1.1;
+}
+
+.sectionHeading button,
+.activityRow button {
+  min-height: 2.25rem;
+}
+
+.orderGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.orderCard {
+  padding: 1.15rem;
+}
+
+.orderTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.status {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-full);
+  font-size: 0.68rem;
+}
+
+.neutral {
+  background: var(--color-status-received-bg);
+  color: var(--color-status-received-text);
+}
+
+.warm,
+.warning {
+  background: var(--color-status-preparing-bg);
+  color: var(--color-status-preparing-text);
+}
+
+.success {
+  background: var(--color-status-complete-bg);
+  color: var(--color-status-complete-text);
+}
+
+.brand {
+  background: color-mix(in oklab, var(--color-brand) 14%, transparent);
+  color: var(--color-brand-text);
+}
+
+.orderCard h3 {
+  margin: 1.2rem 0 0;
+  font-size: 1rem;
+}
+
+.orderCard p,
+.activityRow p,
+.timelineRow p,
+.notePanel p,
+.longRead p {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.progressTrack {
+  height: 0.35rem;
+  margin-top: 1.35rem;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+}
+
+.progressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.progress_neutral { width: 28%; background: var(--color-status-received-icon); }
+.progress_warm { width: 68%; background: var(--color-status-preparing-icon); }
+.progress_success { width: 100%; background: var(--color-status-complete-icon); }
+
+.orderCard footer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.splitSection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(16rem, 0.75fr);
+  gap: 1rem;
+}
+
+.schedulePanel,
+.notePanel,
+.longRead {
+  padding: 1.5rem;
+}
+
+.timeline {
+  display: grid;
+  gap: 0;
+  margin-top: 1.5rem;
+}
+
+.timelineRow {
+  display: grid;
+  grid-template-columns: 3.2rem 1rem 1fr;
+  gap: 0.7rem;
+  min-height: 4.25rem;
+}
+
+.timelineRow time {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.timelineMarker {
+  position: relative;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.15rem;
+  border-radius: 50%;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 0.25rem color-mix(in oklab, var(--color-brand) 12%, transparent);
+}
+
+.timelineMarker::after {
+  content: "";
+  position: absolute;
+  top: 0.8rem;
+  left: calc(50% - 0.5px);
+  width: 1px;
+  height: 3.2rem;
+  background: var(--color-border);
+}
+
+.timelineRow:last-child .timelineMarker::after {
+  display: none;
+}
+
+.timelineRow strong,
+.activityRow strong {
+  font-size: 0.85rem;
+}
+
+.timelineRow p,
+.activityRow p {
+  font-size: 0.75rem;
+}
+
+.notePanel {
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at 100% 0%, rgb(255 255 255 / 0.08), transparent 40%),
+    #2b211a;
+  color: #fff8ef;
+  box-shadow: 0 16px 38px -24px rgb(0 0 0 / 0.65);
+}
+
+.notePanel > span {
+  display: block;
+  margin-top: 1.5rem;
+  color: #f0a276;
+}
+
+.notePanel h2 {
+  color: #fff8ef;
+}
+
+.notePanel p {
+  color: #d7c5b2;
+}
+
+.notePanel button {
+  margin-top: 1.5rem;
+}
+
+.activityList {
+  overflow: hidden;
+}
+
+.activityRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.activityRow:last-child {
+  border-bottom: 0;
+}
+
+.activityIcon {
+  width: 2.3rem;
+  height: 2.3rem;
+}
+
+.activityRow button {
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+}
+
+.liveIndicator {
+  color: var(--color-success);
+}
+
+.liveIndicator::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.longRead {
+  min-height: 31rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background:
+    linear-gradient(135deg, color-mix(in oklab, var(--color-surface-1) 94%, var(--color-brand) 6%), var(--color-surface-1));
+}
+
+.longRead p {
+  max-width: 49rem;
+  font-size: 0.92rem;
+}
+
+.sampleStripes {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: 6rem;
+  margin: 2rem 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.sampleStripes span:nth-child(1) { background: var(--color-brand); }
+.sampleStripes span:nth-child(2) { background: var(--color-accent-olive); }
+.sampleStripes span:nth-child(3) { background: #1f1813; }
+.sampleStripes span:nth-child(4) { background: var(--color-warning); }
+.sampleStripes span:nth-child(5) { background: var(--color-surface-2); }
+
+.pageFooter {
+  min-height: 12rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glazeSpecimen {
+    background: color-mix(in oklab, var(--color-surface-1) 92%, var(--color-brand) 8%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glazeSpecimen {
+    --specimen-backdrop-filter: none;
+    background: var(--color-surface-1);
+  }
+}
+
+@media (max-width: 760px) {
+  .hero {
+    padding-top: 7.25rem;
+  }
+
+  .controlBand,
+  .metrics,
+  .orderGrid,
+  .splitSection {
+    grid-template-columns: 1fr;
+  }
+
+  .filterButton,
+  .primaryButton {
+    width: 100%;
+  }
+
+  .glazeSpecimen {
+    top: 1.5rem;
+    width: 9rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .glazeSpecimen {
+    --specimen-backdrop-filter: none;
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    box-shadow: none;
+  }
+}
+
+@media print {
+  .glazeSpecimen {
+    display: none;
+  }
+}

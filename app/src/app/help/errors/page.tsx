@@ -28,9 +28,8 @@ const MASCOT_LINES = [
  * state; there's no data-fetching reason to keep it server-only, and the
  * registry import is small and static either way.
  *
- * Not added to server.js's PUBLIC_ALLOWED_PREFIXES -- this is staff
- * reference material (linked from the authenticated kitchen/admin toolbar),
- * gated the same as /admin/db rather than exposed on a public LAN host.
+ * Added to server.js's PUBLIC_ALLOWED_PREFIXES so kitchen staff can open the
+ * reference from another device on the LAN. Admin routes remain restricted.
  */
 export default function ErrorCodesHelpPage() {
   return (
@@ -182,14 +181,11 @@ function ErrorCodesHelpContent() {
           PageHeader's in-flow action row it does NOT need
           `--reserved-top-right-w` clearance -- an earlier version added it
           anyway "to be safe," which just shifted the centered search box
-          295px left of true-center for no reason. Background is a heavier
-          `backdrop-blur-xl` over a translucent (not solid) surface color --
-          the BackgroundArt food-icon watermarks and page content scrolling
-          underneath should read as genuinely frosted/glassy, not just have a
-          faint blur that's masked by an almost-opaque bar. */}
+          295px left of true-center for no reason. The outer shell uses Clear
+          Bistro Glaze while the search input itself remains opaque. */}
       {stickyMounted && (
         <div
-          className={`fixed top-0 inset-x-0 z-30 border-b border-[var(--color-border)]/60 bg-[var(--color-surface-1)]/25 backdrop-blur-xl shadow-sm ${
+          className={`fixed top-0 inset-x-0 z-30 ${
             stickyInteractive ? "" : "pointer-events-none"
           }`}
           aria-hidden={!stickyInteractive}
@@ -199,9 +195,24 @@ function ErrorCodesHelpContent() {
               stickyPhase === "exiting" ? "animate-sticky-search-pop-out" : "animate-sticky-search-pop-in"
             }`}
           >
-            <div className="relative max-w-md mx-auto">
+            <div
+              className="relative max-w-md mx-auto rounded-[var(--radius-sm)]"
+            >
+              <span
+                className="help-sticky-glaze absolute inset-0 rounded-[inherit] pointer-events-none"
+                data-glaze="on"
+                aria-hidden="true"
+                style={{
+                  "--help-glaze-body": "color-mix(in oklab, color-mix(in oklab, var(--color-surface-1) 88%, var(--color-brand) 12%) 29%, transparent)",
+                  "--help-glaze-left-warmth": "color-mix(in oklab, var(--color-brand) 16%, transparent)",
+                  "--help-glaze-right-warmth": "color-mix(in oklab, var(--color-brand) 22%, transparent)",
+                  "--help-glaze-backdrop-filter": "blur(2px) saturate(145%)",
+                  backdropFilter: "var(--help-glaze-backdrop-filter)",
+                  WebkitBackdropFilter: "var(--help-glaze-backdrop-filter)",
+                } as React.CSSProperties}
+              />
               <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
+                className="absolute z-10 left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]"
                 aria-hidden="true"
               />
               <Input
@@ -210,7 +221,8 @@ function ErrorCodesHelpContent() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by code or keyword..."
                 aria-label="Search error codes"
-                className="pl-10"
+                className="help-sticky-glaze-input relative z-10 pl-10"
+                style={{ background: "transparent" }}
                 tabIndex={stickyInteractive ? 0 : -1}
               />
             </div>

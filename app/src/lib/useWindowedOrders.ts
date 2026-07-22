@@ -92,6 +92,7 @@ interface PageResponse {
 export function useWindowedOrders(
   params: OrderQueryParams,
   onFirstLoad?: (data: { restaurants?: Restaurant[]; deletedCount?: number }) => void,
+  enabled = true,
 ) {
   const [state, setState] = useState<CursorState>(EMPTY_CURSOR_STATE);
   const [isLoadingTop, setIsLoadingTop] = useState(false);
@@ -189,9 +190,10 @@ export function useWindowedOrders(
   useEffect(() => {
     // reload() already reads the latest params via paramsRef; this effect's
     // job is purely to trigger it when the query identity above changes.
+    if (!enabled) return;
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload is intentionally omitted: it's stable via useCallback and reads params fresh via paramsRef, not via closure.
-  }, [params.includeDeleted, params.orderSearch, restaurantNamesKey, statusFilterKey, sortKey, sortDirectionKey]);
+  }, [enabled, params.includeDeleted, params.orderSearch, restaurantNamesKey, statusFilterKey, sortKey, sortDirectionKey]);
 
   const loadMoreBottom = useCallback(async () => {
     const current = stateRef.current;

@@ -102,12 +102,21 @@ export const AccessibilityMenu: FC = () => {
         <div
           role="menu"
           aria-label="Accessibility options"
-          className={`${menuAnimationClass} fixed left-2 right-2 top-[calc(1rem+var(--reserved-top-right-h)+0.5rem)] max-h-[calc(100dvh-var(--reserved-top-right-h)-2rem)] overflow-x-hidden overflow-y-auto sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72 sm:max-w-[calc(100vw-2rem)] sm:max-h-[calc(100dvh-5rem)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-1)] shadow-lg z-40`}
+          className={`${menuAnimationClass} accessibility-glaze-panel fixed left-2 right-2 top-[calc(1rem+var(--reserved-top-right-h)+0.5rem)] max-h-[calc(100dvh-var(--reserved-top-right-h)-2rem)] overflow-x-hidden overflow-y-auto sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72 sm:max-w-[calc(100vw-2rem)] sm:max-h-[calc(100dvh-5rem)] rounded-[var(--radius-md)] border z-40`}
         >
-          <div className="px-4 py-3 border-b border-[var(--color-border)]">
+          <span
+            className="accessibility-glaze-material absolute inset-0 rounded-[inherit] pointer-events-none"
+            aria-hidden="true"
+            style={{
+              "--accessibility-glaze-backdrop-filter": "blur(2px) saturate(145%)",
+              backdropFilter: "var(--accessibility-glaze-backdrop-filter)",
+              WebkitBackdropFilter: "var(--accessibility-glaze-backdrop-filter)",
+            } as React.CSSProperties}
+          />
+          <div className="relative z-10 px-4 py-3 border-b border-[var(--color-border)]">
             <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Accessibility</h3>
           </div>
-          <ul className="py-1">
+          <ul className="relative z-10 py-1">
             {OPTIONS.map(({ key, label, description }) => (
               <li key={key}>
                 <button
@@ -138,7 +147,7 @@ export const AccessibilityMenu: FC = () => {
             ))}
           </ul>
 
-          <div className="px-4 py-3 border-t border-[var(--color-border)]">
+          <div className="relative z-10 px-4 py-3 border-t border-[var(--color-border)]">
             <h4 className="text-sm font-medium text-[var(--color-text-primary)]">Colorblind-Friendly Palette</h4>
             <p className="text-xs text-[var(--color-text-muted)] mt-0.5 mb-2">
               Pick the option that matches your color vision — each swaps status/brand colors for a palette tuned and

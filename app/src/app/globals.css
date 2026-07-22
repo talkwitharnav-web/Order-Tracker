@@ -63,6 +63,9 @@
   --color-danger-hover: #96331f;
   --color-success: #4f7942;
   --color-warning: #b3540a; /* hazard orange — overdue-order alerts, distinct from danger's red */
+  --color-on-success: var(--color-text-primary);
+  --color-on-warning: var(--color-text-primary);
+  --color-on-danger: var(--color-text-primary);
 
   /* Radius scale — exactly three sizes used app-wide */
   --radius-sm: 0.5rem; /* buttons, inputs, badges */
@@ -348,7 +351,7 @@
 }
 .dropdown-reveal {
   transform-origin: top center;
-  animation: dropdown-reveal-in 0.18s ease-out both;
+  animation: dropdown-reveal-in 0.18s ease-out backwards;
 }
 .dropdown-reveal-out {
   transform-origin: top center;
@@ -940,31 +943,80 @@ html[data-ui-size="big"] {
   }
 }
 
-/*
- * The toast stack (Toast.tsx) is itself `position: fixed`, unlike PageHeader's
- * in-flow content — `.clear-top-right`'s padding approach doesn't move a
- * fixed element, so this adjusts `top` directly instead. `right` is a plain
- * fixed `1rem` at every width (matching Tailwind's `right-4` on the
- * container itself) -- the stack always sits directly below SettingsToggles,
- * anchored to the same right edge, never beside it.
- *
- * A previous version of this rule pushed the stack LEFT by
- * `--reserved-top-right-w` at sm:+ (to sit beside SettingsToggles rather
- * than below it), which was only ever correct while the toolbar was narrow.
- * As SettingsToggles grew (Colorblind picker, DB-size chip, etc. added over
- * time -- it's ~300px+ wide now, not the ~190px it was when that rule was
- * written), that horizontal offset grew right along with it and started
- * pushing the whole toast stack most of the way across a medium-width
- * viewport, landing it near screen-center instead of "top right" -- a real
- * regression a live measurement caught (768px viewport: stack's right edge
- * ended up 408px in from the window edge, nowhere near the actual corner).
- * Stacking below (same fix already used on mobile) is correct at every
- * width regardless of how wide the toolbar ever grows, so there's no longer
- * a separate sm:+ branch that needs its own width-tracking math.
- */
+/* Notifications are short-lived viewport overlays, not layout-aware chrome.
+   Keep them at the true top-right corner regardless of Settings width/state
+   or any nearby page content. They may temporarily cover another control. */
 .toast-stack {
-  top: calc(var(--reserved-top-right-h) + 24px);
+  top: 1rem;
   right: 1rem;
+}
+
+/* Bistro Glaze — Segment 3: semantic notifications.
+   Success, warning, and error keep explicit icon+wording semantics while one
+   translucent ceramic body carries the active theme/CVD semantic token. */
+.bistro-toast {
+  --toast-accent: var(--color-brand);
+  --toast-foreground: var(--color-text-primary);
+  border: 1px solid color-mix(in oklab, var(--toast-accent) 45%, var(--color-border-strong));
+  background:
+    linear-gradient(100deg, transparent 7%, rgb(255 255 255 / 0.2) 24%, transparent 46%),
+    radial-gradient(100% 82% at 28% -18%, rgb(255 255 255 / 0.22), transparent 47%),
+    radial-gradient(70% 120% at 100% 110%, color-mix(in oklab, var(--toast-accent) 24%, transparent), transparent 72%),
+    radial-gradient(54% 130% at 0% 45%, color-mix(in oklab, var(--toast-accent) 18%, transparent), transparent 76%),
+    color-mix(
+      in oklab,
+      color-mix(in oklab, var(--color-surface-1) 78%, var(--toast-accent) 22%) 29%,
+      transparent
+    );
+  color: var(--toast-foreground);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.38),
+    inset 0 -1px 0 color-mix(in oklab, var(--toast-accent) 22%, transparent),
+    0 2px 3px color-mix(in oklab, #000 14%, transparent),
+    0 12px 30px -10px color-mix(in oklab, var(--toast-accent) 28%, #000 20%);
+}
+
+.bistro-toast[data-toast-type="success"] {
+  --toast-accent: var(--color-success);
+  --toast-foreground: var(--color-on-success);
+}
+
+.bistro-toast[data-toast-type="warning"] {
+  --toast-accent: var(--color-warning);
+  --toast-foreground: var(--color-on-warning);
+}
+
+.bistro-toast[data-toast-type="error"] {
+  --toast-accent: var(--color-danger);
+  --toast-foreground: var(--color-on-danger);
+}
+
+[data-contrast="high"] .bistro-toast,
+[data-transparency="reduced"] .bistro-toast {
+  --notification-glaze-backdrop-filter: none !important;
+  border: 2px solid currentColor;
+  background: var(--color-surface-1);
+  box-shadow: none;
+  color: var(--color-text-primary);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .bistro-toast {
+    --notification-glaze-backdrop-filter: none !important;
+    background: var(--color-surface-1);
+    box-shadow: none;
+    color: var(--color-text-primary);
+  }
+}
+
+@media (forced-colors: active) {
+  .bistro-toast {
+    --notification-glaze-backdrop-filter: none !important;
+    border: 2px solid CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    color: CanvasText;
+  }
 }
 
 /*
@@ -1064,7 +1116,7 @@ summary {
   }
 }
 .animate-sticky-search-pop-in {
-  animation: sticky-search-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: sticky-search-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 
 @keyframes sticky-search-pop-out {
@@ -1079,6 +1131,271 @@ summary {
 }
 .animate-sticky-search-pop-out {
   animation: sticky-search-pop-out 0.26s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Bistro Glaze — Segment 2: Help page floating search shell.
+   The full-width bar stays context-first and translucent; its search input
+   remains an opaque local surface for dependable text contrast. */
+.help-sticky-glaze[data-glaze="on"] {
+  border-color: color-mix(in oklab, var(--color-border-strong) 62%, var(--color-brand) 20%);
+  background:
+    linear-gradient(100deg, transparent 7%, rgb(255 255 255 / 0.2) 24%, transparent 46%),
+    radial-gradient(100% 82% at 28% -18%, rgb(255 255 255 / 0.22), transparent 47%),
+    radial-gradient(85% 72% at 24% -18%, rgb(255 255 255 / 0.24), transparent 58%),
+    radial-gradient(38% 130% at 100% 110%, var(--help-glaze-right-warmth), transparent 74%),
+    radial-gradient(34% 140% at 0% 48%, var(--help-glaze-left-warmth), transparent 76%),
+    linear-gradient(115deg, color-mix(in oklab, var(--color-accent-olive) 5%, transparent), transparent 42%),
+    var(--help-glaze-body);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.38),
+    inset 0 -1px 0 color-mix(in oklab, var(--color-brand) 18%, transparent),
+    0 2px 3px color-mix(in oklab, #000 14%, transparent),
+    0 9px 24px -12px color-mix(in oklab, #000 24%, var(--color-brand) 8%);
+}
+
+.help-sticky-glaze-input {
+  background: transparent;
+}
+
+[data-contrast="high"] .help-sticky-glaze[data-glaze="on"],
+[data-transparency="reduced"] .help-sticky-glaze[data-glaze="on"] {
+  --help-glaze-backdrop-filter: none !important;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-1);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .help-sticky-glaze[data-glaze="on"] {
+    --help-glaze-backdrop-filter: none !important;
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-1);
+    box-shadow: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .help-sticky-glaze[data-glaze="on"] {
+    --help-glaze-backdrop-filter: none !important;
+    border-color: ButtonText;
+    background: ButtonFace;
+    box-shadow: none;
+  }
+}
+
+/* Settings toolbar ravel/unravel. The pill stays fixed to the viewport's
+   right edge, so changing only its measured width makes it grow naturally
+   toward the left. Content motion has the same playful overshoot as the
+   help page's sticky search, while the close is quicker and more direct. */
+.settings-pill {
+  border-radius: var(--radius-md);
+  transition: width 0.26s cubic-bezier(0.4, 0, 1, 1),
+    border-radius 0.26s cubic-bezier(0.4, 0, 1, 1),
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+/* Bistro Glaze — Segment 1: Settings pill.
+   Locally gated for visual approval and immediate rollback. The warm color
+   pools at the two ends while the center remains neutral and backdrop-led. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .settings-pill[data-glaze="on"] {
+    --settings-glaze-body: color-mix(
+      in oklab,
+      color-mix(in oklab, var(--color-surface-1) 88%, var(--color-brand) 12%) 29%,
+      transparent
+    );
+    --settings-glaze-backdrop-filter: blur(1.5px) saturate(145%);
+    border-color: color-mix(in oklab, var(--color-border-strong) 62%, var(--color-brand) 20%);
+    background:
+      linear-gradient(100deg, transparent 7%, rgb(255 255 255 / 0.2) 24%, transparent 46%),
+      radial-gradient(100% 82% at 28% -18%, rgb(255 255 255 / 0.22), transparent 47%),
+      radial-gradient(85% 72% at 24% -18%, rgb(255 255 255 / 0.24), transparent 58%),
+      radial-gradient(65% 90% at 92% 118%, var(--settings-glaze-right-warmth), transparent 72%),
+      radial-gradient(48% 130% at 8% 52%, var(--settings-glaze-left-warmth), transparent 76%),
+      radial-gradient(42% 120% at 72% 28%, rgb(255 248 234 / 0.08), transparent 78%),
+      linear-gradient(115deg, color-mix(in oklab, var(--color-accent-olive) 5%, transparent), transparent 42%),
+      var(--settings-glaze-body);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.38),
+      inset 0 -1px 0 color-mix(in oklab, var(--color-brand) 18%, transparent),
+      inset 1px 0 0 rgb(255 255 255 / 0.12),
+      inset 0 0 0 1px rgb(255 255 255 / 0.06),
+      0 2px 3px color-mix(in oklab, #000 14%, transparent),
+      0 9px 24px -9px color-mix(in oklab, #000 28%, var(--color-brand) 8%);
+  }
+}
+
+[data-contrast="high"] .settings-pill[data-glaze="on"],
+[data-transparency="reduced"] .settings-pill[data-glaze="on"] {
+  --settings-glaze-backdrop-filter: none;
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-1);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .settings-pill[data-glaze="on"] {
+    --settings-glaze-backdrop-filter: none;
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-1);
+    box-shadow: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .settings-pill[data-glaze="on"] {
+    --settings-glaze-backdrop-filter: none;
+    border-color: ButtonText;
+    background: ButtonFace;
+    box-shadow: none;
+  }
+}
+
+/* Bistro Glaze — Segment 4: Accessibility dropdown.
+   A dedicated inset material layer keeps small text and controls above the
+   backdrop sampler while the outer panel owns positioning and scrolling. */
+.accessibility-glaze-panel {
+  border-color: color-mix(in oklab, var(--color-border-strong) 68%, var(--color-brand) 18%);
+  background: transparent;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.32),
+    0 3px 6px color-mix(in oklab, #000 16%, transparent),
+    0 14px 32px -10px color-mix(in oklab, #000 30%, var(--color-brand) 8%);
+}
+
+/* A backdrop-filter creates a backdrop root for descendants. Temporarily
+   release the parent Settings sampler while its Accessibility panel is
+   mounted so the nested material can sample the real page behind it. */
+.settings-pill:has(.accessibility-glaze-panel) {
+  --settings-glaze-backdrop-filter: none !important;
+}
+
+.accessibility-glaze-material {
+  background:
+    linear-gradient(100deg, transparent 7%, rgb(255 255 255 / 0.2) 24%, transparent 46%),
+    radial-gradient(100% 82% at 28% -18%, rgb(255 255 255 / 0.22), transparent 47%),
+    radial-gradient(85% 72% at 24% -18%, rgb(255 255 255 / 0.24), transparent 58%),
+    radial-gradient(70% 100% at 100% 112%, color-mix(in oklab, var(--color-brand) 22%, transparent), transparent 72%),
+    radial-gradient(55% 130% at 0% 48%, color-mix(in oklab, var(--color-brand) 16%, transparent), transparent 76%),
+    radial-gradient(42% 120% at 72% 28%, rgb(255 248 234 / 0.08), transparent 78%),
+    linear-gradient(115deg, color-mix(in oklab, var(--color-accent-olive) 5%, transparent), transparent 42%),
+    color-mix(
+      in oklab,
+      color-mix(in oklab, var(--color-surface-1) 88%, var(--color-brand) 12%) 72%,
+      transparent
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.38),
+    inset 0 -1px 0 color-mix(in oklab, var(--color-brand) 18%, transparent),
+    inset 1px 0 0 rgb(255 255 255 / 0.12);
+}
+
+[data-contrast="high"] .accessibility-glaze-panel,
+[data-transparency="reduced"] .accessibility-glaze-panel {
+  border: 2px solid var(--color-border-strong);
+  background: var(--color-surface-1);
+  box-shadow: none;
+}
+
+[data-contrast="high"] .accessibility-glaze-material,
+[data-transparency="reduced"] .accessibility-glaze-material {
+  --accessibility-glaze-backdrop-filter: none !important;
+  background: var(--color-surface-1);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .accessibility-glaze-panel {
+    background: var(--color-surface-1);
+    box-shadow: none;
+  }
+
+  .accessibility-glaze-material {
+    --accessibility-glaze-backdrop-filter: none !important;
+    background: var(--color-surface-1);
+    box-shadow: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .accessibility-glaze-panel {
+    border: 2px solid CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  .accessibility-glaze-material {
+    --accessibility-glaze-backdrop-filter: none !important;
+    background: Canvas;
+    box-shadow: none;
+  }
+}
+
+.settings-pill-expanded {
+  border-radius: 1.25rem;
+  transition-duration: 0.45s, 0.45s, 0.25s, 0.25s, 0.25s;
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1), cubic-bezier(0.34, 1.56, 0.64, 1), ease, ease, ease;
+}
+
+.settings-pill-collapsed {
+  width: 2.5rem;
+  border-radius: var(--radius-md);
+}
+
+.settings-pill-toggle {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.settings-pill-toggle:hover,
+.settings-pill-toggle:focus-visible {
+  background: color-mix(in oklab, var(--color-brand) 8%, transparent);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-brand) 16%, transparent);
+}
+
+.settings-pill-content {
+  transform-origin: right center;
+  transition: opacity 0.18s ease, transform 0.26s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.settings-pill-reveal-window {
+  border-radius: inherit;
+}
+
+.settings-pill-content-collapsed {
+  opacity: 0;
+  transform: translateX(10px) scaleX(0.94);
+  pointer-events: none;
+}
+
+.settings-pill-content-expanded {
+  opacity: 1;
+  transform: translateX(0) scaleX(1);
+  transition-duration: 0.32s, 0.42s;
+  transition-timing-function: ease, cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition-delay: 0.08s, 0s;
+}
+
+@keyframes settings-pill-toggle-pop {
+  0% {
+    opacity: 0;
+    transform: rotate(-35deg) scale(0.72);
+  }
+  65% {
+    opacity: 1;
+    transform: rotate(5deg) scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(0) scale(1);
+  }
+}
+
+.settings-pill-toggle-icon {
+  animation: settings-pill-toggle-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 /* Whimsy: small bounce when a StatusStepper step advances */

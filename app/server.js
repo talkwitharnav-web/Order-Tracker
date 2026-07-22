@@ -121,6 +121,7 @@ const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 // allowed pages (no CSS/JS, no session check, etc).
 const PUBLIC_ALLOWED_PREFIXES = [
   "/customer",
+  "/help/errors",
   "/restaurant",
   "/api/orders",
   "/api/restaurants",
