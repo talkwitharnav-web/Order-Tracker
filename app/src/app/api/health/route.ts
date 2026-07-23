@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { cookies } from "next/headers";
 import { requireAnyAuthenticated, isAdminRequest } from "@/lib/auth";
+import { ADMIN_SESSION_COOKIE_NAME, RESTAURANT_SESSION_COOKIE_NAME } from "@/lib/session";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { errJson } from "@/lib/error-response";
 
@@ -37,8 +39,24 @@ export async function GET(request: Request) {
   const auth = await requireAnyAuthenticated();
   if (!auth.ok) return auth.response;
 
-  const ip = getClientIp(request);
-  if (!checkRateLimit(`health:${ip}`, { windowMs: RATE_LIMIT_WINDOW_MS, maxAttempts: RATE_LIMIT_MAX_REQUESTS })) {
+  // Keyed by the caller's own session cookie, not raw IP -- getClientIp()
+  // returns the literal string "unknown" for every localhost caller with no
+  // X-Forwarded-For header (see CLAUDE.md's ".141 machine" lesson on
+  // /api/restaurants/register), which would otherwise put every tab/admin
+  // page/kitchen dashboard on this dev machine into ONE shared bucket. A
+  // kitchen dashboard tab and an admin/db tab open side by side each poll
+  // independently and would trip each other's rate limit long before either
+  // one was actually abusive. The session cookie value is already an
+  // unforgeable per-login identity (HMAC-signed, see session.ts), so it's a
+  // strictly better key than IP here even once this app is reachable
+  // remotely -- falls back to IP only for the unreachable case where
+  // requireAnyAuthenticated() passed but somehow no cookie value is read.
+  const cookieStore = await cookies();
+  const sessionKey =
+    cookieStore.get(ADMIN_SESSION_COOKIE_NAME)?.value ??
+    cookieStore.get(RESTAURANT_SESSION_COOKIE_NAME)?.value ??
+    getClientIp(request);
+  if (!checkRateLimit(`health:${sessionKey}`, { windowMs: RATE_LIMIT_WINDOW_MS, maxAttempts: RATE_LIMIT_MAX_REQUESTS })) {
     return errJson("RATE_LIMITED_HEALTH", 429);
   }
 
